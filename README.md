@@ -1,43 +1,62 @@
-# OllamaAgent
+# ollama_agent
 
-TODO: Delete this and the text below, and describe your gem
+Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollama.com) model. It exposes tools to **list files**, **read files**, **search the tree** (ripgrep or grep), and **apply unified diffs** so the model can make small, reviewable edits.
 
-Welcome to your new gem! In this directory, you'll find the files you need to be able to package up your Ruby library into a gem. Put your Ruby code in the file `lib/ollama_agent`. To experiment with that code, run `bin/console` for an interactive prompt.
+## Requirements
+
+- Ruby ≥ 3.2
+- Ollama running and a capable tool-calling model (e.g. a coder variant)
 
 ## Installation
 
-TODO: Replace `UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG` with your gem name right after releasing it to RubyGems.org. Please do not do it earlier due to security reasons. Alternatively, replace this section with instructions to install your gem from git if you don't plan to release to RubyGems.org.
-
-Install the gem and add to the application's Gemfile by executing:
+From RubyGems (when published) or from this repository:
 
 ```bash
-bundle add UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
-```
-
-If bundler is not being used to manage dependencies, install the gem by executing:
-
-```bash
-gem install UPDATE_WITH_YOUR_GEM_NAME_IMMEDIATELY_AFTER_RELEASE_TO_RUBYGEMS_ORG
+bundle install
 ```
 
 ## Usage
 
-TODO: Write usage instructions here
+From the project you want the agent to modify (set the working directory accordingly):
+
+```bash
+bundle exec ruby exe/ollama_agent ask "Update the README.md with current codebase"
+```
+
+Apply proposed patches without interactive confirmation:
+
+```bash
+bundle exec ruby exe/ollama_agent ask -y "Your task"
+```
+
+Interactive REPL:
+
+```bash
+bundle exec ruby exe/ollama_agent ask --interactive
+```
+
+### Environment
+
+| Variable | Purpose |
+|----------|---------|
+| `OLLAMA_AGENT_MODEL` | Model name (overrides default from ollama-client) |
+| `OLLAMA_AGENT_ROOT` | Project root (defaults to current working directory) |
+| `OLLAMA_AGENT_DEBUG` | Set to `1` to print validation diagnostics on stderr |
+| `OLLAMA_AGENT_MAX_TURNS` | Max chat rounds with tool calls (default: 64) |
+
+## How it works
+
+1. The CLI starts `OllamaAgent::Agent`, which loops on `Ollama::Client#chat` with tool definitions.
+2. Tools are executed in-process under a **path sandbox** (`OLLAMA_AGENT_ROOT`).
+3. Patches are validated and checked with **`patch --dry-run`** before you confirm (unless `-y`).
 
 ## Development
 
-After checking out the repo, run `bin/setup` to install dependencies. Then, run `rake spec` to run the tests. You can also run `bin/console` for an interactive prompt that will allow you to experiment.
-
-To install this gem onto your local machine, run `bundle exec rake install`. To release a new version, update the version number in `version.rb`, and then run `bundle exec rake release`, which will create a git tag for the version, push git commits and the created tag, and push the `.gem` file to [rubygems.org](https://rubygems.org).
-
-## Contributing
-
-Bug reports and pull requests are welcome on GitHub at https://github.com/[USERNAME]/ollama_agent. This project is intended to be a safe, welcoming space for collaboration, and contributors are expected to adhere to the [code of conduct](https://github.com/[USERNAME]/ollama_agent/blob/master/CODE_OF_CONDUCT.md).
+```bash
+bundle exec rspec
+bundle exec rubocop
+```
 
 ## License
 
-The gem is available as open source under the terms of the [MIT License](https://opensource.org/licenses/MIT).
-
-## Code of Conduct
-
-Everyone interacting in the OllamaAgent project's codebases, issue trackers, chat rooms and mailing lists is expected to follow the [code of conduct](https://github.com/[USERNAME]/ollama_agent/blob/master/CODE_OF_CONDUCT.md).
+MIT. See [LICENSE.txt](LICENSE.txt).

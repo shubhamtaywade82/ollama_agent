@@ -53,7 +53,9 @@ RSpec.describe OllamaAgent::Agent do
       expect { agent.run("read") }.not_to raise_error
     end
 
-    it "raises when the loop never finishes with tool-only replies" do
+    it "stops after max tool rounds when the model never returns without tools" do
+      stub_const("OllamaAgent::Agent::MAX_TURNS", 3)
+
       tool_response = Ollama::Response.new(
         "message" => {
           "role" => "assistant",
@@ -74,7 +76,7 @@ RSpec.describe OllamaAgent::Agent do
       allow(client).to receive(:chat).and_return(tool_response)
 
       agent = described_class.new(client: client, root: root, confirm_patches: false)
-      expect { agent.run("loop") }.to raise_error(OllamaAgent::Error, /Maximum agent turns/)
+      expect { agent.run("loop") }.not_to raise_error
     end
   end
 

@@ -33,8 +33,27 @@ module OllamaAgent
     {
       type: "function",
       function: {
+        name: "list_files",
+        description: "List file paths under a directory relative to project root (skips .git). " \
+                     "Use first to see layout (lib/, exe/, gemspec) before updating README or docs.",
+        parameters: {
+          type: "object",
+          properties: {
+            directory: { type: "string", description: "Directory to scan (default: .)" },
+            max_entries: { type: "integer", description: "Max paths to return (default 100, max 500)" }
+          },
+          required: []
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
         name: "edit_file",
-        description: "Apply a unified diff. Use standard git diff format; apply with patch -p1 from project root.",
+        description: "Apply a unified diff to the file given by path. " \
+                     "Use git unified format: --- a/<path>, then +++ b/<path>, then @@ hunk, then lines with " \
+                     "leading space, `-`, or `+`. Copy exact lines from read_file; @@ counts must match the hunk. " \
+                     "Paths in ---/+++ must match path. patch -p1 from project root.",
         parameters: {
           type: "object",
           properties: {

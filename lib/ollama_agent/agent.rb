@@ -8,7 +8,7 @@ module OllamaAgent
   class Agent
     include SandboxedTools
 
-    MAX_TURNS = 32
+    MAX_TURNS = 64
 
     attr_reader :client, :root
 
@@ -31,7 +31,7 @@ module OllamaAgent
     private
 
     def execute_agent_turns(messages)
-      MAX_TURNS.times do
+      max_turns.times do
         message = chat_assistant_message(messages)
         tool_calls = message.tool_calls || []
         messages << message.to_h
@@ -40,7 +40,13 @@ module OllamaAgent
         append_tool_results(messages, tool_calls)
       end
 
-      raise Error, "Maximum agent turns (#{MAX_TURNS}) exceeded"
+      warn "ollama_agent: maximum tool rounds (#{max_turns}) reached" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+    end
+
+    def max_turns
+      Integer(ENV.fetch("OLLAMA_AGENT_MAX_TURNS", MAX_TURNS.to_s))
+    rescue ArgumentError, TypeError
+      MAX_TURNS
     end
 
     def chat_assistant_message(messages)
@@ -69,15 +75,18 @@ module OllamaAgent
 
     def system_prompt
       <<~PROMPT
-        You are a coding assistant. You can read files, search code, and apply small patches using unified diffs.
-        Only access paths under the project root. Explain your plan before using tools.
-        When editing, produce a unified diff suitable for `patch -p1` from the project root.
-        Example:
-        --- a/lib/example.rb
-        +++ b/lib/example.rb
-        @@ -1,3 +1,3 @@
-        -old
-        +new
+        You are a coding assistant with tools: list_files, read_file, search_code, edit_file.
+        Work only under the project root. Briefly state your plan, then use tools.
+
+        For README or documentation updates that should reflect the codebase:
+        1) list_files on "." or "lib" (and read ollama_agent.gemspec if present) to see structure.
+        2) read_file the targets you will mention (e.g. README.md, lib/ollama_agent.rb).
+        3) edit_file last, using a unified diff produced like `git diff`: --- a/<path>, +++ b/<path>, @@ ... @@,
+           then lines with leading space (unchanged context), `-` (remove), `+` (add). Copy exact existing lines from
+           read_file for `-`/context; @@ line counts must match the hunk.
+
+        Never invent file contents—only edit what you have read. Never put @@ before the +++ line for the same file.
+        When the task is done, reply with a brief summary and stop calling tools.
       PROMPT
     end
 
