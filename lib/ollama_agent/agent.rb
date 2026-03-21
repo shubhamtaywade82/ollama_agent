@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
+require_relative "agent_prompt"
 require_relative "tools_schema"
 require_relative "sandboxed_tools"
+require_relative "tool_content_parser"
 
 module OllamaAgent
   # Runs a tool-calling loop against Ollama: read files, search, apply unified diffs.
@@ -9,14 +11,17 @@ module OllamaAgent
     include SandboxedTools
 
     MAX_TURNS = 64
+    # ollama-client defaults to 30s; multi-turn tool chats often need longer on local hardware.
+    DEFAULT_HTTP_TIMEOUT = 120
 
     attr_reader :client, :root
 
-    def initialize(client: nil, model: nil, root: nil, confirm_patches: true)
+    def initialize(client: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil)
       @model = model || default_model
       @root = File.expand_path(root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
       @confirm_patches = confirm_patches
-      @client = client || Ollama::Client.new
+      @http_timeout_override = http_timeout
+      @client = client || build_default_client
     end
 
     def run(query)
@@ -33,7 +38,8 @@ module OllamaAgent
     def execute_agent_turns(messages)
       max_turns.times do
         message = chat_assistant_message(messages)
-        tool_calls = message.tool_calls || []
+        tool_calls = tool_calls_from(message)
+
         messages << message.to_h
         return if tool_calls.empty?
 
@@ -41,6 +47,13 @@ module OllamaAgent
       end
 
       warn "ollama_agent: maximum tool rounds (#{max_turns}) reached" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+    end
+
+    def tool_calls_from(message)
+      calls = message.tool_calls || []
+      return calls unless calls.empty? && ToolContentParser.enabled?
+
+      ToolContentParser.synthetic_calls(message.content)
     end
 
     def max_turns
@@ -73,21 +86,37 @@ module OllamaAgent
       ENV["OLLAMA_AGENT_MODEL"] || Ollama::Config.new.model
     end
 
+    def build_default_client
+      config = Ollama::Config.new
+      @http_timeout_seconds = resolved_http_timeout_seconds
+      config.timeout = @http_timeout_seconds
+      Ollama::Client.new(config: config)
+    end
+
+    def resolved_http_timeout_seconds
+      parsed = parse_positive_timeout(@http_timeout_override)
+      return parsed if parsed
+
+      parsed = parse_positive_timeout(ENV.fetch("OLLAMA_AGENT_TIMEOUT", nil))
+      return parsed if parsed
+
+      DEFAULT_HTTP_TIMEOUT
+    end
+
     def system_prompt
-      <<~PROMPT
-        You are a coding assistant with tools: list_files, read_file, search_code, edit_file.
-        Work only under the project root. Briefly state your plan, then use tools.
+      AgentPrompt.text
+    end
 
-        For README or documentation updates that should reflect the codebase:
-        1) list_files on "." or "lib" (and read ollama_agent.gemspec if present) to see structure.
-        2) read_file the targets you will mention (e.g. README.md, lib/ollama_agent.rb).
-        3) edit_file last, using a unified diff produced like `git diff`: --- a/<path>, +++ b/<path>, @@ ... @@,
-           then lines with leading space (unchanged context), `-` (remove), `+` (add). Copy exact existing lines from
-           read_file for `-`/context; @@ line counts must match the hunk.
+    def parse_positive_timeout(raw)
+      return nil if raw.nil?
+      return nil if raw.is_a?(String) && raw.strip.empty?
 
-        Never invent file contents—only edit what you have read. Never put @@ before the +++ line for the same file.
-        When the task is done, reply with a brief summary and stop calling tools.
-      PROMPT
+      t = Integer(raw)
+      return nil unless t.positive?
+
+      t
+    rescue ArgumentError, TypeError
+      nil
     end
 
     def append_tool_results(messages, tool_calls)

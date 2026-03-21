@@ -78,6 +78,72 @@ RSpec.describe OllamaAgent::Agent do
       agent = described_class.new(client: client, root: root, confirm_patches: false)
       expect { agent.run("loop") }.not_to raise_error
     end
+
+    it "executes tools from JSON lines in content when OLLAMA_AGENT_PARSE_TOOL_JSON=1" do
+      File.write(File.join(root, "sample.txt"), "hello")
+
+      ENV["OLLAMA_AGENT_PARSE_TOOL_JSON"] = "1"
+
+      first = Ollama::Response.new(
+        "message" => {
+          "role" => "assistant",
+          "content" => '{"name":"read_file","parameters":{"path":"sample.txt"}}'
+        }
+      )
+      second = Ollama::Response.new(
+        "message" => { "role" => "assistant", "content" => "Done." }
+      )
+
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:chat).and_return(first, second)
+
+      agent = described_class.new(client: client, root: root, confirm_patches: false)
+      expect { agent.run("read") }.not_to raise_error
+    ensure
+      ENV.delete("OLLAMA_AGENT_PARSE_TOOL_JSON")
+    end
+  end
+
+  describe "default HTTP client" do
+    it "defaults to 120s when OLLAMA_AGENT_TIMEOUT is unset" do
+      ENV.delete("OLLAMA_AGENT_TIMEOUT")
+      agent = described_class.new(root: root)
+      config = agent.client.instance_variable_get(:@config)
+      expect(config.timeout).to eq(120)
+    end
+
+    it "sets Ollama read timeout from OLLAMA_AGENT_TIMEOUT" do
+      ENV["OLLAMA_AGENT_TIMEOUT"] = "90"
+      agent = described_class.new(root: root)
+      config = agent.client.instance_variable_get(:@config)
+      expect(config.timeout).to eq(90)
+    ensure
+      ENV.delete("OLLAMA_AGENT_TIMEOUT")
+    end
+
+    it "prefers http_timeout keyword over OLLAMA_AGENT_TIMEOUT" do
+      ENV["OLLAMA_AGENT_TIMEOUT"] = "90"
+      agent = described_class.new(root: root, http_timeout: 45)
+      config = agent.client.instance_variable_get(:@config)
+      expect(config.timeout).to eq(45)
+    ensure
+      ENV.delete("OLLAMA_AGENT_TIMEOUT")
+    end
+  end
+
+  describe "system_prompt" do
+    it "does not use commas after --- / +++ path placeholders" do
+      prompt = OllamaAgent::AgentPrompt.text
+      expect(prompt).not_to include("+++ b/<path>,")
+      expect(prompt).not_to include("--- a/<path>,")
+    end
+
+    it "does not embed a copy-pasteable README example diff" do
+      prompt = OllamaAgent::AgentPrompt.text
+      expect(prompt).not_to include("--- a/README.md")
+      expect(prompt).not_to include("old line from read_file")
+      expect(prompt).not_to include("context line")
+    end
   end
 
   describe "path sandbox" do

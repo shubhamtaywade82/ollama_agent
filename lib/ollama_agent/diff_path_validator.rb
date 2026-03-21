@@ -5,6 +5,9 @@ require "pathname"
 module OllamaAgent
   # Validates unified diffs: hunk headers and path alignment with edit_file (applyability is patch --dry-run).
   class DiffPathValidator
+    # Legacy context-diff hunks (`--- N,M ----`) are not unified diffs; models sometimes emit them by mistake.
+    CONTEXT_DIFF_HUNK = /^\s*---\s+\d+\s*,\s*\d+\s*----\s*$/m
+
     def self.call(diff, root, target_path)
       new(diff, root, target_path).validate
     end
@@ -14,6 +17,8 @@ module OllamaAgent
       d = diff.to_s
       d = d.gsub("\r\n", "\n").gsub("\r", "\n")
       d = d.gsub("\\\\n", "\n").gsub("\\n", "\n") if d.include?("\\n") && !d.include?("\n")
+      # Strip trailing commas on ---/+++ lines (models copy commas from bad examples).
+      d = d.gsub(/^((?:---|\+\+\+)[^\n]+),\s*$/m, "\\1")
       # Split "--- a/foo @@ -1,3" when glued on one line (common LLM mistake).
       d.gsub(/(\S)\s(@@ -\d[^\n]*)/, "\\1\n\\2")
     end
@@ -29,6 +34,9 @@ module OllamaAgent
       return "Diff is empty." if @diff.strip.empty?
       return "edit_file path is missing or empty." if @target_path.nil? || @target_path.to_s.strip.empty?
 
+      err = context_diff_hunk_error
+      return err if err
+
       err = header_order_error
       return err if err
 
@@ -39,6 +47,16 @@ module OllamaAgent
     end
 
     private
+
+    def context_diff_hunk_error
+      return nil unless @diff.match?(CONTEXT_DIFF_HUNK)
+
+      <<~MSG.strip
+        This patch uses a legacy context-diff hunk line (`--- N,M ----`). Unified diffs need a hunk header that starts
+        with two at-signs, e.g. `@@ -1,3 +1,3 @@`, immediately after the `+++ b/<path>` line—not `---` with numbers.
+        Rebuild the diff in the same shape as `git diff` output.
+      MSG
+    end
 
     def header_order_error
       lines = @diff.lines

@@ -29,6 +29,12 @@ Apply proposed patches without interactive confirmation:
 bundle exec ruby exe/ollama_agent ask -y "Your task"
 ```
 
+Long-running models (slow local inference):
+
+```bash
+bundle exec ruby exe/ollama_agent ask --timeout 300 "Your task"
+```
+
 Interactive REPL:
 
 ```bash
@@ -43,6 +49,14 @@ bundle exec ruby exe/ollama_agent ask --interactive
 | `OLLAMA_AGENT_ROOT` | Project root (defaults to current working directory) |
 | `OLLAMA_AGENT_DEBUG` | Set to `1` to print validation diagnostics on stderr |
 | `OLLAMA_AGENT_MAX_TURNS` | Max chat rounds with tool calls (default: 64) |
+| `OLLAMA_AGENT_TIMEOUT` | HTTP read/open timeout in seconds for Ollama requests (default **120**; use `ask --timeout` / `-t` to override per run) |
+| `OLLAMA_AGENT_PARSE_TOOL_JSON` | Set to `1` to run tools parsed from JSON lines in assistant text (fallback when the model does not emit native tool calls) |
+
+## Troubleshooting
+
+- **Use a tool-capable model** — Set `OLLAMA_AGENT_MODEL` to a model that supports function/tool calling (e.g. a recent coder-tuned variant). If the model only prints `{"name": "read_file", ...}` in plain text, tools never run unless you enable `OLLAMA_AGENT_PARSE_TOOL_JSON=1`.
+- **Malformed diffs** — Headers must look like `git diff`: `--- a/file` then `+++ b/file` then a unified hunk line starting with `@@` (not legacy `--- N,M ----`). Do not put commas after path tokens. The gem normalizes some mistakes and runs `patch --dry-run` before applying.
+- **Request timeouts** — The agent defaults to a **120s** HTTP timeout (longer than ollama-client’s 30s). If you still hit `Ollama::TimeoutError`, raise it with `OLLAMA_AGENT_TIMEOUT=300`, `bundle exec ruby exe/ollama_agent ask --timeout 300 "..."`, or `-t 300`. Ensure the variable name is exactly `OLLAMA_AGENT_TIMEOUT` (a leading typo such as `vOLLAMA_AGENT_TIMEOUT` is ignored).
 
 ## How it works
 

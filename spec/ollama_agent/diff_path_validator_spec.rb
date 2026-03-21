@@ -79,9 +79,34 @@ RSpec.describe OllamaAgent::DiffPathValidator do
 
       expect(described_class.call(diff, root, "README.md")).to include("+++ b/")
     end
+
+    it "rejects legacy context-diff hunks like --- N,M ----" do
+      diff = <<~DIFF
+        --- a/README.md
+        +++ b/README.md
+        --- 2,1 ----
+        -old
+        +new
+      DIFF
+
+      expect(described_class.call(diff, root, "README.md")).to include("@@")
+    end
   end
 
   describe ".normalize_diff" do
+    it "strips trailing commas on --- and +++ header lines" do
+      raw = <<~DIFF
+        --- a/README.md,
+        +++ b/README.md,
+        @@ -1 +1 @@
+        -a
+        +b
+      DIFF
+      normalized = described_class.normalize_diff(raw)
+      expect(normalized.lines[0].strip).to eq("--- a/README.md")
+      expect(normalized.lines[1].strip).to eq("+++ b/README.md")
+    end
+
     it "expands escaped newlines when there are no real line breaks" do
       raw = '--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new'
       normalized = described_class.normalize_diff(raw)

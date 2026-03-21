@@ -12,6 +12,7 @@ module OllamaAgent
     method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches without confirmation"
     method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
+    method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
     def ask(query = nil)
       agent = build_agent
 
@@ -31,7 +32,8 @@ module OllamaAgent
       Agent.new(
         model: options[:model],
         root: options[:root],
-        confirm_patches: !options[:yes]
+        confirm_patches: !options[:yes],
+        http_timeout: options[:timeout]
       )
     end
 

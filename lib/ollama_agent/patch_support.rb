@@ -26,14 +26,22 @@ module OllamaAgent
     def patch_failure_message(output, dry_run:)
       detail = output.to_s.strip
       intro = dry_run ? "Patch does not apply to the current tree (dry-run)." : "Patch failed to apply."
+      hint = patch_stderr_hint(detail)
 
-      <<~MSG.strip
+      msg = <<~MSG.strip
         #{intro}
         #{detail}
 
         Re-read the file with read_file, then rebuild the diff using exact lines from that file (not placeholders).
         The @@ hunk line counts must match the hunk body the way git diff would emit them.
       MSG
+      hint.empty? ? msg : "#{msg}\n#{hint}"
+    end
+
+    def patch_stderr_hint(detail)
+      return "" unless detail.match?(/malformed patch|---\s+\d+\s*,\s*\d+\s*----/i)
+
+      "If you see `--- N,M ----`, replace it with a unified hunk line starting with @@ (e.g. @@ -1,3 +1,3 @@)."
     end
 
     def apply_patch(diff)
