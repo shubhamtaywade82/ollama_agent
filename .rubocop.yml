@@ -1,5 +1,10 @@
 AllCops:
   TargetRubyVersion: 3.2
+  NewCops: enable
+
+Metrics/BlockLength:
+  Exclude:
+    - "spec/**/*_spec.rb"
 
 Style/StringLiterals:
   EnforcedStyle: double_quotes
