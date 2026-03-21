@@ -129,6 +129,18 @@ RSpec.describe OllamaAgent::Agent do
     ensure
       ENV.delete("OLLAMA_AGENT_TIMEOUT")
     end
+
+    it "applies OLLAMA_BASE_URL and OLLAMA_API_KEY for Ollama Cloud (ollama-client convention)" do
+      ENV["OLLAMA_BASE_URL"] = "https://ollama.com"
+      ENV["OLLAMA_API_KEY"] = "test-key"
+      agent = described_class.new(root: root)
+      config = agent.client.instance_variable_get(:@config)
+      expect(config.base_url).to eq("https://ollama.com")
+      expect(config.api_key).to eq("test-key")
+    ensure
+      ENV.delete("OLLAMA_BASE_URL")
+      ENV.delete("OLLAMA_API_KEY")
+    end
   end
 
   describe "system_prompt" do

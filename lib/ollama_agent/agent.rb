@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "agent_prompt"
+require_relative "ollama_connection"
 require_relative "tools_schema"
 require_relative "sandboxed_tools"
 require_relative "tool_content_parser"
@@ -90,6 +91,7 @@ module OllamaAgent
       config = Ollama::Config.new
       @http_timeout_seconds = resolved_http_timeout_seconds
       config.timeout = @http_timeout_seconds
+      OllamaConnection.apply_env_to_config(config)
       Ollama::Client.new(config: config)
     end
 

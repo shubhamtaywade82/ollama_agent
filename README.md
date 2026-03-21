@@ -5,7 +5,8 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
 ## Requirements
 
 - Ruby ≥ 3.2
-- Ollama running and a capable tool-calling model (e.g. a coder variant)
+- **Local:** Ollama running and a capable tool-calling model, **or**
+- **Ollama Cloud:** API key and a cloud-capable model name (see below)
 
 ## Installation
 
@@ -41,10 +42,26 @@ Interactive REPL:
 bundle exec ruby exe/ollama_agent ask --interactive
 ```
 
+### Ollama Cloud
+
+[Ollama Cloud](https://docs.ollama.com/cloud) uses the same HTTP API as the local server, with HTTPS and a Bearer API key. The **ollama-client** gem sends `Authorization: Bearer <api_key>` when `Ollama::Config#api_key` is set (HTTPS is used when the URL scheme is `https`).
+
+1. Create a key at [ollama.com/settings/keys](https://ollama.com/settings/keys).
+2. Point the agent at the cloud host and pass the key (same env names as ollama-client’s docs):
+
+```bash
+export OLLAMA_BASE_URL="https://ollama.com"
+export OLLAMA_API_KEY="your_key"
+export OLLAMA_AGENT_MODEL="gpt-oss:120b-cloud"   # example; pick a cloud model from `ollama list` / the catalog
+bundle exec ruby exe/ollama_agent ask "Your task"
+```
+
 ### Environment
 
 | Variable | Purpose |
 |----------|---------|
+| `OLLAMA_BASE_URL` | Ollama API base URL (default from ollama-client: `http://localhost:11434`; use `https://ollama.com` for cloud) |
+| `OLLAMA_API_KEY` | API key for Ollama Cloud (`https://ollama.com`); optional for local HTTP |
 | `OLLAMA_AGENT_MODEL` | Model name (overrides default from ollama-client) |
 | `OLLAMA_AGENT_ROOT` | Project root (defaults to current working directory) |
 | `OLLAMA_AGENT_DEBUG` | Set to `1` to print validation diagnostics on stderr |
