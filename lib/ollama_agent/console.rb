@@ -22,12 +22,20 @@ module OllamaAgent
       comment: :bright_black
     }.freeze
 
+    THINKING_FRAME_WIDTH = 44
+
     def color_enabled?
       $stdout.tty? && ENV["NO_COLOR"].to_s.empty? && ENV["OLLAMA_AGENT_COLOR"] != "0"
     end
 
     def markdown_enabled?
       $stdout.tty? && ENV["NO_COLOR"].to_s.empty? && ENV["OLLAMA_AGENT_MARKDOWN"] != "0"
+    end
+
+    # Thinking uses dim plain text by default so it stays visually separate from the main reply.
+    # Set OLLAMA_AGENT_THINKING_MARKDOWN=1 to render thinking through tty-markdown (muted theme).
+    def thinking_markdown_enabled?
+      markdown_enabled? && ENV["OLLAMA_AGENT_THINKING_MARKDOWN"] == "1"
     end
 
     def style(text, *codes)
@@ -67,13 +75,22 @@ module OllamaAgent
     end
 
     def format_thinking(text)
-      header = "#{magenta(bold("Thinking"))}\n"
-      body = if markdown_enabled?
+      line = thinking_frame_line
+      header = "#{magenta(bold("Thinking"))}\n#{line}\n"
+      body = if thinking_markdown_enabled?
                markdown_parse(text, thinking: true) || dim(text.to_s)
              else
                dim(text.to_s)
              end
-      "#{header}#{body}"
+      "#{header}#{body}\n#{line}"
+    end
+
+    def assistant_reply_heading
+      bold(green("Assistant"))
+    end
+
+    def thinking_frame_line
+      dim("-" * THINKING_FRAME_WIDTH)
     end
 
     class << self
@@ -86,15 +103,22 @@ module OllamaAgent
       rescue LoadError, StandardError
         nil
       end
+
+      def write_assistant_reply(content, thinking_present)
+        puts if thinking_present
+        puts assistant_reply_heading if thinking_present
+        puts format_assistant(content)
+      end
     end
 
     # Prints thinking (if any) then main content; duck-types #thinking and #content.
     def puts_assistant_message(message)
       t = message.thinking
-      puts format_thinking(t) if t && !t.to_s.empty?
-
       c = message.content
-      puts format_assistant(c) if c && !c.to_s.empty?
+      thinking_present = t && !t.to_s.empty?
+
+      puts format_thinking(t) if thinking_present
+      write_assistant_reply(c, thinking_present) if c && !c.to_s.empty?
     end
 
     def patch_title(text)

@@ -30,6 +30,10 @@ module OllamaAgent
 
         Never put @@ before the +++ line for the same file. When the task is done, reply with a brief summary and stop
         calling tools.
+
+        When the API exposes separate reasoning ("thinking") and main message text ("content"): put internal planning only
+        in thinking; put the full user-visible reply (greetings, explanations, summaries) in content so the host can style
+        them as the assistant message.
       PROMPT
     end
   end
