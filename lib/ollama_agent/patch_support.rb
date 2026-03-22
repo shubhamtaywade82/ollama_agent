@@ -8,6 +8,8 @@ module OllamaAgent
     private
 
     def patch_dry_run(diff)
+      return patch_missing_tool_message unless patch_available?
+
       output, status = Open3.capture2e(
         "patch", "-p1", "-f", "-d", @root, "--dry-run",
         stdin_data: diff
@@ -65,6 +67,8 @@ module OllamaAgent
     end
 
     def apply_patch(diff)
+      return patch_missing_tool_message unless patch_available?
+
       output, status = Open3.capture2e(
         "patch", "-p1", "-f", "-d", @root,
         stdin_data: diff
@@ -73,6 +77,27 @@ module OllamaAgent
       return "Patch applied successfully." if status.success?
 
       patch_failure_message(output, dry_run: false)
+    end
+
+    def patch_available?
+      return @patch_available if defined?(@patch_available)
+
+      @patch_available = patch_binary_usable?
+    end
+
+    def patch_binary_usable?
+      _, status = Open3.capture2e("patch", "--version")
+      return true if status.success?
+
+      _, which_status = Open3.capture2e("which", "patch")
+      which_status.success?
+    end
+
+    def patch_missing_tool_message
+      <<~MSG.strip
+        Error: ollama_agent: the `patch` program was not found or is not usable on PATH. edit_file requires GNU patch.
+        Install it (e.g. apt install patch, brew install gpatch), or on Windows use Git Bash, WSL, or GnuWin32.
+      MSG
     end
   end
 end

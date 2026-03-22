@@ -15,6 +15,15 @@ module OllamaAgent
 
     module_function
 
+    def large_diff_line_limit
+      v = ENV.fetch("OLLAMA_AGENT_PATCH_RISK_MAX_DIFF_LINES", nil)
+      return LARGE_DIFF_LINES if v.nil? || v.to_s.strip.empty?
+
+      Integer(v)
+    rescue ArgumentError, TypeError
+      LARGE_DIFF_LINES
+    end
+
     def forbidden?(diff)
       FORBIDDEN_PATTERNS.any? { |pattern| diff.match?(pattern) }
     end
@@ -38,8 +47,9 @@ module OllamaAgent
         critical_lib_file?(relative)
     end
 
-    def large_diff?(diff, limit: LARGE_DIFF_LINES)
-      diff.scan(/^[-+][^-+]/).size > limit
+    def large_diff?(diff, limit: nil)
+      max = limit.nil? ? large_diff_line_limit : limit
+      diff.scan(/^[-+][^-+]/).size > max
     end
 
     def obvious_path?(relative)

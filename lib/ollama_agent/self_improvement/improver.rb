@@ -11,14 +11,16 @@ module OllamaAgent
   module SelfImprovement
     # Copies the project into a temp directory, runs the agent with optional semi-auto patch policy,
     # runs the test suite in the sandbox, and optionally merges changed files back to the source tree.
+    # rubocop:disable Metrics/ClassLength -- orchestration + restore + merge helpers
     class Improver
       SANDBOX_EXCLUDE = %w[.git vendor coverage tmp .bundle .cursor node_modules].freeze
 
       FIX_PROMPT = <<~PROMPT
         You are improving the ollama_agent Ruby gem in this temporary sandbox copy.
         Use list_files, search_code, and read_file to understand the code, then edit_file with valid unified diffs.
-        Prefer small, reviewable changes: fixes, tests, docs, and clarity. Avoid changing Gemfile, Gemfile.lock,
-        version.rb, or exe/ unless strictly necessary.
+        Prefer small, reviewable changes: fixes, tests, docs, and clarity.
+        Do not delete Gemfile, Gemfile.lock, the gemspec, or exe/; the improve run restores those from the source
+        tree before tests, but deleting them breaks the session.
 
         When finished, summarize what you changed in plain language.
       PROMPT
@@ -41,6 +43,7 @@ module OllamaAgent
             http_timeout: http_timeout,
             think: think
           )
+          restore_build_essentials_from_source(source_root, sandbox_root)
           test_result = run_test_suite(sandbox_root)
           copied = copy_back_if_requested(test_result, apply, sandbox_root, source_root)
           build_run_result(test_result, copied, source_root)
@@ -78,6 +81,20 @@ module OllamaAgent
           next if SANDBOX_EXCLUDE.include?(entry)
 
           FileUtils.cp_r(File.join(source, entry), File.join(dest, entry))
+        end
+      end
+
+      # The model may delete or corrupt Gemfile / lock / gemspec during edit_file; bundle needs them in the sandbox.
+      def restore_build_essentials_from_source(source, sandbox)
+        %w[Gemfile Gemfile.lock Rakefile .ruby-version].each do |name|
+          src = File.join(source, name)
+          next unless File.file?(src)
+
+          FileUtils.cp(src, File.join(sandbox, name))
+        end
+
+        Dir.glob(File.join(source, "*.gemspec")).each do |src|
+          FileUtils.cp(src, File.join(sandbox, File.basename(src)))
         end
       end
 
@@ -140,5 +157,6 @@ module OllamaAgent
         File.binread(sandbox_file) != File.binread(target_file)
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

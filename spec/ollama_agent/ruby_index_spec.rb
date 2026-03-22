@@ -27,4 +27,26 @@ RSpec.describe OllamaAgent::RubyIndex do
       expect(hits.first[:name]).to eq("instance_method")
     end
   end
+
+  describe "cache concurrency (via Agent)" do
+    let(:fixture_root) { File.expand_path("../fixtures/ruby_index", __dir__) }
+
+    it "calls RubyIndex.build only once when ruby_index is invoked concurrently" do
+      ENV["OLLAMA_AGENT_INDEX_REBUILD"] = "1"
+      calls = 0
+      allow(described_class).to receive(:build).and_wrap_original do |orig, **kwargs|
+        calls += 1
+        sleep 0.02
+        orig.call(**kwargs)
+      end
+
+      agent = OllamaAgent::Agent.new(root: fixture_root, confirm_patches: false)
+      threads = 8.times.map { Thread.new { agent.send(:ruby_index) } }
+      threads.each(&:join)
+
+      expect(calls).to eq(1)
+    ensure
+      ENV.delete("OLLAMA_AGENT_INDEX_REBUILD")
+    end
+  end
 end

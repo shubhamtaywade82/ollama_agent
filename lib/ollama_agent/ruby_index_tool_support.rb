@@ -39,14 +39,17 @@ module OllamaAgent
 
     # Rebuild only when OLLAMA_AGENT_INDEX_REBUILD changes (avoids rebuilding on every call while it stays "1").
     def ruby_index
-      fingerprint = ENV.fetch("OLLAMA_AGENT_INDEX_REBUILD", "")
-      @ruby_index = nil if fingerprint != @ruby_index_cache_fingerprint
-      @ruby_index_cache_fingerprint = fingerprint
-      return @ruby_index if @ruby_index
+      @ruby_index_mutex ||= Mutex.new
+      @ruby_index_mutex.synchronize do
+        fingerprint = ENV.fetch("OLLAMA_AGENT_INDEX_REBUILD", "")
+        @ruby_index = nil if fingerprint != @ruby_index_cache_fingerprint
+        @ruby_index_cache_fingerprint = fingerprint
+        return @ruby_index if @ruby_index
 
-      @ruby_index = RubyIndex.build(root: @root)
-      warn "ollama_agent: #{@ruby_index.summary_line}" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
-      @ruby_index
+        @ruby_index = RubyIndex.build(root: @root)
+        warn "ollama_agent: #{@ruby_index.summary_line}" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+        @ruby_index
+      end
     end
   end
 end

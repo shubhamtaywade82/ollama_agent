@@ -12,7 +12,18 @@ module OllamaAgent
       inner = h["parameters"] || h[:parameters]
       return h unless inner.is_a?(Hash)
 
-      inner.merge(h.except("parameters", :parameters))
+      outer = h.except("parameters", :parameters)
+      merge_parameters_with_outer(inner, outer)
+    end
+
+    def merge_parameters_with_outer(inner, outer)
+      inner.merge(outer) do |_key, inner_val, outer_val|
+        if inner_val.is_a?(Hash) && outer_val.is_a?(Hash)
+          merge_parameters_with_outer(inner_val, outer_val)
+        else
+          outer_val
+        end
+      end
     end
 
     def blank_tool_value?(value)

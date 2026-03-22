@@ -28,6 +28,20 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       expect(result).to include("read-only")
     end
 
+    it "returns a clear error when patch is not available" do
+      File.write(File.join(tmpdir, "README.md"), "x\n")
+      allow(agent).to receive(:patch_available?).and_return(false)
+      diff = <<~DIFF
+        --- a/README.md
+        +++ b/README.md
+        @@ -1 +1 @@
+        -x
+        +y
+      DIFF
+      result = agent.send(:execute_tool, "edit_file", { "path" => "README.md", "diff" => diff })
+      expect(result).to include("Error:").and include("patch")
+    end
+
     it "rejects diffs that match forbidden patterns" do
       skip "patch --dry-run not supported" unless patch_supports_dry_run?
 
@@ -78,10 +92,25 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       File.write(File.join(tmpdir, "big.txt"), "x" * 20)
       agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
       out = agent.send(:read_file, "big.txt")
-      expect(out).to include("max size").and include("10")
+      expect(out).to include("file too large").and include("10").and include("start_line")
     ensure
       ENV.delete("OLLAMA_AGENT_MAX_READ_FILE_BYTES")
       FileUtils.remove_entry(tmpdir)
+    end
+  end
+
+  describe "search_code (text mode)" do
+    let(:search_tmp) { Dir.mktmpdir }
+    let(:search_agent) { OllamaAgent::Agent.new(root: search_tmp, confirm_patches: false) }
+
+    after do
+      FileUtils.remove_entry(search_tmp)
+    end
+
+    it "returns a clear error when neither rg nor grep is available" do
+      allow(search_agent).to receive_messages(rg_available?: false, grep_available?: false)
+      out = search_agent.send(:execute_tool, "search_code", { "pattern" => "foo", "directory" => "." })
+      expect(out).to include("ripgrep").and include("grep").and include("Error:")
     end
   end
 

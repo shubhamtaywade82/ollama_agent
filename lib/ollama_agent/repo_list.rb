@@ -21,7 +21,10 @@ module OllamaAgent
       paths = collect_relative_paths(base, cap)
       return "(no files listed)" if paths.empty?
 
-      paths.sort.join("\n")
+      body = paths.sort.join("\n")
+      return body unless paths.size >= cap
+
+      "#{body}\n(list truncated at #{cap} entries; pass max_entries or narrow directory)"
     end
 
     def collect_relative_paths(base, cap)
