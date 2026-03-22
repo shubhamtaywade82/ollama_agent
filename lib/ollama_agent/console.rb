@@ -53,10 +53,10 @@ module OllamaAgent
     def format_thinking(text)
       header = "#{magenta(bold("Thinking"))}\n"
       body = if markdown_enabled?
-        markdown_parse(text) || dim(text.to_s)
-      else
-        dim(text.to_s)
-      end
+               markdown_parse(text) || dim(text.to_s)
+             else
+               dim(text.to_s)
+             end
       "#{header}#{body}"
     end
 
