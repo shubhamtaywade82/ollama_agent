@@ -13,6 +13,7 @@ module OllamaAgent
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches without confirmation"
     method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
+    method_option :think, type: :string, desc: "Thinking mode: true|false|high|medium|low (see OLLAMA_AGENT_THINK)"
     def ask(query = nil)
       agent = build_agent
 
@@ -33,7 +34,8 @@ module OllamaAgent
         model: options[:model],
         root: options[:root],
         confirm_patches: !options[:yes],
-        http_timeout: options[:timeout]
+        http_timeout: options[:timeout],
+        think: options[:think]
       )
     end
 

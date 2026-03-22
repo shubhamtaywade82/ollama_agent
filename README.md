@@ -52,6 +52,14 @@ Interactive REPL:
 bundle exec ruby exe/ollama_agent ask --interactive
 ```
 
+With a **thinking-capable** model, enable reasoning output:
+
+```bash
+OLLAMA_AGENT_THINK=true bundle exec ruby exe/ollama_agent ask -i
+# or
+bundle exec ruby exe/ollama_agent ask -i --think true
+```
+
 The CLI uses **ANSI colors** on a TTY (banner, prompt, patch prompts). **Assistant replies** are rendered as **Markdown** (headings, lists, bold, code fences) via `tty-markdown` when stdout is a TTY and **`NO_COLOR`** is unset. Disable Markdown rendering with **`OLLAMA_AGENT_MARKDOWN=0`**. Disable all colors with **`NO_COLOR`** or **`OLLAMA_AGENT_COLOR=0`**.
 
 ### Ollama Cloud
@@ -83,6 +91,7 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `NO_COLOR` | Set (any value) to disable ANSI colors (see [no-color.org](https://no-color.org/)) |
 | `OLLAMA_AGENT_COLOR` | Set to `0` to disable colors even on a TTY |
 | `OLLAMA_AGENT_MARKDOWN` | Set to `0` to disable Markdown formatting of assistant replies (plain text only) |
+| `OLLAMA_AGENT_THINK` | Model **thinking** mode for compatible models: `true` / `false`, or `high` / `medium` / `low` (see ollama-client `think:`). Empty = omit (server default). |
 
 ## Troubleshooting
 

@@ -29,6 +29,7 @@ module OllamaAgent
     def green(text) = style(text, 32)
     def yellow(text) = style(text, 33)
     def red(text) = style(text, 31)
+    def magenta(text) = style(text, 35)
 
     def welcome_banner(text)
       bold(cyan(text))
@@ -50,6 +51,19 @@ module OllamaAgent
       TTY::Markdown.parse(text.to_s)
     rescue LoadError, StandardError
       assistant_output(text)
+    end
+
+    def format_thinking(text)
+      "#{magenta(bold("Thinking"))}\n#{dim(text.to_s)}"
+    end
+
+    # Prints thinking (if any) then main content; duck-types #thinking and #content.
+    def puts_assistant_message(message)
+      t = message.thinking
+      puts format_thinking(t) if t && !t.to_s.empty?
+
+      c = message.content
+      puts format_assistant(c) if c && !c.to_s.empty?
     end
 
     def patch_title(text)

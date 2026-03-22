@@ -5,6 +5,8 @@ require_relative "console"
 require_relative "ollama_connection"
 require_relative "tools_schema"
 require_relative "sandboxed_tools"
+require_relative "think_param"
+require_relative "timeout_param"
 require_relative "tool_content_parser"
 
 module OllamaAgent
@@ -18,13 +20,16 @@ module OllamaAgent
 
     attr_reader :client, :root
 
-    def initialize(client: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil)
+    # rubocop:disable Metrics/ParameterLists -- CLI and tests pass explicit dependencies
+    def initialize(client: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil, think: nil)
       @model = model || default_model
       @root = File.expand_path(root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
       @confirm_patches = confirm_patches
       @http_timeout_override = http_timeout
+      @think = think
       @client = client || build_default_client
     end
+    # rubocop:enable Metrics/ParameterLists
 
     def run(query)
       messages = [
@@ -65,12 +70,7 @@ module OllamaAgent
     end
 
     def chat_assistant_message(messages)
-      response = @client.chat(
-        messages: messages,
-        tools: TOOLS,
-        model: @model,
-        options: { temperature: 0.2 }
-      )
+      response = @client.chat(**chat_request_args(messages))
 
       message = response.message
       raise Error, "Empty assistant message" if message.nil?
@@ -79,9 +79,24 @@ module OllamaAgent
       message
     end
 
+    def chat_request_args(messages)
+      args = {
+        messages: messages,
+        tools: TOOLS,
+        model: @model,
+        options: { temperature: 0.2 }
+      }
+      th = resolve_think
+      args[:think] = th unless th.nil?
+      args
+    end
+
     def announce_assistant_content(message)
-      content = message.content
-      puts Console.format_assistant(content) if content && !content.to_s.empty?
+      Console.puts_assistant_message(message)
+    end
+
+    def resolve_think
+      ThinkParam.resolve(@think)
     end
 
     def default_model
@@ -97,10 +112,10 @@ module OllamaAgent
     end
 
     def resolved_http_timeout_seconds
-      parsed = parse_positive_timeout(@http_timeout_override)
+      parsed = TimeoutParam.parse_positive(@http_timeout_override)
       return parsed if parsed
 
-      parsed = parse_positive_timeout(ENV.fetch("OLLAMA_AGENT_TIMEOUT", nil))
+      parsed = TimeoutParam.parse_positive(ENV.fetch("OLLAMA_AGENT_TIMEOUT", nil))
       return parsed if parsed
 
       DEFAULT_HTTP_TIMEOUT
@@ -108,18 +123,6 @@ module OllamaAgent
 
     def system_prompt
       AgentPrompt.text
-    end
-
-    def parse_positive_timeout(raw)
-      return nil if raw.nil?
-      return nil if raw.is_a?(String) && raw.strip.empty?
-
-      t = Integer(raw)
-      return nil unless t.positive?
-
-      t
-    rescue ArgumentError, TypeError
-      nil
     end
 
     def append_tool_results(messages, tool_calls)
