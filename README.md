@@ -123,6 +123,23 @@ bundle exec rspec
 bundle exec rubocop
 ```
 
+### CI and RubyGems release
+
+- **CI** — [`.github/workflows/main.yml`](.github/workflows/main.yml) runs **RSpec** and **RuboCop** on pushes to `main` / `master` and on pull requests (Ruby **3.3.4** and **3.2.0**).
+- **Release** — [`.github/workflows/release.yml`](.github/workflows/release.yml) runs on tags `v*`. It checks that the tag matches `OllamaAgent::VERSION` in [`lib/ollama_agent/version.rb`](lib/ollama_agent/version.rb), builds with `gem build ollama_agent.gemspec`, and pushes to RubyGems.
+
+Repository **secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Purpose |
+|--------|---------|
+| `RUBYGEMS_API_KEY` | RubyGems API key with **push** scope |
+| `RUBYGEMS_OTP_SECRET` | Base32 secret for **TOTP** (RubyGems MFA); the workflow uses `rotp` to generate a one-time code for `gem push` |
+
+Release steps:
+
+1. Bump `OllamaAgent::VERSION` in `lib/ollama_agent/version.rb` and commit to `main`.
+2. Tag: `git tag v0.1.0` (must match the version string) and `git push origin v0.1.0`.
+
 ## License
 
 MIT. See [LICENSE.txt](LICENSE.txt).
