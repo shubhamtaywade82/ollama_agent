@@ -19,6 +19,7 @@ module OllamaAgent
         You are improving the ollama_agent Ruby gem in this temporary sandbox copy.
         Use list_files, search_code, and read_file to understand the code, then edit_file with valid unified diffs.
         Prefer small, reviewable changes: fixes, tests, docs, and clarity.
+        Minimal diffs only: fewest lines per edit_file, exact @@ counts—no whole-method or mega-hunks.
         Do not delete Gemfile, Gemfile.lock, the gemspec, or exe/; the improve run restores those from the source
         tree before tests, but deleting them breaks the session.
 
