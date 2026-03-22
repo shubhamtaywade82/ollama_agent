@@ -40,16 +40,24 @@ module OllamaAgent
     # Rebuild only when OLLAMA_AGENT_INDEX_REBUILD changes (avoids rebuilding on every call while it stays "1").
     def ruby_index
       @ruby_index_mutex ||= Mutex.new
-      @ruby_index_mutex.synchronize do
-        fingerprint = ENV.fetch("OLLAMA_AGENT_INDEX_REBUILD", "")
-        @ruby_index = nil if fingerprint != @ruby_index_cache_fingerprint
-        @ruby_index_cache_fingerprint = fingerprint
-        return @ruby_index if @ruby_index
+      @ruby_index_mutex.synchronize { synchronized_ruby_index }
+    end
 
-        @ruby_index = RubyIndex.build(root: @root)
-        warn "ollama_agent: #{@ruby_index.summary_line}" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
-        @ruby_index
+    def synchronized_ruby_index
+      invalidate_ruby_index_if_fingerprint_changed
+      return @ruby_index if @ruby_index
+
+      @ruby_index = RubyIndex.build(root: @root).tap do |idx|
+        warn "ollama_agent: #{idx.summary_line}" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
       end
+    end
+
+    def invalidate_ruby_index_if_fingerprint_changed
+      fp = ENV.fetch("OLLAMA_AGENT_INDEX_REBUILD", "")
+      return if fp == @ruby_index_cache_fingerprint
+
+      @ruby_index = nil
+      @ruby_index_cache_fingerprint = fp
     end
   end
 end

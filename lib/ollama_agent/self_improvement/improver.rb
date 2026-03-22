@@ -13,7 +13,10 @@ module OllamaAgent
     # runs the test suite in the sandbox, and optionally merges changed files back to the source tree.
     # rubocop:disable Metrics/ClassLength -- orchestration + restore + merge helpers
     class Improver
-      SANDBOX_EXCLUDE = %w[.git vendor coverage tmp .bundle .cursor node_modules].freeze
+      SANDBOX_EXCLUDE = %w[.git vendor coverage tmp .bundle .cursor node_modules .rspec_status].freeze
+
+      # Basenames never merged back from the sandbox (test runs create these; they are gitignored).
+      MERGE_SKIP_BASENAMES = %w[.rspec_status].freeze
 
       FIX_PROMPT = <<~PROMPT
         You are improving the ollama_agent Ruby gem in this temporary sandbox copy.
@@ -22,6 +25,7 @@ module OllamaAgent
         Minimal diffs only: fewest lines per edit_file, exact @@ counts—no whole-method or mega-hunks.
         Do not delete Gemfile, Gemfile.lock, the gemspec, or exe/; the improve run restores those from the source
         tree before tests, but deleting them breaks the session.
+        Do not add or rely on .rspec_status or other ignored test-artifact files; RSpec may create them during the test step.
 
         When finished, summarize what you changed in plain language.
       PROMPT
@@ -176,6 +180,8 @@ module OllamaAgent
       def merge_sandbox_into_source(sandbox, source)
         paths = []
         each_relative_file(sandbox) do |rel|
+          next if MERGE_SKIP_BASENAMES.include?(File.basename(rel))
+
           src = File.join(sandbox, rel)
           dst = File.join(source, rel)
           next unless File.file?(src)

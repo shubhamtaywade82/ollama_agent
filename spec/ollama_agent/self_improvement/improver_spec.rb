@@ -53,6 +53,20 @@ RSpec.describe OllamaAgent::SelfImprovement::Improver do
     end
   end
 
+  describe "#merge_sandbox_into_source" do
+    it "does not copy .rspec_status from the sandbox into the source tree" do
+      File.write(File.join(source, "tracked.txt"), "a")
+      File.write(File.join(sandbox, "tracked.txt"), "b")
+      File.write(File.join(sandbox, ".rspec_status"), "rspec parallel state")
+
+      copied = improver.send(:merge_sandbox_into_source, sandbox, source)
+
+      expect(copied).to eq(["tracked.txt"])
+      expect(File.read(File.join(source, "tracked.txt"))).to eq("b")
+      expect(File).not_to be_file(File.join(source, ".rspec_status"))
+    end
+  end
+
   describe "#missing_gemfile_failure" do
     it "returns nil when the sandbox already has a Gemfile" do
       File.write(File.join(sandbox, "Gemfile"), "gem 'rake'\n")
