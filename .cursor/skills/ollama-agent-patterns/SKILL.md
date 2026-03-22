@@ -9,86 +9,124 @@ description: >-
   architecture, extensibility, registries, or Ruby metaprogramming for agents.
 ---
 
-# Ollama Agent: Patterns & Metaprogramming
+# Skill: Ollama Agent — Design Patterns & Metaprogramming
 
-## When to apply
+## 1. Overview
 
-- Designing or refactoring `ollama_agent` (CLI agent loop, tools, LLM layer).
-- Adding tools, backends, streaming hooks, or patch strategies.
-- Choosing where new code belongs (see layout table below).
+Blueprint for a **CLI coding agent** (e.g. `ollama_agent`) that uses **ollama-client** to chat with tools: read/search files, apply small unified diffs from natural language. Patterns keep the design **extensible and maintainable** without front-loading complexity.
 
-## Principles
+## 2. Core components & patterns
 
-1. **Start simple** — introduce Factory, State, Strategy, etc. when duplication or branching pain appears; do not front-load every pattern.
-2. **Core loop stays explicit** — the main agent loop should remain readable; hide complexity behind named collaborators (`Adapter`, `PromptBuilder`, `ToolCommand`), not clever `send` chains.
-3. **Metaprogramming for boundaries** — registration and DSLs at tool/plugin edges; avoid dynamic dispatch in error handling and hot paths unless measured.
-4. **Workspace rules** — tool schemas validated before execution; actions loggable/replayable; no hardcoded model names (runtime config).
+| Component | Pattern(s) | Purpose |
+|-----------|------------|---------|
+| **Agent** | Facade, Template Method | Simple API (`run`); skeleton loop with overridable steps. |
+| **Tools** | Factory Method, Command, Registry | Load/execute tools; optional logging/replay/undo. |
+| **LLM client** | Adapter, (optional) Proxy | Swap backends; logging/metrics without forking core. |
+| **Prompts** | Builder | Fluent construction of messages + tools + options. |
+| **Streaming** | Observer | Multiple subscribers for tokens (UI, logs). |
+| **Patch application** | Strategy | Swap `patch(1)` vs Ruby-native apply, etc. |
+| **Conversation** | State | Phases (idle, tools, confirmation) without giant `if/else`. |
 
-## Pattern map
+**Client lifetime:** **Singleton** is optional. Prefer **injectable** `Ollama::Client` (or adapter) for tests and per-run config (`timeout`, `base_url`, `api_key`).
+
+## 3. Principles
+
+1. **Start simple** — add Factory, State, Strategy when duplication or branching hurts; do not adopt every pattern up front.
+2. **Core loop stays explicit** — readable `run` / tool loop; collaborators (`Adapter`, `PromptBuilder`, `ToolCommand`) hide detail, not `send` spaghetti.
+3. **Metaprogramming at boundaries** — registration / DSLs at tool edges; avoid dynamic dispatch in error paths and hot loops unless measured.
+4. **Workspace rules** — validated tool schemas; loggable/replayable actions; **no hardcoded model names** (runtime config).
+
+## 4. Pattern map (where code lives)
 
 | Area | Patterns | Role |
 |------|-----------|------|
-| **Agent** | Facade, Template Method | Single entry (`run`); fixed loop skeleton with overridable steps. |
-| **Tools** | Factory Method, Command, Registry | Discover/instantiate tools; optional undo/replay via command objects. |
-| **LLM** | Adapter, Proxy | Swap backends; add logging, rate limits, metrics without changing core client. |
-| **Client lifetime** | Singleton (optional) | One process-wide client when appropriate; prefer explicit DI for tests. |
-| **Prompts** | Builder | Fluent construction of messages + tools + options. |
-| **Streaming** | Observer | Multiple subscribers for tokens (UI, logs, metrics). |
-| **Patches** | Strategy | Swap `patch` vs Ruby-native apply, etc. |
-| **Conversation** | State | Phases (idle, awaiting tools, confirmation) without giant `if/else`. |
+| **Agent** | Facade, Template Method | Single entry; fixed loop with overridable hooks. |
+| **Tools** | Factory, Command, Registry | Instantiate tools; optional command objects for audit. |
+| **LLM** | Adapter, Proxy | Backends; cross-cutting logging/rate limits. |
+| **Prompts** | Builder | Messages + tools + options. |
+| **Streaming** | Observer | Fan-out from client `hooks`. |
+| **Patches** | Strategy | Pluggable apply path. |
+| **Conversation** | State | Explicit phases when control flow grows. |
 
-## Target gem layout
+### Target layout (illustrative)
+
+A fuller **pattern-oriented** tree (with `bin/console`, `commands/`, `strategies/`, `states/`, etc.) and a **“this repo today”** note live in **reference.md** under *Recommended gem structure*. Migrate only when complexity justifies new directories.
 
 ```
 ollama_agent/
 ├── exe/ollama_agent
 ├── lib/ollama_agent.rb
 └── lib/ollama_agent/
-    ├── agent.rb              # Facade + Template Method
+    ├── agent.rb
     ├── cli.rb
-    ├── prompt_builder.rb   # Builder
-    ├── tool_registry.rb    # name → class map (often class-level, not Singleton)
-    ├── tools/base.rb       # inherited hook / DSL; concrete tools
+    ├── prompt_builder.rb      # Builder (optional)
+    ├── tool_registry.rb
+    ├── tools/base.rb
     ├── tools/
     ├── llm/base_adapter.rb
     ├── llm/ollama_adapter.rb
     ├── llm/logging_proxy.rb
     ├── commands/tool_command.rb
     ├── observers/
-    ├── strategies/         # patch strategies
-    └── states/             # optional; add when phase logic grows
+    ├── strategies/
+    └── states/
 ```
 
-## Where things live
+## 5. Creational patterns (summary)
 
-| Concept | Typical file/dir |
-|---------|-------------------|
-| Facade / loop skeleton | `lib/ollama_agent/agent.rb` |
-| Builder | `lib/ollama_agent/prompt_builder.rb` |
-| Registry + `inherited` | `lib/ollama_agent/tools/base.rb` + `tool_registry.rb` |
-| Adapter / Proxy | `lib/ollama_agent/llm/` |
-| Command | `lib/ollama_agent/commands/tool_command.rb` |
-| Observer | `lib/ollama_agent/observers/` |
-| Strategy | `lib/ollama_agent/strategies/` |
-| State | `lib/ollama_agent/states/` |
+- **Factory + registry** — Replace a growing `case` with `ToolRegistry.get(name)`; auto-register via `inherited` **or** explicit `tool_name` + hash (clearer than magic naming).
+- **Builder** — `PromptBuilder` when message construction branches; skip until you have real optional composition.
+- **Singleton** — Avoid as default for HTTP clients; use when you truly need one process-wide resource and tests can still stub.
 
-## Loading order
+## 6. Structural patterns (summary)
 
-- Require `version`, then foundational pieces (`tool_registry`, `tools/base`), then `Dir.glob` tools (ensure subclasses load after `Base`), then LLM, commands, agent, CLI.
-- See snippet in [reference.md](reference.md).
+- **Adapter** — Common `chat(messages:, tools:, **options)` surface for Ollama vs future providers.
+- **Proxy** — Wrap adapter for logging/metrics; keep thin.
+- **Facade** — `Agent#run` — already the right shape.
 
-## Metaprogramming (use sparingly)
+## 7. Behavioral patterns (summary)
 
-- **`inherited`** — auto-register tool subclasses when files load.
-- **Tool DSL** — `tool :name, "description" do ... end` at class level; keep implementation thin; test generated behavior.
-- **`send` / hooks** — `on_#{event}` only when subscribers are optional and names are fixed; prefer explicit methods for public API.
+- **Command** — Wrap tool invocations when you need queues, structured logs, or replay; **undo** only with a real story (VCS/snapshots).
+- **Observer** — Fan-out streaming tokens; compose with ollama-client `hooks`.
+- **Strategy** — `PatchStrategy` if you need non-`patch` apply paths.
+- **State** — When confirmation + tool rounds + idle become tangled.
+- **Template Method** — Base agent class only if you have **multiple** agent variants sharing one loop.
 
-## When to avoid heavy metaprogramming
+## 8. Metaprogramming (judicious)
 
-- Main agent loop and error handling — prefer explicit code.
-- Performance-sensitive inner loops — measure before dynamic dispatch.
-- Public APIs — stable, documented methods over hidden DSL magic.
+| Technique | Use when | Caution |
+|-----------|----------|--------|
+| **`inherited` + registry** | Many tools, stable naming | Keep in sync with **tool JSON schema**; consider explicit `tool_name`. |
+| **Tool DSL** (`tool :name do …`) | Repetition dominates | Stack traces and IDE nav suffer; keep DSL thin. |
+| **`send` for hooks** | Fixed event names | Prefer explicit methods for public API. |
+| **`method_missing`** | Rare delegation | Not for core tool dispatch — use a Hash/registry. |
+| **Plugin `extend`** | Third-party tools | Document load order and sandbox rules. |
 
-## Full code examples
+## 9. When to avoid heavy metaprogramming
 
-See [reference.md](reference.md) for registry, `PromptBuilder`, adapters, proxy, command, observer, strategy, state, template-method skeleton, DSL sketch, and a corrected “putting it together” example.
+- Main agent loop and **error handling** — explicit flow wins.
+- **Performance-sensitive** inner loops — measure before dynamic dispatch.
+- **Public APIs** — stable, documented entry points over hidden DSL magic.
+
+## 10. Summary
+
+| Pattern | Benefit |
+|---------|---------|
+| Factory Method | Decouples tool creation from call sites. |
+| Builder | Composes prompts/options without positional arg soup. |
+| Singleton | Single shared resource (use sparingly for HTTP clients). |
+| Adapter | Multiple LLM backends behind one shape. |
+| Proxy | Cross-cutting concerns on the client. |
+| Facade | Hides orchestration from CLI users. |
+| Command | Tool calls as objects (log/replay/queue). |
+| Observer | Decoupled streaming consumers. |
+| Strategy | Swappable patch application. |
+| State | Explicit conversation phases. |
+| Template Method | Shared loop, varied steps. |
+| Metaprogramming | Less boilerplate at **boundaries** only. |
+
+**Start with straightforward code; refactor into patterns when pain appears.**
+
+## 11. Full code examples
+
+Runnable snippets (registry, `PromptBuilder`, adapters, proxy, command, observer, strategy, state, template-method skeleton, DSL sketch) live in **[reference.md](reference.md)**. Prefer copying from there and adapting to the real `ollama-client` API and this repo’s `SandboxedTools` / `tools_schema` constraints.

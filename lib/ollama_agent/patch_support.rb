@@ -39,9 +39,29 @@ module OllamaAgent
     end
 
     def patch_stderr_hint(detail)
-      return "" unless detail.match?(/malformed patch|---\s+\d+\s*,\s*\d+\s*----/i)
+      [
+        hint_legacy_context_diff(detail),
+        hint_garbage_markers(detail),
+        hint_markdown_bullets(detail)
+      ].compact.join(" ")
+    end
 
-      "If you see `--- N,M ----`, replace it with a unified hunk line starting with @@ (e.g. @@ -1,3 +1,3 @@)."
+    def hint_legacy_context_diff(detail)
+      return nil unless detail.match?(/---\s+\d+\s*,\s*\d+\s*----/i)
+
+      "If you see `--- N,M ----`, use a unified hunk line starting with @@ (e.g. @@ -1,3 +1,3 @@)."
+    end
+
+    def hint_garbage_markers(detail)
+      return nil unless detail.match?(/Only garbage|ends in middle of line/i)
+
+      "Remove lines like `*** End Patch` / `*** Begin Patch`; they are not part of unified diff."
+    end
+
+    def hint_markdown_bullets(detail)
+      return nil unless detail.match?(/malformed patch/i)
+
+      "Markdown bullets: new lines that begin with `-` in the file must appear as `+ - text` in the diff."
     end
 
     def apply_patch(diff)

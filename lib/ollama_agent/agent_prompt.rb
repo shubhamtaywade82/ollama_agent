@@ -17,7 +17,12 @@ module OllamaAgent
         3) edit_file last with a unified diff in `git diff` / patch(1) form: `--- a/<path>` then `+++ b/<same path>` (no
            trailing commas). The next line must be a unified hunk header starting with `@@` (two at-signs), e.g.
            `@@ -12,5 +12,5 @@`, then unchanged lines prefixed with a space, `-` removed, `+` added. Never use legacy lines like
-           `--- 2,1 ----` or `***`; those are not unified diffs.
+           `--- 2,1 ----`. Do not append editor markers such as `*** End Patch` or `*** Begin Patch`—only what `git diff`
+           would print; those markers are not valid patch input.
+
+        Markdown bullets: in unified diff, the first character of each line is the opcode. A line starting with `-` is a
+        removal from the old file—not a bullet. To add a bullet line `- item` to the file, the diff line must start with
+        `+` then the rest: `+ - item` (plus, space, dash, …). Same for any new line whose text begins with `-`.
 
         Do not paste, paraphrase, or echo any sample diff from this system message—there is none. Every `-` and `+` line
         must match real text from your read_file results (or your intended replacement for those exact lines). Never

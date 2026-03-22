@@ -17,10 +17,19 @@ module OllamaAgent
       d = diff.to_s
       d = d.gsub("\r\n", "\n").gsub("\r", "\n")
       d = d.gsub("\\\\n", "\n").gsub("\\n", "\n") if d.include?("\\n") && !d.include?("\n")
+      d = strip_cursor_patch_markers(d)
       # Strip trailing commas on ---/+++ lines (models copy commas from bad examples).
       d = d.gsub(/^((?:---|\+\+\+)[^\n]+),\s*$/m, "\\1")
       # Split "--- a/foo @@ -1,3" when glued on one line (common LLM mistake).
-      d.gsub(/(\S)\s(@@ -\d[^\n]*)/, "\\1\n\\2")
+      d = d.gsub(/(\S)\s(@@ -\d[^\n]*)/, "\\1\n\\2")
+      d += "\n" unless d.empty? || d.end_with?("\n")
+      d
+    end
+
+    def self.strip_cursor_patch_markers(diff)
+      # Multiline `/m` so `^` matches each line; strips Cursor-style trailers that are not valid patch input.
+      diff.gsub(/^\s*\*\*\*\s*(?:Begin|End)\s+Patch\s*$/im, "")
+          .gsub(/^\s*(?:Begin|End)\s+Patch\s*$/im, "")
     end
 
     def initialize(diff, root, target_path)

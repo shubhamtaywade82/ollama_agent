@@ -341,3 +341,88 @@ Dir[File.join(__dir__, "ollama_agent", "tools", "*.rb")].sort.each { |f| require
 ```
 
 Skip globs if load order matters; require explicit files instead.
+
+---
+
+## Recommended gem structure (pattern-oriented layout)
+
+Use this when growing toward explicit registries, adapters, and strategies. Omit directories you do not need yet (e.g. `states/`, `strategies/`).
+
+```
+ollama_agent/
+├── bin/
+│   └── console
+├── exe/
+│   └── ollama_agent
+├── lib/
+│   ├── ollama_agent.rb
+│   ├── ollama_agent/
+│   │   ├── version.rb
+│   │   ├── cli.rb
+│   │   ├── agent.rb                 # Facade + template-method loop
+│   │   ├── prompt_builder.rb
+│   │   ├── tool_registry.rb       # name → class (not a process Singleton)
+│   │   ├── tools/
+│   │   │   ├── base.rb            # inherited hook / optional DSL
+│   │   │   ├── read_file.rb
+│   │   │   ├── search_code.rb
+│   │   │   └── edit_file.rb
+│   │   ├── llm/
+│   │   │   ├── base_adapter.rb
+│   │   │   ├── ollama_adapter.rb
+│   │   │   └── logging_proxy.rb
+│   │   ├── commands/
+│   │   │   └── tool_command.rb
+│   │   ├── observers/
+│   │   │   ├── base_observer.rb
+│   │   │   └── token_observer.rb
+│   │   ├── strategies/
+│   │   │   ├── patch_strategy.rb
+│   │   │   └── system_patch_strategy.rb
+│   │   └── states/
+│   │       ├── agent_state.rb
+│   │       ├── idle_state.rb
+│   │       └── tool_execution_state.rb
+├── spec/
+└── ollama_agent.gemspec
+```
+
+### Where each pattern lives
+
+| Pattern / concept | Location |
+|-------------------|----------|
+| Facade | `agent.rb` — `run` |
+| Template method | `agent.rb` — loop skeleton; subclasses override hooks if needed |
+| Builder | `prompt_builder.rb` |
+| Registry | `tool_registry.rb` — map of tool names to classes |
+| Factory / auto-registration | `tools/base.rb` — `inherited` (or explicit registration) |
+| Adapter | `llm/base_adapter.rb`, `llm/ollama_adapter.rb` |
+| Proxy | `llm/logging_proxy.rb` |
+| Command | `commands/tool_command.rb` |
+| Observer | `observers/` |
+| Strategy | `strategies/` — patch application |
+| State | `states/` — conversation phases |
+| Metaprogramming / DSL | `tools/base.rb` — optional `tool` class method |
+
+### `lib/ollama_agent.rb` require order (example)
+
+```ruby
+require_relative "ollama_agent/version"
+require_relative "ollama_agent/cli"
+require_relative "ollama_agent/agent"
+require_relative "ollama_agent/prompt_builder"
+require_relative "ollama_agent/tool_registry"
+require_relative "ollama_agent/tools/base"
+Dir[File.join(__dir__, "ollama_agent", "tools", "*.rb")].sort.each { |f| require f }
+# then llm/, commands/, strategies/, etc.
+```
+
+Prefer explicit `require_relative` per file when load order matters (subclasses after `Base`).
+
+### Benefits
+
+- Separation of concerns; isolated unit tests; clear extension points for tools, strategies, observers.
+
+### This repository today (flatter)
+
+The live `ollama_agent` gem currently uses a **smaller** layout: e.g. `sandboxed_tools.rb`, `tools_schema.rb`, `patch_support.rb`, `diff_path_validator.rb`, `agent_prompt.rb`, `ollama_connection.rb` — same responsibilities, fewer directories. Migrating to the tree above is optional and should follow real need (second LLM backend, multiple patch strategies, etc.).

@@ -120,5 +120,19 @@ RSpec.describe OllamaAgent::DiffPathValidator do
       expect(normalized.lines[0].strip).to end_with(".md")
       expect(normalized).to include("\n@@")
     end
+
+    it "strips Cursor-style *** End Patch / *** Begin Patch lines" do
+      raw = <<~DIFF
+        --- a/x.md
+        +++ b/x.md
+        @@ -1 +1 @@
+        -a
+        +b
+        *** End Patch
+      DIFF
+      normalized = described_class.normalize_diff(raw)
+      expect(normalized).not_to include("***")
+      expect(described_class.call(normalized, root, "x.md")).to be_nil
+    end
   end
 end
