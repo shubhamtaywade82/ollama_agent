@@ -28,7 +28,7 @@ module OllamaAgent
       # rubocop:disable Metrics/ParameterLists -- mirrors CLI; keeps call sites explicit
       # rubocop:disable Metrics/MethodLength
       def run(model: nil, root: nil, yes: false, semi: true, apply: false, http_timeout: nil, think: nil, client: nil)
-        source_root = File.expand_path(root || OllamaAgent.gem_root)
+        source_root = resolve_source_root(root)
         sandbox_root = Dir.mktmpdir("ollama_agent_improve_")
         policy = semi ? PatchRisk.method(:assess).to_proc : nil
 
@@ -44,6 +44,9 @@ module OllamaAgent
             think: think
           )
           restore_build_essentials_from_source(source_root, sandbox_root)
+          missing = missing_gemfile_failure(source_root, sandbox_root)
+          return build_run_result(missing, [], source_root) if missing
+
           test_result = run_test_suite(sandbox_root)
           copied = copy_back_if_requested(test_result, apply, sandbox_root, source_root)
           build_run_result(test_result, copied, source_root)
@@ -84,6 +87,40 @@ module OllamaAgent
         end
       end
 
+      def resolve_source_root(root)
+        start_dir = normalize_improve_root(root)
+        nearest = nearest_directory_with_gemfile(start_dir)
+        nearest || start_dir
+      end
+
+      def normalize_improve_root(root)
+        return OllamaAgent.gem_root if root.nil? || root.to_s.strip.empty?
+
+        File.expand_path(root)
+      end
+
+      def nearest_directory_with_gemfile(start_dir)
+        dir = File.expand_path(start_dir)
+        loop do
+          return dir if File.file?(File.join(dir, "Gemfile"))
+
+          parent = File.dirname(dir)
+          return nil if parent == dir
+
+          dir = parent
+        end
+      end
+
+      def missing_gemfile_failure(source_root, sandbox_root)
+        return nil if File.file?(File.join(sandbox_root, "Gemfile"))
+
+        msg = <<~MSG
+          Cannot run tests: Gemfile is missing in the sandbox after restore from #{source_root}.
+          Point --root at a directory that contains a Gemfile (or a subdirectory of such a project).
+        MSG
+        { success: false, output: msg.strip }
+      end
+
       # The model may delete or corrupt Gemfile / lock / gemspec during edit_file; bundle needs them in the sandbox.
       def restore_build_essentials_from_source(source, sandbox)
         %w[Gemfile Gemfile.lock Rakefile .ruby-version].each do |name|
@@ -111,7 +148,7 @@ module OllamaAgent
       end
 
       def bundle_env(dir)
-        { "BUNDLE_GEMFILE" => File.join(dir, "Gemfile") }
+        { "BUNDLE_GEMFILE" => File.expand_path(File.join(dir, "Gemfile")) }
       end
 
       def bundle_exec(dir, *)

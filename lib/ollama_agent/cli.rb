@@ -146,13 +146,15 @@ module OllamaAgent
     end
 
     def resolved_root_for_self_review
-      File.expand_path(options[:root] || ENV["OLLAMA_AGENT_ROOT"] || OllamaAgent.gem_root)
+      raw = options[:root] || ENV.fetch("OLLAMA_AGENT_ROOT", nil)
+      base = raw.to_s.strip.empty? ? OllamaAgent.gem_root : raw
+      File.expand_path(base)
     end
 
     def improve_run_options
       {
         model: options[:model],
-        root: options[:root],
+        root: options[:root] || ENV.fetch("OLLAMA_AGENT_ROOT", nil),
         yes: options[:yes],
         semi: options[:semi] != false,
         apply: options[:apply],
@@ -175,10 +177,12 @@ module OllamaAgent
       puts "ollama_agent: no changed files to copy from sandbox" if options[:apply] && copied.empty?
     end
 
+    # Build an Agent for the `ask` command.
+    # Use the same root resolution as other commands, falling back to the gem root.
     def build_agent
       Agent.new(
         model: options[:model],
-        root: options[:root],
+        root: resolved_root_for_self_review,
         confirm_patches: !options[:yes],
         http_timeout: options[:timeout],
         think: options[:think]

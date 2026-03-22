@@ -28,4 +28,33 @@ RSpec.describe OllamaAgent::SelfImprovement::Improver do
       expect(File).to be_file(File.join(sandbox, "foo.gemspec"))
     end
   end
+
+  describe "#resolve_source_root" do
+    it "treats a blank root like the default gem root" do
+      expect(improver.send(:resolve_source_root, "")).to eq(OllamaAgent.gem_root)
+      expect(improver.send(:resolve_source_root, "   ")).to eq(OllamaAgent.gem_root)
+    end
+
+    it "walks up from a subdirectory until it finds a Gemfile" do
+      nested = File.join(source, "lib", "nested")
+      FileUtils.mkdir_p(nested)
+      File.write(File.join(source, "Gemfile"), "source 'https://rubygems.org'\n")
+
+      expect(improver.send(:resolve_source_root, nested)).to eq(File.expand_path(source))
+    end
+  end
+
+  describe "#missing_gemfile_failure" do
+    it "returns nil when the sandbox already has a Gemfile" do
+      File.write(File.join(sandbox, "Gemfile"), "gem 'rake'\n")
+      expect(improver.send(:missing_gemfile_failure, source, sandbox)).to be_nil
+    end
+
+    it "returns a failure hash when the sandbox has no Gemfile" do
+      out = improver.send(:missing_gemfile_failure, source, sandbox)
+      expect(out[:success]).to be(false)
+      expect(out[:output]).to include("Gemfile is missing")
+      expect(out[:output]).to include(source)
+    end
+  end
 end
