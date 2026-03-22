@@ -97,6 +97,11 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_AGENT_MARKDOWN` | Set to `0` to disable Markdown formatting of assistant replies (plain text only) |
 | `OLLAMA_AGENT_THINKING_MARKDOWN` | Set to `1` to render **thinking** text with Markdown (muted); default is plain dim text inside the Thinking frame |
 | `OLLAMA_AGENT_THINK` | Model **thinking** mode for compatible models: `true` / `false`, or `high` / `medium` / `low` (see ollama-client `think:`). Empty = omit (server default). |
+| `OLLAMA_AGENT_INDEX_REBUILD` | Set to `1` to drop the cached Prism Ruby index before the next symbol search in this process |
+| `OLLAMA_AGENT_RUBY_INDEX_MAX_FILES` | Max `.rb` files to parse per index build (default **5000**) |
+| `OLLAMA_AGENT_RUBY_INDEX_MAX_FILE_BYTES` | Skip Ruby files larger than this many bytes (default **512000**) |
+| `OLLAMA_AGENT_RUBY_INDEX_MAX_LINES` | Max result lines for `search_code` class/module/method modes (default **200**) |
+| `OLLAMA_AGENT_RUBY_INDEX_MAX_CHARS` | Max characters of index output per search (default **60000**) |
 
 ## Troubleshooting
 
@@ -108,7 +113,8 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 
 1. The CLI starts `OllamaAgent::Agent`, which loops on `Ollama::Client#chat` with tool definitions.
 2. Tools are executed in-process under a **path sandbox** (`OLLAMA_AGENT_ROOT`).
-3. Patches are validated and checked with **`patch --dry-run`** before you confirm (unless `-y`).
+3. **`search_code`** defaults to **ripgrep/grep** (`mode` omitted or `text`). For Ruby, use `mode` **`method`**, **`class`**, **`module`**, or **`constant`** to query a **Prism** parse index (built lazily on first use). **`read_file`** accepts optional **`start_line`** / **`end_line`** (1-based, inclusive) to read only part of a file.
+4. Patches are validated and checked with **`patch --dry-run`** before you confirm (unless `-y`).
 
 ## Development
 

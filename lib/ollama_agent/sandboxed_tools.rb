@@ -7,13 +7,16 @@ require_relative "console"
 require_relative "diff_path_validator"
 require_relative "patch_support"
 require_relative "repo_list"
+require_relative "ruby_index_tool_support"
 require_relative "tool_arguments"
 
 module OllamaAgent
   # File read, search, and patch application constrained to a project root.
+  # rubocop:disable Metrics/ModuleLength -- tool dispatch, I/O, and Ruby index support
   module SandboxedTools
     include PatchSupport
     include RepoList
+    include RubyIndexToolSupport
     include ToolArguments
 
     private
@@ -33,11 +36,19 @@ module OllamaAgent
       path = tool_arg(args, "path")
       return missing_tool_argument("read_file", "path") if blank_tool_value?(path)
 
-      read_file(path)
+      read_file(
+        path,
+        start_line: tool_arg(args, "start_line"),
+        end_line: tool_arg(args, "end_line")
+      )
     end
 
     def execute_search_code(args)
-      pattern = tool_arg(args, "pattern")
+      pattern = tool_arg(args, "pattern").to_s
+      mode = (tool_arg(args, "mode") || "text").to_s.downcase
+
+      return search_code_ruby(pattern, mode) if ruby_search_mode?(mode)
+
       return missing_tool_argument("search_code", "pattern") if blank_tool_value?(pattern)
 
       search_code(pattern, tool_arg(args, "directory") || ".")
@@ -57,12 +68,36 @@ module OllamaAgent
       edit_file(path, diff)
     end
 
-    def read_file(path)
+    def read_file(path, start_line: nil, end_line: nil)
       return disallowed_path_message(path) unless path_allowed?(path)
 
-      File.read(resolve_path(path))
+      abs = resolve_path(path)
+      return read_file_lines(abs, start_line, end_line) if start_line || end_line
+
+      File.read(abs)
     rescue Errno::ENOENT => e
       "Error reading file: #{e.message}"
+    end
+
+    def read_file_lines(abs, start_line, end_line)
+      lines = File.readlines(abs)
+      return "" if lines.empty?
+
+      total = lines.size
+      end_i = integer_or(end_line, total).clamp(1, total)
+      start_i = integer_or(start_line, 1).clamp(1, total)
+      return "" if start_i > end_i
+
+      slice = lines[(start_i - 1)..(end_i - 1)]
+      slice ? slice.join : ""
+    end
+
+    def integer_or(value, default)
+      return default if value.nil?
+
+      Integer(value)
+    rescue ArgumentError, TypeError
+      default
     end
 
     def search_code(pattern, directory)
@@ -144,4 +179,5 @@ module OllamaAgent
       "Path must stay under project root #{@root}: #{path}"
     end
   end
+  # rubocop:enable Metrics/ModuleLength
 end

@@ -37,7 +37,6 @@ RSpec.describe OllamaAgent::Console do
     end
   end
 
-  # rubocop:disable RSpec/MultipleExpectations, RSpec/ExampleLength -- examples check header + body
   describe ".format_thinking" do
     it "keeps thinking as dim plain text by default (framed)" do
       ENV["OLLAMA_AGENT_MARKDOWN"] = "0"
@@ -63,7 +62,6 @@ RSpec.describe OllamaAgent::Console do
       ENV.delete("OLLAMA_AGENT_THINKING_MARKDOWN")
     end
   end
-  # rubocop:enable RSpec/MultipleExpectations, RSpec/ExampleLength
 
   describe ".puts_assistant_message" do
     let(:msg_class) { Struct.new(:thinking, :content) }

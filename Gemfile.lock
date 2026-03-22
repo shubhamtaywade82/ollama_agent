@@ -4,6 +4,7 @@ PATH
     ollama_agent (0.1.0)
       dotenv (~> 2.8)
       ollama-client (~> 1.1)
+      prism (~> 1.0)
       thor (~> 1.2)
       tty-markdown (~> 0.7)
 

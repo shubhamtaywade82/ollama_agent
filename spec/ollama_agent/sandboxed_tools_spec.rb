@@ -39,6 +39,29 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
     end
   end
 
+  describe "#read_file" do
+    it "returns only the requested line range when start_line and end_line are set" do
+      tmpdir = Dir.mktmpdir
+      File.write(File.join(tmpdir, "slice.rb"), "a\nb\nc\nd\n")
+      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      out = agent.send(:read_file, "slice.rb", start_line: 2, end_line: 3)
+      expect(out).to eq("b\nc\n")
+    ensure
+      FileUtils.remove_entry(tmpdir)
+    end
+  end
+
+  describe "search_code Ruby index modes" do
+    let(:fixture_root) { File.expand_path("../fixtures/ruby_index", __dir__) }
+
+    it "returns formatted method rows for mode method" do
+      agent = OllamaAgent::Agent.new(root: fixture_root, confirm_patches: false)
+      out = agent.send(:execute_tool, "search_code", { "pattern" => "instance_method", "mode" => "method" })
+      expect(out).to include("instance_method")
+      expect(out).to include("nested.rb")
+    end
+  end
+
   describe "#edit_file" do
     it "returns a dry-run error without prompting when the diff does not match the file" do
       skip "patch --dry-run not supported" unless patch_supports_dry_run?
