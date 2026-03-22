@@ -81,7 +81,7 @@ module OllamaAgent
 
     def announce_assistant_content(message)
       content = message.content
-      puts Console.assistant_output(content) if content && !content.to_s.empty?
+      puts Console.format_assistant(content) if content && !content.to_s.empty?
     end
 
     def default_model

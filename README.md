@@ -52,7 +52,7 @@ Interactive REPL:
 bundle exec ruby exe/ollama_agent ask --interactive
 ```
 
-The CLI uses **ANSI colors** on a TTY (banner, prompt, assistant text, patch prompts). Disable with **`NO_COLOR`** or **`OLLAMA_AGENT_COLOR=0`**.
+The CLI uses **ANSI colors** on a TTY (banner, prompt, patch prompts). **Assistant replies** are rendered as **Markdown** (headings, lists, bold, code fences) via `tty-markdown` when stdout is a TTY and **`NO_COLOR`** is unset. Disable Markdown rendering with **`OLLAMA_AGENT_MARKDOWN=0`**. Disable all colors with **`NO_COLOR`** or **`OLLAMA_AGENT_COLOR=0`**.
 
 ### Ollama Cloud
 
@@ -82,6 +82,7 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_AGENT_PARSE_TOOL_JSON` | Set to `1` to run tools parsed from JSON lines in assistant text (fallback when the model does not emit native tool calls) |
 | `NO_COLOR` | Set (any value) to disable ANSI colors (see [no-color.org](https://no-color.org/)) |
 | `OLLAMA_AGENT_COLOR` | Set to `0` to disable colors even on a TTY |
+| `OLLAMA_AGENT_MARKDOWN` | Set to `0` to disable Markdown formatting of assistant replies (plain text only) |
 
 ## Troubleshooting
 

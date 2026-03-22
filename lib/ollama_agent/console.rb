@@ -2,11 +2,16 @@
 
 module OllamaAgent
   # ANSI styling for TTY output. Respects https://no-color.org/ via NO_COLOR.
+  # Assistant replies use tty-markdown when enabled (headings, lists, bold, code blocks).
   module Console
     module_function
 
     def color_enabled?
       $stdout.tty? && ENV["NO_COLOR"].to_s.empty? && ENV["OLLAMA_AGENT_COLOR"] != "0"
+    end
+
+    def markdown_enabled?
+      $stdout.tty? && ENV["NO_COLOR"].to_s.empty? && ENV["OLLAMA_AGENT_MARKDOWN"] != "0"
     end
 
     def style(text, *codes)
@@ -35,6 +40,16 @@ module OllamaAgent
 
     def assistant_output(text)
       green(text)
+    end
+
+    # Renders Markdown to the terminal (bold, lists, fenced code) when enabled; otherwise plain green text.
+    def format_assistant(text)
+      return assistant_output(text) unless markdown_enabled?
+
+      require "tty-markdown"
+      TTY::Markdown.parse(text.to_s)
+    rescue LoadError, StandardError
+      assistant_output(text)
     end
 
     def patch_title(text)

@@ -27,4 +27,13 @@ RSpec.describe OllamaAgent::Console do
       ENV.delete("OLLAMA_AGENT_COLOR")
     end
   end
+
+  describe ".format_assistant" do
+    it "falls back to plain styling when Markdown is disabled" do
+      ENV["OLLAMA_AGENT_MARKDOWN"] = "0"
+      expect(described_class.format_assistant("**hi**")).to eq(described_class.assistant_output("**hi**"))
+    ensure
+      ENV.delete("OLLAMA_AGENT_MARKDOWN")
+    end
+  end
 end
