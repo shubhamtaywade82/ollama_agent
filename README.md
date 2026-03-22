@@ -15,7 +15,7 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
   - **`analysis`** (default, alias `1`) — read-only tools; report only; no writes.
   - **`interactive`** (alias `2`, `fix`) — full tools on `--root`; you confirm each patch (like `ask`); optional `-y` / `--semi`.
   - **`automated`** (alias `3`, `sandbox`) — temp copy, agent edits, **`bundle exec rspec`** in the sandbox, optional **`--apply`** to merge into your checkout.
-- **`improve`** — same as **`self_review --mode automated`**.
+- **`improve`** — same as **`self_review --mode automated`** (you can pass **`--mode automated`** explicitly; other modes belong on **`self_review`**).
 
 ## Requirements
 

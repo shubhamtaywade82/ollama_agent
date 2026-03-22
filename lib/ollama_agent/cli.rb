@@ -8,6 +8,10 @@ module OllamaAgent
   # Thor CLI for single-shot and interactive agent sessions.
   # rubocop:disable Metrics/ClassLength -- Thor commands and shared helpers
   class CLI < Thor
+    def self.exit_on_failure?
+      true
+    end
+
     desc "ask [QUERY]", "Run a natural-language task (reads, search, patch)"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
     method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
@@ -55,6 +59,8 @@ module OllamaAgent
     end
 
     desc "improve", "Shortcut for: self_review --mode automated"
+    method_option :mode, type: :string, default: "automated",
+                         desc: "Optional; must be automated (or 3, sandbox, full). Other modes: use self_review --mode"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
     method_option :root, type: :string, desc: "Source tree to copy and test (default: OLLAMA_AGENT_ROOT or gem root)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
@@ -65,10 +71,30 @@ module OllamaAgent
     method_option :apply, type: :boolean, default: false,
                           desc: "After green tests, copy changed files from sandbox into --root"
     def improve
+      ensure_improve_mode_only_automated!
       dispatch_self_review_mode("automated")
     end
 
     private
+
+    def ensure_improve_mode_only_automated!
+      m = SelfImprovement::Modes.normalize(options[:mode])
+      return if m == "automated"
+
+      warn Console.error_line(improve_mode_error_message(m))
+      exit 1
+    end
+
+    def improve_mode_error_message(normalized_mode)
+      return invalid_improve_mode_message unless SelfImprovement::Modes.valid?(normalized_mode)
+
+      "Command \"improve\" only runs automated (sandbox) mode. For other modes use: " \
+        "ollama_agent self_review --mode analysis | interactive"
+    end
+
+    def invalid_improve_mode_message
+      "Invalid --mode for improve: use automated (or 3, sandbox, full). Got: #{options[:mode].inspect}"
+    end
 
     def dispatch_self_review_mode(mode)
       validate_self_review_mode!(mode)
@@ -115,7 +141,7 @@ module OllamaAgent
     end
 
     def run_mode_automated
-      result = SelfImprovement::Improver.new.run(improve_run_options)
+      result = SelfImprovement::Improver.new.run(**improve_run_options)
       report_improve_result(result)
     end
 
