@@ -97,6 +97,13 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_AGENT_MARKDOWN` | Set to `0` to disable Markdown formatting of assistant replies (plain text only) |
 | `OLLAMA_AGENT_THINKING_MARKDOWN` | Set to `1` to render **thinking** text with Markdown (muted); default is plain dim text inside the Thinking frame |
 | `OLLAMA_AGENT_THINK` | Model **thinking** mode for compatible models: `true` / `false`, or `high` / `medium` / `low` (see ollama-client `think:`). Empty = omit (server default). |
+| `OLLAMA_AGENT_INDEX_REBUILD` | Set to `1` to drop the cached Prism Ruby index before the next symbol search in this process |
+| `OLLAMA_AGENT_RUBY_INDEX_MAX_FILES` | Max `.rb` files to parse per index build (default **5000**) |
+| `OLLAMA_AGENT_RUBY_INDEX_MAX_FILE_BYTES` | Skip Ruby files larger than this many bytes (default **512000**) |
+| `OLLAMA_AGENT_RUBY_INDEX_MAX_LINES` | Max result lines for `search_code` class/module/method modes (default **200**) |
+| `OLLAMA_AGENT_RUBY_INDEX_MAX_CHARS` | Max characters of index output per search (default **60000**) |
+| `OLLAMA_AGENT_MAX_READ_FILE_BYTES` | Max bytes for a **full** `read_file` (no line range); larger files return an error (default **2097152**, 2 MiB). Line-range reads stream and are not limited by this cap. |
+| `OLLAMA_AGENT_INDEX_REBUILD` | The Prism index is rebuilt when this env value **changes** (e.g. unset → `1`); it is **not** rebuilt on every tool call while it stays `1`. |
 
 ## Troubleshooting
 
@@ -108,7 +115,8 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 
 1. The CLI starts `OllamaAgent::Agent`, which loops on `Ollama::Client#chat` with tool definitions.
 2. Tools are executed in-process under a **path sandbox** (`OLLAMA_AGENT_ROOT`).
-3. Patches are validated and checked with **`patch --dry-run`** before you confirm (unless `-y`).
+3. **`search_code`** defaults to **ripgrep/grep** (`mode` omitted or `text`). For Ruby, use `mode` **`method`**, **`class`**, **`module`**, or **`constant`** to query a **Prism** parse index (built lazily on first use). **`read_file`** accepts optional **`start_line`** / **`end_line`** (1-based, inclusive) to read only part of a file.
+4. Patches are validated and checked with **`patch --dry-run`** before you confirm (unless `-y`).
 
 ## Development
 
@@ -116,6 +124,23 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 bundle exec rspec
 bundle exec rubocop
 ```
+
+### CI and RubyGems release
+
+- **CI** — [`.github/workflows/main.yml`](.github/workflows/main.yml) runs **RSpec** and **RuboCop** on pushes to `main` / `master` and on pull requests (Ruby **3.3.4** and **3.2.0**).
+- **Release** — [`.github/workflows/release.yml`](.github/workflows/release.yml) runs on tags `v*`. It checks that the tag matches `OllamaAgent::VERSION` in [`lib/ollama_agent/version.rb`](lib/ollama_agent/version.rb), builds with `gem build ollama_agent.gemspec`, and pushes to RubyGems.
+
+Repository **secrets** (Settings → Secrets and variables → Actions):
+
+| Secret | Purpose |
+|--------|---------|
+| `RUBYGEMS_API_KEY` | RubyGems API key with **push** scope |
+| `RUBYGEMS_OTP_SECRET` | Base32 secret for **TOTP** (RubyGems MFA); the workflow uses `rotp` to generate a one-time code for `gem push` |
+
+Release steps:
+
+1. Bump `OllamaAgent::VERSION` in `lib/ollama_agent/version.rb` and commit to `main`.
+2. Tag: `git tag v0.1.0` (must match the version string) and `git push origin v0.1.0`.
 
 ## License
 

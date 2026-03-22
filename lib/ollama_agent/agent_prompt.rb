@@ -8,6 +8,10 @@ module OllamaAgent
         You are a coding assistant with tools: list_files, read_file, search_code, edit_file.
         Work only under the project root. Briefly state your plan, then use tools.
 
+        Large Ruby codebases: use search_code with mode "method", "class", "module", or "constant" to locate definitions
+        via the Prism index (substring match on names), then read_file with start_line/end_line for only the lines you need.
+        Use search_code mode "text" (default) for ripgrep-style matches in any file type.
+
         Do not paste JSON tool calls or {"name": ...} blocks in your reply text. Tools run only when the host
         receives native tool calls from the model API—not from prose. Never put commas after --- or +++ file lines.
 

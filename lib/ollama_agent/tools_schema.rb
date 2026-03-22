@@ -7,10 +7,15 @@ module OllamaAgent
       type: "function",
       function: {
         name: "read_file",
-        description: "Read the content of a file under the project root.",
+        description: "Read the content of a file under the project root. " \
+                     "Optional start_line and end_line (1-based, inclusive) return only that slice.",
         parameters: {
           type: "object",
-          properties: { path: { type: "string" } },
+          properties: {
+            path: { type: "string" },
+            start_line: { type: "integer", description: "First line to include (1-based)" },
+            end_line: { type: "integer", description: "Last line to include (1-based); omit through EOF" }
+          },
           required: ["path"]
         }
       }
@@ -19,12 +24,17 @@ module OllamaAgent
       type: "function",
       function: {
         name: "search_code",
-        description: "Search for a pattern in files (case-sensitive). Returns matching lines with file names.",
+        description: "Search: mode text = ripgrep/grep (default). " \
+                     "Modes class, module, constant, method = Prism Ruby index (no grep).",
         parameters: {
           type: "object",
           properties: {
             pattern: { type: "string" },
-            directory: { type: "string" }
+            directory: { type: "string" },
+            mode: {
+              type: "string",
+              description: "text (default), class, module, constant, or method (Prism Ruby index)"
+            }
           },
           required: ["pattern"]
         }
