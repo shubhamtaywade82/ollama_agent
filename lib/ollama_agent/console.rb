@@ -6,6 +6,22 @@ module OllamaAgent
   module Console
     module_function
 
+    # Muted tty-markdown palette so "Thinking" stays visually distinct from the main reply
+    # (default TTY::Markdown theme uses cyan/yellow like normal assistant output).
+    THINKING_MARKDOWN_THEME = {
+      em: :bright_black,
+      header: %i[bright_black bold],
+      hr: :bright_black,
+      link: %i[bright_black underline],
+      list: :bright_black,
+      strong: %i[bright_black bold],
+      table: :bright_black,
+      quote: :bright_black,
+      image: :bright_black,
+      note: :bright_black,
+      comment: :bright_black
+    }.freeze
+
     def color_enabled?
       $stdout.tty? && ENV["NO_COLOR"].to_s.empty? && ENV["OLLAMA_AGENT_COLOR"] != "0"
     end
@@ -53,7 +69,7 @@ module OllamaAgent
     def format_thinking(text)
       header = "#{magenta(bold("Thinking"))}\n"
       body = if markdown_enabled?
-               markdown_parse(text) || dim(text.to_s)
+               markdown_parse(text, thinking: true) || dim(text.to_s)
              else
                dim(text.to_s)
              end
@@ -63,9 +79,10 @@ module OllamaAgent
     class << self
       private
 
-      def markdown_parse(text)
+      def markdown_parse(text, thinking: false)
         require "tty-markdown"
-        TTY::Markdown.parse(text.to_s)
+        theme = thinking ? THINKING_MARKDOWN_THEME : {}
+        TTY::Markdown.parse(text.to_s, theme: theme)
       rescue LoadError, StandardError
         nil
       end

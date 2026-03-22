@@ -1,6 +1,11 @@
 AllCops:
   TargetRubyVersion: 3.2
   NewCops: enable
+  Exclude:
+    - "*.gemspec"
+plugins:
+  - rubocop-rake
+  - rubocop-rspec
 
 Metrics/BlockLength:
   Exclude:
