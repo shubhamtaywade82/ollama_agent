@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "open3"
 require "spec_helper"
 
 RSpec.describe OllamaAgent::Agent do
@@ -155,6 +156,47 @@ RSpec.describe OllamaAgent::Agent do
       expect(prompt).not_to include("--- a/README.md")
       expect(prompt).not_to include("old line from read_file")
       expect(prompt).not_to include("context line")
+    end
+
+    it "uses self-review instructions when read_only is true" do
+      prompt = OllamaAgent::AgentPrompt.self_review_text
+      expect(prompt).to include("analysis-only")
+      expect(prompt).not_to include("edit_file last")
+    end
+  end
+
+  describe "read_only and tools" do
+    it "omits edit_file from tools when read_only is true" do
+      agent = described_class.new(client: instance_double(Ollama::Client), root: root, read_only: true,
+                                  confirm_patches: false)
+      args = agent.send(:chat_request_args, [])
+      expect(args[:tools].size).to eq(3)
+      names = args[:tools].map { |t| t.dig(:function, :name) }
+      expect(names).not_to include("edit_file")
+    end
+
+    it "uses patch_policy to skip confirmation for auto-approved paths" do
+      skip "patch --dry-run not supported" unless patch_supports_dry_run?
+
+      File.write(File.join(root, "README.md"), "hi\n")
+      policy = ->(_path, _diff) { :auto_approve }
+
+      agent = described_class.new(root: root, confirm_patches: true, patch_policy: policy)
+
+      diff = <<~DIFF
+        --- a/README.md
+        +++ b/README.md
+        @@ -1 +1 @@
+        -hi
+        +hello
+      DIFF
+      result = agent.send(:edit_file, "README.md", diff)
+      expect(result).to eq("Patch applied successfully.")
+    end
+
+    def patch_supports_dry_run?
+      out, = Open3.capture2e("patch", "--help")
+      out.include?("dry-run")
     end
   end
 

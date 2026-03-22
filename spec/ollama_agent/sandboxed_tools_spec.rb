@@ -22,6 +22,28 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       expect(result).to include("Missing required").and include("path")
     end
 
+    it "rejects edit_file when the agent is read-only" do
+      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false, read_only: true)
+      result = agent.send(:execute_tool, "edit_file", { "path" => "x.rb", "diff" => "---\n" })
+      expect(result).to include("read-only")
+    end
+
+    it "rejects diffs that match forbidden patterns" do
+      skip "patch --dry-run not supported" unless patch_supports_dry_run?
+
+      File.write(File.join(tmpdir, "README.md"), "hi\n")
+      diff = <<~DIFF
+        --- a/README.md
+        +++ b/README.md
+        @@ -1 +1 @@
+        -hi
+        +eval("x")
+      DIFF
+      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      result = agent.send(:execute_tool, "edit_file", { "path" => "README.md", "diff" => diff })
+      expect(result).to include("forbidden")
+    end
+
     it "merges nested parameters into tool arguments" do
       skip "patch --dry-run not supported" unless patch_supports_dry_run?
 

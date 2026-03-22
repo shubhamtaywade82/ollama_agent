@@ -11,6 +11,11 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
 - Tool `search_code` – search code with ripgrep or grep.
 - Tool `edit_file` – apply unified diffs safely.
 - CLI built with Thor, entry point `exe/ollama_agent`.
+- **`self_review`** – self-review / improvement with a **`--mode`**:
+  - **`analysis`** (default, alias `1`) — read-only tools; report only; no writes.
+  - **`interactive`** (alias `2`, `fix`) — full tools on `--root`; you confirm each patch (like `ask`); optional `-y` / `--semi`.
+  - **`automated`** (alias `3`, `sandbox`) — temp copy, agent edits, **`bundle exec rspec`** in the sandbox, optional **`--apply`** to merge into your checkout.
+- **`improve`** — same as **`self_review --mode automated`**.
 
 ## Requirements
 
@@ -53,6 +58,23 @@ Interactive REPL:
 ```bash
 bundle exec ruby exe/ollama_agent ask --interactive
 ```
+
+Self-review modes (default project root is the loaded gem tree unless you set `--root` or `OLLAMA_AGENT_ROOT`):
+
+```bash
+# Mode 1 — analysis only (default)
+bundle exec ruby exe/ollama_agent self_review
+bundle exec ruby exe/ollama_agent self_review --mode analysis
+
+# Mode 2 — optional fixes in the working tree (confirm each patch, or -y / --semi)
+bundle exec ruby exe/ollama_agent self_review --mode interactive
+
+# Mode 3 — sandbox + tests + optional merge back (same as `improve`)
+bundle exec ruby exe/ollama_agent self_review --mode automated
+bundle exec ruby exe/ollama_agent improve --apply
+```
+
+For mode 3, `-y` skips all patch prompts; `--no-semi` prompts for every patch when not using `-y`.
 
 With a **thinking-capable** model, enable reasoning output:
 

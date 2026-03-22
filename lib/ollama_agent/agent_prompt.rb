@@ -40,5 +40,20 @@ module OllamaAgent
         them as the assistant message.
       PROMPT
     end
+
+    def self.self_review_text
+      <<~PROMPT
+        You are reviewing the ollama_agent Ruby gem. Tools available: list_files, read_file, search_code only.
+        Do not call edit_file and do not output unified diffs—this run is analysis-only.
+
+        Work only under the project root. Briefly state your plan, then use tools.
+
+        Large Ruby trees: use search_code with mode "method", "class", "module", or "constant" to locate definitions
+        via the Prism index, then read_file with start_line/end_line for only the lines you need.
+
+        Final reply: strengths, risks, and concrete suggestions with file paths (and line numbers when clear).
+        Do not paste JSON tool calls in prose; tools run only via native tool calls from the API.
+      PROMPT
+    end
   end
 end

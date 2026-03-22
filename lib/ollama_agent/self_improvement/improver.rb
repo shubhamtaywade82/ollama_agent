@@ -1,0 +1,144 @@
+# frozen_string_literal: true
+
+require "fileutils"
+require "open3"
+require "pathname"
+
+require_relative "../agent"
+require_relative "../patch_risk"
+
+module OllamaAgent
+  module SelfImprovement
+    # Copies the project into a temp directory, runs the agent with optional semi-auto patch policy,
+    # runs the test suite in the sandbox, and optionally merges changed files back to the source tree.
+    class Improver
+      SANDBOX_EXCLUDE = %w[.git vendor coverage tmp .bundle .cursor node_modules].freeze
+
+      FIX_PROMPT = <<~PROMPT
+        You are improving the ollama_agent Ruby gem in this temporary sandbox copy.
+        Use list_files, search_code, and read_file to understand the code, then edit_file with valid unified diffs.
+        Prefer small, reviewable changes: fixes, tests, docs, and clarity. Avoid changing Gemfile, Gemfile.lock,
+        version.rb, or exe/ unless strictly necessary.
+
+        When finished, summarize what you changed in plain language.
+      PROMPT
+
+      # rubocop:disable Metrics/ParameterLists -- mirrors CLI; keeps call sites explicit
+      # rubocop:disable Metrics/MethodLength
+      def run(model: nil, root: nil, yes: false, semi: true, apply: false, http_timeout: nil, think: nil, client: nil)
+        source_root = File.expand_path(root || OllamaAgent.gem_root)
+        sandbox_root = Dir.mktmpdir("ollama_agent_improve_")
+        policy = semi ? PatchRisk.method(:assess).to_proc : nil
+
+        begin
+          copy_project_into_sandbox(source_root, sandbox_root)
+          run_agent_session(
+            sandbox_root,
+            client: client,
+            model: model,
+            confirm_patches: !yes,
+            patch_policy: policy,
+            http_timeout: http_timeout,
+            think: think
+          )
+          test_result = run_test_suite(sandbox_root)
+          copied = copy_back_if_requested(test_result, apply, sandbox_root, source_root)
+          build_run_result(test_result, copied, source_root)
+        ensure
+          FileUtils.remove_entry(sandbox_root) if sandbox_root && Dir.exist?(sandbox_root)
+        end
+      end
+      # rubocop:enable Metrics/MethodLength
+      # rubocop:enable Metrics/ParameterLists
+
+      private
+
+      def run_agent_session(sandbox_root, **)
+        agent = Agent.new(root: sandbox_root, **)
+        agent.run(FIX_PROMPT)
+      end
+
+      def copy_back_if_requested(test_result, apply, sandbox_root, source_root)
+        return [] unless test_result[:success] && apply
+
+        merge_sandbox_into_source(sandbox_root, source_root)
+      end
+
+      def build_run_result(test_result, copied, source_root)
+        {
+          success: test_result[:success],
+          test_output: test_result[:output],
+          copied_to_source: copied,
+          source_root: source_root
+        }
+      end
+
+      def copy_project_into_sandbox(source, dest)
+        Dir.children(source).each do |entry|
+          next if SANDBOX_EXCLUDE.include?(entry)
+
+          FileUtils.cp_r(File.join(source, entry), File.join(dest, entry))
+        end
+      end
+
+      def run_test_suite(dir)
+        output, status = bundle_exec(dir, "rspec", "spec/")
+        return { success: true, output: output } if status.success?
+
+        install_out, install_status = bundle_install(dir)
+        combined = "#{install_out}\n#{output}"
+        return { success: false, output: combined } unless install_status.success?
+
+        output2, status2 = bundle_exec(dir, "rspec", "spec/")
+        { success: status2.success?, output: "#{combined}\n#{output2}" }
+      end
+
+      def bundle_env(dir)
+        { "BUNDLE_GEMFILE" => File.join(dir, "Gemfile") }
+      end
+
+      def bundle_exec(dir, *)
+        Open3.capture2e(bundle_env(dir), "bundle", "exec", *, chdir: dir)
+      end
+
+      def bundle_install(dir)
+        Open3.capture2e(bundle_env(dir), "bundle", "install", chdir: dir)
+      end
+
+      # rubocop:disable Metrics/MethodLength -- straight-line file copy loop
+      def merge_sandbox_into_source(sandbox, source)
+        paths = []
+        each_relative_file(sandbox) do |rel|
+          src = File.join(sandbox, rel)
+          dst = File.join(source, rel)
+          next unless File.file?(src)
+          next unless file_differs?(src, dst)
+
+          FileUtils.mkdir_p(File.dirname(dst))
+          FileUtils.cp(src, dst)
+          paths << rel
+        end
+        paths
+      end
+      # rubocop:enable Metrics/MethodLength
+
+      def each_relative_file(base)
+        base_path = Pathname.new(base)
+        Dir.glob(File.join(base, "**", "*"), File::FNM_DOTMATCH).each do |abs|
+          next if File.directory?(abs)
+          next if abs.include?("#{File::SEPARATOR}vendor#{File::SEPARATOR}")
+          next if abs.include?("#{File::SEPARATOR}.git#{File::SEPARATOR}")
+
+          rel = Pathname(abs).relative_path_from(base_path).to_s
+          yield rel
+        end
+      end
+
+      def file_differs?(sandbox_file, target_file)
+        return true unless File.file?(target_file)
+
+        File.binread(sandbox_file) != File.binread(target_file)
+      end
+    end
+  end
+end

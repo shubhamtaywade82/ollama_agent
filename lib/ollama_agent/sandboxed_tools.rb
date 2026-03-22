@@ -5,6 +5,7 @@ require "pathname"
 
 require_relative "console"
 require_relative "diff_path_validator"
+require_relative "patch_risk"
 require_relative "patch_support"
 require_relative "repo_list"
 require_relative "ruby_index_tool_support"
@@ -158,15 +159,25 @@ module OllamaAgent
 
     def edit_file(path, diff)
       return disallowed_path_message(path) unless path_allowed?(path)
+      return "edit_file is disabled in read-only mode." if @read_only
 
       diff = DiffPathValidator.normalize_diff(diff)
 
       validation = validate_edit_diff(path, diff)
       return validation if validation
 
-      return "Cancelled by user" if @confirm_patches && !user_confirms_patch?(path, diff)
+      return "Rejected: diff matches a forbidden pattern (unsafe)." if PatchRisk.forbidden?(diff)
+
+      return "Cancelled by user" if patch_confirmation_needed?(path, diff) && !user_confirms_patch?(path, diff)
 
       apply_patch(diff)
+    end
+
+    def patch_confirmation_needed?(path, diff)
+      return false unless @confirm_patches
+      return true unless @patch_policy
+
+      @patch_policy.call(path, diff) == :require_confirmation
     end
 
     def validate_edit_diff(path, diff)
