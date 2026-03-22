@@ -64,6 +64,8 @@ bundle exec ruby exe/ollama_agent ask -i --think true
 
 The CLI uses **ANSI colors** on a TTY (banner, prompt, patch prompts). **Assistant replies** are rendered as **Markdown** (headings, lists, bold, code fences) via `tty-markdown` when stdout is a TTY and **`NO_COLOR`** is unset. Disable Markdown rendering with **`OLLAMA_AGENT_MARKDOWN=0`**. Disable all colors with **`NO_COLOR`** or **`OLLAMA_AGENT_COLOR=0`**.
 
+When **thinking** is enabled, internal reasoning is shown in a **framed, dim** block labeled **Thinking**; the user-facing reply is labeled **Assistant** in green when the model returns both fields. Thinking text is **plain dim** by default (so it stays visually separate from the reply). Set **`OLLAMA_AGENT_THINKING_MARKDOWN=1`** to render thinking through Markdown too (muted colors).
+
 ### Ollama Cloud
 
 [Ollama Cloud](https://docs.ollama.com/cloud) uses the same HTTP API as the local server, with HTTPS and a Bearer API key. The **ollama-client** gem sends `Authorization: Bearer <api_key>` when `Ollama::Config#api_key` is set (HTTPS is used when the URL scheme is `https`).
@@ -93,6 +95,7 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `NO_COLOR` | Set (any value) to disable ANSI colors (see [no-color.org](https://no-color.org/)) |
 | `OLLAMA_AGENT_COLOR` | Set to `0` to disable colors even on a TTY |
 | `OLLAMA_AGENT_MARKDOWN` | Set to `0` to disable Markdown formatting of assistant replies (plain text only) |
+| `OLLAMA_AGENT_THINKING_MARKDOWN` | Set to `1` to render **thinking** text with Markdown (muted); default is plain dim text inside the Thinking frame |
 | `OLLAMA_AGENT_THINK` | Model **thinking** mode for compatible models: `true` / `false`, or `high` / `medium` / `low` (see ollama-client `think:`). Empty = omit (server default). |
 
 ## Troubleshooting
