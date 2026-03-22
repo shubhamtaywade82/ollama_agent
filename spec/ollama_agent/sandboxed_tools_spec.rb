@@ -49,10 +49,33 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
     ensure
       FileUtils.remove_entry(tmpdir)
     end
+
+    it "rejects a full read when the file is larger than OLLAMA_AGENT_MAX_READ_FILE_BYTES" do
+      tmpdir = Dir.mktmpdir
+      ENV["OLLAMA_AGENT_MAX_READ_FILE_BYTES"] = "10"
+      File.write(File.join(tmpdir, "big.txt"), "x" * 20)
+      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      out = agent.send(:read_file, "big.txt")
+      expect(out).to include("max size").and include("10")
+    ensure
+      ENV.delete("OLLAMA_AGENT_MAX_READ_FILE_BYTES")
+      FileUtils.remove_entry(tmpdir)
+    end
   end
 
   describe "search_code Ruby index modes" do
     let(:fixture_root) { File.expand_path("../fixtures/ruby_index", __dir__) }
+
+    it "builds the Ruby index once while OLLAMA_AGENT_INDEX_REBUILD stays set" do
+      allow(OllamaAgent::RubyIndex).to receive(:build).and_call_original
+      ENV["OLLAMA_AGENT_INDEX_REBUILD"] = "1"
+      agent = OllamaAgent::Agent.new(root: fixture_root, confirm_patches: false)
+      agent.send(:execute_tool, "search_code", { "pattern" => "a", "mode" => "method" })
+      agent.send(:execute_tool, "search_code", { "pattern" => "b", "mode" => "method" })
+      expect(OllamaAgent::RubyIndex).to have_received(:build).once
+    ensure
+      ENV.delete("OLLAMA_AGENT_INDEX_REBUILD")
+    end
 
     it "returns formatted method rows for mode method" do
       agent = OllamaAgent::Agent.new(root: fixture_root, confirm_patches: false)

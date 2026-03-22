@@ -14,6 +14,7 @@ module OllamaAgent
   # File read, search, and patch application constrained to a project root.
   # rubocop:disable Metrics/ModuleLength -- tool dispatch, I/O, and Ruby index support
   module SandboxedTools
+    DEFAULT_MAX_READ_FILE_BYTES = 2_097_152
     include PatchSupport
     include RepoList
     include RubyIndexToolSupport
@@ -74,22 +75,54 @@ module OllamaAgent
       abs = resolve_path(path)
       return read_file_lines(abs, start_line, end_line) if start_line || end_line
 
+      return read_file_too_large(abs) if File.size(abs) > max_read_file_bytes
+
       File.read(abs)
     rescue Errno::ENOENT => e
       "Error reading file: #{e.message}"
     end
 
+    def read_file_too_large(abs)
+      n = max_read_file_bytes
+      "Error reading file: file exceeds max size (#{n} bytes): #{abs}"
+    end
+
+    def max_read_file_bytes
+      v = ENV.fetch("OLLAMA_AGENT_MAX_READ_FILE_BYTES", nil)
+      return DEFAULT_MAX_READ_FILE_BYTES if v.nil? || v.to_s.strip.empty?
+
+      Integer(v)
+    rescue ArgumentError, TypeError
+      DEFAULT_MAX_READ_FILE_BYTES
+    end
+
     def read_file_lines(abs, start_line, end_line)
-      lines = File.readlines(abs)
-      return "" if lines.empty?
+      start_i = read_line_start_index(start_line)
+      end_i = read_line_end_index(end_line)
+      return "" if end_i && start_i > end_i
 
-      total = lines.size
-      end_i = integer_or(end_line, total).clamp(1, total)
-      start_i = integer_or(start_line, 1).clamp(1, total)
-      return "" if start_i > end_i
+      accumulate_file_lines(abs, start_i, end_i)
+    rescue Errno::ENOENT => e
+      "Error reading file: #{e.message}"
+    end
 
-      slice = lines[(start_i - 1)..(end_i - 1)]
-      slice ? slice.join : ""
+    def read_line_start_index(start_line)
+      [integer_or(start_line, 1), 1].max
+    end
+
+    def read_line_end_index(end_line)
+      end_line.nil? ? nil : integer_or(end_line, 1)
+    end
+
+    def accumulate_file_lines(abs, start_i, end_i)
+      buf = +""
+      File.foreach(abs).with_index(1) do |line, lineno|
+        next if lineno < start_i
+        break if end_i && lineno > end_i
+
+        buf << line
+      end
+      buf
     end
 
     def integer_or(value, default)

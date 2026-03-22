@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "ruby_index"
+require_relative "ruby_search_modes"
 
 module OllamaAgent
   # Prism Ruby index lookup for search_code (included by SandboxedTools).
@@ -8,7 +9,7 @@ module OllamaAgent
     private
 
     def ruby_search_mode?(mode)
-      %w[class module constant method].include?(mode)
+      RubySearchModes::ALL.include?(mode)
     end
 
     def search_code_ruby(pattern, mode)
@@ -29,15 +30,18 @@ module OllamaAgent
     end
 
     def format_ruby_index_rows(rows, mode)
-      if %w[class module constant].include?(mode)
+      if RubySearchModes::CONSTANT_OUTPUT.include?(mode)
         RubyIndex::Formatter.format_constants(rows)
       else
         RubyIndex::Formatter.format_methods(rows)
       end
     end
 
+    # Rebuild only when OLLAMA_AGENT_INDEX_REBUILD changes (avoids rebuilding on every call while it stays "1").
     def ruby_index
-      @ruby_index = nil if ENV["OLLAMA_AGENT_INDEX_REBUILD"] == "1"
+      fingerprint = ENV.fetch("OLLAMA_AGENT_INDEX_REBUILD", "")
+      @ruby_index = nil if fingerprint != @ruby_index_cache_fingerprint
+      @ruby_index_cache_fingerprint = fingerprint
       return @ruby_index if @ruby_index
 
       @ruby_index = RubyIndex.build(root: @root)
