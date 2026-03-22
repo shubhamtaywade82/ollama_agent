@@ -5,7 +5,7 @@ source "https://rubygems.org"
 # Specify your gem's dependencies in ollama_agent.gemspec
 gemspec
 
-gem "ollama-client", path: "../ollama-client"
+gem "ollama-client"
 
 gem "irb"
 gem "rake", "~> 13.0"

@@ -1,11 +1,4 @@
 PATH
-  remote: ../ollama-client
-  specs:
-    ollama-client (1.1.0)
-      bigdecimal
-      json-schema (~> 4.0)
-
-PATH
   remote: .
   specs:
     ollama_agent (0.1.0)
@@ -40,6 +33,9 @@ GEM
     lint_roller (1.1.0)
     mcp (0.9.0)
       json-schema (>= 4.1)
+    ollama-client (1.1.0)
+      bigdecimal
+      json-schema (~> 4.0)
     parallel (1.27.0)
     parser (3.3.10.2)
       ast (~> 2.4.1)
@@ -127,7 +123,7 @@ PLATFORMS
 
 DEPENDENCIES
   irb
-  ollama-client!
+  ollama-client
   ollama_agent!
   rake (~> 13.0)
   rspec (~> 3.0)
@@ -151,7 +147,7 @@ CHECKSUMS
   language_server-protocol (3.17.0.5) sha256=fd1e39a51a28bf3eec959379985a72e296e9f9acfce46f6a79d31ca8760803cc
   lint_roller (1.1.0) sha256=2c0c845b632a7d172cb849cc90c1bce937a28c5c8ccccb50dfd46a485003cc87
   mcp (0.9.0) sha256=a0a3737b0ac9df0772f4ef7e2b013c260ddbcf217a5d50a66bff0baeddf03e47
-  ollama-client (1.1.0)
+  ollama-client (1.1.0) sha256=c7539388530b240f8db3181c0f6e0a7595deec56f47a791821c304bce0fedd36
   ollama_agent (0.1.0)
   parallel (1.27.0) sha256=4ac151e1806b755fb4e2dc2332cbf0e54f2e24ba821ff2d3dcf86bf6dc4ae130
   parser (3.3.10.2) sha256=6f60c84aa4bdcedb6d1a2434b738fe8a8136807b6adc8f7f53b97da9bc4e9357
@@ -176,8 +172,8 @@ CHECKSUMS
   rspec-support (3.13.7) sha256=0640e5570872aafefd79867901deeeeb40b0c9875a36b983d85f54fb7381c47c
   rubocop (1.85.1) sha256=3dbcf9e961baa4c376eeeb2a03913dca5e3987033b04d38fa538aa1e7406cc77
   rubocop-ast (1.49.1) sha256=4412f3ee70f6fe4546cc489548e0f6fcf76cafcfa80fa03af67098ffed755035
-  rubocop-rake (0.7.1)
-  rubocop-rspec (3.9.0)
+  rubocop-rake (0.7.1) sha256=3797f2b6810c3e9df7376c26d5f44f3475eda59eb1adc38e6f62ecf027cbae4d
+  rubocop-rspec (3.9.0) sha256=8fa70a3619408237d789aeecfb9beef40576acc855173e60939d63332fdb55e2
   ruby-progressbar (1.13.0) sha256=80fc9c47a9b640d6834e0dc7b3c94c9df37f08cb072b7761e4a71e22cff29b33
   stringio (3.2.0) sha256=c37cb2e58b4ffbd33fe5cd948c05934af997b36e0b6ca6fdf43afa234cf222e1
   strings (0.2.1) sha256=933293b3c95cf85b81eb44b3cf673e3087661ba739bbadfeadf442083158d6fb
