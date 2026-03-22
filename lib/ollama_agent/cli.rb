@@ -173,8 +173,15 @@ module OllamaAgent
       root = result[:source_root]
       puts "ollama_agent: tests passed in sandbox (#{root})"
       copied = result[:copied_to_source]
-      puts "ollama_agent: copied #{copied.size} file(s) to #{root}" if copied.any?
+      report_improve_copied_files(copied, root)
       puts "ollama_agent: no changed files to copy from sandbox" if options[:apply] && copied.empty?
+    end
+
+    def report_improve_copied_files(copied, root)
+      return if copied.empty?
+
+      puts "ollama_agent: copied #{copied.size} file(s) to #{root}"
+      copied.sort.each { |rel| puts "  #{rel}" }
     end
 
     # Build an Agent for the `ask` command.
