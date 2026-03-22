@@ -47,14 +47,28 @@ module OllamaAgent
     def format_assistant(text)
       return assistant_output(text) unless markdown_enabled?
 
-      require "tty-markdown"
-      TTY::Markdown.parse(text.to_s)
-    rescue LoadError, StandardError
-      assistant_output(text)
+      markdown_parse(text) || assistant_output(text)
     end
 
     def format_thinking(text)
-      "#{magenta(bold("Thinking"))}\n#{dim(text.to_s)}"
+      header = "#{magenta(bold("Thinking"))}\n"
+      body = if markdown_enabled?
+        markdown_parse(text) || dim(text.to_s)
+      else
+        dim(text.to_s)
+      end
+      "#{header}#{body}"
+    end
+
+    class << self
+      private
+
+      def markdown_parse(text)
+        require "tty-markdown"
+        TTY::Markdown.parse(text.to_s)
+      rescue LoadError, StandardError
+        nil
+      end
     end
 
     # Prints thinking (if any) then main content; duck-types #thinking and #content.

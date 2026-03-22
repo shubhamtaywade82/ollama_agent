@@ -41,15 +41,32 @@ module OllamaAgent
 
     def start_interactive(agent)
       puts Console.welcome_banner("Ollama Agent (type 'exit' to quit)")
+      use_readline = interactive_readline_usable?
+
       loop do
-        print Console.prompt_prefix
-        input = $stdin.gets
+        input = interactive_readline_line(use_readline)
         break if input.nil?
 
         line = input.chomp
         break if line == "exit"
 
         agent.run(line)
+      end
+    end
+
+    def interactive_readline_usable?
+      require "readline"
+      true
+    rescue LoadError
+      false
+    end
+
+    def interactive_readline_line(use_readline)
+      if use_readline
+        Readline.readline(Console.prompt_prefix, true)
+      else
+        print Console.prompt_prefix
+        $stdin.gets
       end
     end
   end
