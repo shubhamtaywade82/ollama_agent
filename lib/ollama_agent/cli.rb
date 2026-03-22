@@ -21,7 +21,7 @@ module OllamaAgent
       elsif query
         agent.run(query)
       else
-        puts "Error: provide a QUERY or use --interactive"
+        puts Console.error_line("Error: provide a QUERY or use --interactive")
         exit 1
       end
     end
@@ -38,9 +38,9 @@ module OllamaAgent
     end
 
     def start_interactive(agent)
-      puts "Ollama Agent (type 'exit' to quit)"
+      puts Console.welcome_banner("Ollama Agent (type 'exit' to quit)")
       loop do
-        print "> "
+        print Console.prompt_prefix
         input = $stdin.gets
         break if input.nil?
 

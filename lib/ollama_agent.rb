@@ -2,6 +2,7 @@
 
 require_relative "ollama_agent/version"
 require "ollama_client"
+require_relative "ollama_agent/console"
 require_relative "ollama_agent/agent"
 require_relative "ollama_agent/cli"
 

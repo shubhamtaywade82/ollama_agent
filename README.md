@@ -1,6 +1,16 @@
 # ollama_agent
 
+Version: 0.1.0
+
 Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollama.com) model. It exposes tools to **list files**, **read files**, **search the tree** (ripgrep or grep), and **apply unified diffs** so the model can make small, reviewable edits.
+
+## Features
+
+- Tool `list_files` – list project files.
+- Tool `read_file` – read file contents.
+- Tool `search_code` – search code with ripgrep or grep.
+- Tool `edit_file` – apply unified diffs safely.
+- CLI built with Thor, entry point `exe/ollama_agent`.
 
 ## Requirements
 
@@ -42,6 +52,8 @@ Interactive REPL:
 bundle exec ruby exe/ollama_agent ask --interactive
 ```
 
+The CLI uses **ANSI colors** on a TTY (banner, prompt, assistant text, patch prompts). Disable with **`NO_COLOR`** or **`OLLAMA_AGENT_COLOR=0`**.
+
 ### Ollama Cloud
 
 [Ollama Cloud](https://docs.ollama.com/cloud) uses the same HTTP API as the local server, with HTTPS and a Bearer API key. The **ollama-client** gem sends `Authorization: Bearer <api_key>` when `Ollama::Config#api_key` is set (HTTPS is used when the URL scheme is `https`).
@@ -68,6 +80,8 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_AGENT_MAX_TURNS` | Max chat rounds with tool calls (default: 64) |
 | `OLLAMA_AGENT_TIMEOUT` | HTTP read/open timeout in seconds for Ollama requests (default **120**; use `ask --timeout` / `-t` to override per run) |
 | `OLLAMA_AGENT_PARSE_TOOL_JSON` | Set to `1` to run tools parsed from JSON lines in assistant text (fallback when the model does not emit native tool calls) |
+| `NO_COLOR` | Set (any value) to disable ANSI colors (see [no-color.org](https://no-color.org/)) |
+| `OLLAMA_AGENT_COLOR` | Set to `0` to disable colors even on a TTY |
 
 ## Troubleshooting
 

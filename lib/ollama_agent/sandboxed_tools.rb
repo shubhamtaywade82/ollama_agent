@@ -3,6 +3,7 @@
 require "open3"
 require "pathname"
 
+require_relative "console"
 require_relative "diff_path_validator"
 require_relative "patch_support"
 require_relative "repo_list"
@@ -121,9 +122,9 @@ module OllamaAgent
     end
 
     def user_confirms_patch?(path, diff)
-      puts "Proposed diff for #{path}:"
+      puts Console.patch_title("Proposed diff for #{path}:")
       puts diff
-      print "Apply? (y/n) "
+      print Console.apply_prompt("Apply? (y/n) ")
       $stdin.gets.to_s.chomp.casecmp("y").zero?
     end
 

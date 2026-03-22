@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "agent_prompt"
+require_relative "console"
 require_relative "ollama_connection"
 require_relative "tools_schema"
 require_relative "sandboxed_tools"
@@ -80,7 +81,7 @@ module OllamaAgent
 
     def announce_assistant_content(message)
       content = message.content
-      puts content if content && !content.to_s.empty?
+      puts Console.assistant_output(content) if content && !content.to_s.empty?
     end
 
     def default_model
