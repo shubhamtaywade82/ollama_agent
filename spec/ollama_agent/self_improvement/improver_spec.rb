@@ -35,6 +35,15 @@ RSpec.describe OllamaAgent::SelfImprovement::Improver do
       expect(improver.send(:resolve_source_root, "   ")).to eq(OllamaAgent.gem_root)
     end
 
+    it "uses the working tree when the loaded gem_root has no Gemfile (installed gem layout)" do
+      real_root = OllamaAgent.gem_root
+      allow(OllamaAgent).to receive(:gem_root).and_return(Dir.mktmpdir)
+
+      Dir.chdir(real_root) do
+        expect(improver.send(:resolve_source_root, nil)).to eq(File.expand_path(real_root))
+      end
+    end
+
     it "walks up from a subdirectory until it finds a Gemfile" do
       nested = File.join(source, "lib", "nested")
       FileUtils.mkdir_p(nested)

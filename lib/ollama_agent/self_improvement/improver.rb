@@ -94,9 +94,20 @@ module OllamaAgent
       end
 
       def normalize_improve_root(root)
-        return OllamaAgent.gem_root if root.nil? || root.to_s.strip.empty?
+        return default_improve_source_root if root.nil? || root.to_s.strip.empty?
 
         File.expand_path(root)
+      end
+
+      # Installed gems omit Gemfile (see gemspec); gem_root may not contain one. Prefer cwd / env from CLI.
+      def default_improve_source_root
+        from_cwd = nearest_directory_with_gemfile(Dir.pwd)
+        return from_cwd if from_cwd
+
+        from_gem = nearest_directory_with_gemfile(OllamaAgent.gem_root)
+        return from_gem if from_gem
+
+        OllamaAgent.gem_root
       end
 
       def nearest_directory_with_gemfile(start_dir)
@@ -116,7 +127,8 @@ module OllamaAgent
 
         msg = <<~MSG
           Cannot run tests: Gemfile is missing in the sandbox after restore from #{source_root}.
-          Point --root at a directory that contains a Gemfile (or a subdirectory of such a project).
+          Run `improve` from your project checkout, set OLLAMA_AGENT_ROOT, or pass --root to a tree that contains a Gemfile.
+          (The packaged gem does not ship a Gemfile; cwd is used when gem_root has none.)
         MSG
         { success: false, output: msg.strip }
       end
