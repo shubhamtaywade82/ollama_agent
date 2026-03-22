@@ -23,5 +23,14 @@ RSpec.describe "OllamaAgent::RepoList" do
       expect(out).to include("lib/foo/a.rb")
       expect(out).not_to include(".git/")
     end
+
+    it "notes when the result is truncated at the cap" do
+      File.write(File.join(tmpdir, "a.rb"), "1")
+      File.write(File.join(tmpdir, "b.rb"), "2")
+      File.write(File.join(tmpdir, "c.rb"), "3")
+
+      out = agent.send(:list_files, ".", 2)
+      expect(out).to include("truncated at 2 entries")
+    end
   end
 end

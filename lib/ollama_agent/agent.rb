@@ -11,6 +11,7 @@ require_relative "tool_content_parser"
 
 module OllamaAgent
   # Runs a tool-calling loop against Ollama: read files, search, apply unified diffs.
+  # rubocop:disable Metrics/ClassLength -- Facade for chat loop, tools, and HTTP client wiring
   class Agent
     include SandboxedTools
 
@@ -21,10 +22,13 @@ module OllamaAgent
     attr_reader :client, :root
 
     # rubocop:disable Metrics/ParameterLists -- CLI and tests pass explicit dependencies
-    def initialize(client: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil, think: nil)
+    def initialize(client: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil, think: nil,
+                   read_only: false, patch_policy: nil)
       @model = model || default_model
       @root = File.expand_path(root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
       @confirm_patches = confirm_patches
+      @read_only = read_only
+      @patch_policy = patch_policy
       @http_timeout_override = http_timeout
       @think = think
       @client = client || build_default_client
@@ -82,7 +86,7 @@ module OllamaAgent
     def chat_request_args(messages)
       args = {
         messages: messages,
-        tools: TOOLS,
+        tools: @read_only ? READ_ONLY_TOOLS : TOOLS,
         model: @model,
         options: { temperature: 0.2 }
       }
@@ -122,6 +126,8 @@ module OllamaAgent
     end
 
     def system_prompt
+      return AgentPrompt.self_review_text if @read_only
+
       AgentPrompt.text
     end
 
@@ -143,4 +149,5 @@ module OllamaAgent
       msg
     end
   end
+  # rubocop:enable Metrics/ClassLength
 end

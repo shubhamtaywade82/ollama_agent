@@ -11,12 +11,22 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
 - Tool `search_code` – search code with ripgrep or grep.
 - Tool `edit_file` – apply unified diffs safely.
 - CLI built with Thor, entry point `exe/ollama_agent`.
+- **`self_review`** – self-review / improvement with a **`--mode`**:
+  - **`analysis`** (default, alias `1`) — read-only tools; report only; no writes.
+  - **`interactive`** (alias `2`, `fix`) — full tools on `--root`; you confirm each patch (like `ask`); optional `-y` / `--semi`.
+  - **`automated`** (alias `3`, `sandbox`) — temp copy, agent edits, **`bundle exec rspec`** in the sandbox, optional **`--apply`** to merge into your checkout.
+- **`improve`** — same as **`self_review --mode automated`** (you can pass **`--mode automated`** explicitly; other modes belong on **`self_review`**).
 
 ## Requirements
 
-- Ruby ≥ 3.2
+- Ruby ≥ 3.2 (enforced in the gemspec as `required_ruby_version`)
 - **Local:** Ollama running and a capable tool-calling model, **or**
 - **Ollama Cloud:** API key and a cloud-capable model name (see below)
+
+### Prerequisites (external tools)
+
+- **`patch`** — required for `edit_file` (GNU `patch` on `PATH`). On Windows, use Git Bash, WSL, GnuWin32, or another environment that provides `patch`.
+- **`rg` (ripgrep) or `grep`** — text mode for `search_code` needs at least one of these on `PATH` (ripgrep is preferred when present).
 
 ## Installation
 
@@ -53,6 +63,23 @@ Interactive REPL:
 ```bash
 bundle exec ruby exe/ollama_agent ask --interactive
 ```
+
+Self-review modes (default project root is the loaded gem tree unless you set `--root` or `OLLAMA_AGENT_ROOT`):
+
+```bash
+# Mode 1 — analysis only (default)
+bundle exec ruby exe/ollama_agent self_review
+bundle exec ruby exe/ollama_agent self_review --mode analysis
+
+# Mode 2 — optional fixes in the working tree (confirm each patch, or -y / --semi)
+bundle exec ruby exe/ollama_agent self_review --mode interactive
+
+# Mode 3 — sandbox + tests + optional merge back (same as `improve`)
+bundle exec ruby exe/ollama_agent self_review --mode automated
+bundle exec ruby exe/ollama_agent improve --apply
+```
+
+For mode 3, `-y` skips all patch prompts; `--no-semi` prompts for every patch when not using `-y`.
 
 With a **thinking-capable** model, enable reasoning output:
 
@@ -97,6 +124,7 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_AGENT_MARKDOWN` | Set to `0` to disable Markdown formatting of assistant replies (plain text only) |
 | `OLLAMA_AGENT_THINKING_MARKDOWN` | Set to `1` to render **thinking** text with Markdown (muted); default is plain dim text inside the Thinking frame |
 | `OLLAMA_AGENT_THINK` | Model **thinking** mode for compatible models: `true` / `false`, or `high` / `medium` / `low` (see ollama-client `think:`). Empty = omit (server default). |
+| `OLLAMA_AGENT_PATCH_RISK_MAX_DIFF_LINES` | Max changed-line count before a diff is treated as "large" for semi-auto patch risk (default **80**) |
 | `OLLAMA_AGENT_INDEX_REBUILD` | Set to `1` to drop the cached Prism Ruby index before the next symbol search in this process |
 | `OLLAMA_AGENT_RUBY_INDEX_MAX_FILES` | Max `.rb` files to parse per index build (default **5000**) |
 | `OLLAMA_AGENT_RUBY_INDEX_MAX_FILE_BYTES` | Skip Ruby files larger than this many bytes (default **512000**) |

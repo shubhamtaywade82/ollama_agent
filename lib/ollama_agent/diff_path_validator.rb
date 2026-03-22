@@ -77,7 +77,7 @@ module OllamaAgent
 
       <<~MSG.strip
         A unified diff must list --- a/<path>, then +++ b/<path>, then @@ ... @@ before any changed lines.
-        Do not put @@ on the line right after --- without a +++ line; use the same order as `git diff`.
+        Put a +++ b/<file> line before the first @@ hunk (e.g. +++ b/README.md); do not place @@ immediately after --- alone.
       MSG
     end
 

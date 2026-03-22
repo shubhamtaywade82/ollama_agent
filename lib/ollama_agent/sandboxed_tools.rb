@@ -5,6 +5,7 @@ require "pathname"
 
 require_relative "console"
 require_relative "diff_path_validator"
+require_relative "patch_risk"
 require_relative "patch_support"
 require_relative "repo_list"
 require_relative "ruby_index_tool_support"
@@ -48,9 +49,9 @@ module OllamaAgent
       pattern = tool_arg(args, "pattern").to_s
       mode = (tool_arg(args, "mode") || "text").to_s.downcase
 
-      return search_code_ruby(pattern, mode) if ruby_search_mode?(mode)
-
       return missing_tool_argument("search_code", "pattern") if blank_tool_value?(pattern)
+
+      return search_code_ruby(pattern, mode) if ruby_search_mode?(mode)
 
       search_code(pattern, tool_arg(args, "directory") || ".")
     end
@@ -84,7 +85,8 @@ module OllamaAgent
 
     def read_file_too_large(abs)
       n = max_read_file_bytes
-      "Error reading file: file exceeds max size (#{n} bytes): #{abs}"
+      "Error reading file: ollama_agent: file too large for full read (max #{n} bytes); use read_file with " \
+        "start_line and end_line, or raise OLLAMA_AGENT_MAX_READ_FILE_BYTES. Path: #{abs}"
     end
 
     def max_read_file_bytes
@@ -137,36 +139,58 @@ module OllamaAgent
       dir = directory.to_s.empty? ? "." : directory
       return disallowed_path_message(dir) unless path_allowed?(dir)
 
-      search_with_ripgrep(pattern, dir) || search_with_grep(pattern, dir)
+      return search_code_no_backends_message unless rg_available? || grep_available?
+
+      return search_with_ripgrep(pattern, dir) if rg_available?
+
+      search_with_grep!(pattern, dir)
     end
 
     def search_with_ripgrep(pattern, directory)
-      return nil unless rg_available?
-
       stdout, = Open3.capture2("rg", "-n", "--", pattern, resolve_path(directory))
       stdout.to_s
     end
 
-    def search_with_grep(pattern, directory)
+    def search_with_grep!(pattern, directory)
       stdout, = Open3.capture2("grep", "-rn", "--", pattern, resolve_path(directory))
       stdout.to_s
+    end
+
+    def search_code_no_backends_message
+      <<~MSG.strip
+        Error: ollama_agent: no text search backend available. Install ripgrep (`rg`) or GNU grep on PATH.
+      MSG
     end
 
     def rg_available?
       system("which", "rg", out: File::NULL, err: File::NULL)
     end
 
+    def grep_available?
+      system("which", "grep", out: File::NULL, err: File::NULL)
+    end
+
     def edit_file(path, diff)
       return disallowed_path_message(path) unless path_allowed?(path)
+      return "edit_file is disabled in read-only mode." if @read_only
 
       diff = DiffPathValidator.normalize_diff(diff)
 
       validation = validate_edit_diff(path, diff)
       return validation if validation
 
-      return "Cancelled by user" if @confirm_patches && !user_confirms_patch?(path, diff)
+      return "Rejected: diff matches a forbidden pattern (unsafe)." if PatchRisk.forbidden?(diff)
+
+      return "Cancelled by user" if patch_confirmation_needed?(path, diff) && !user_confirms_patch?(path, diff)
 
       apply_patch(diff)
+    end
+
+    def patch_confirmation_needed?(path, diff)
+      return false unless @confirm_patches
+      return true unless @patch_policy
+
+      @patch_policy.call(path, diff) == :require_confirmation
     end
 
     def validate_edit_diff(path, diff)

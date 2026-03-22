@@ -134,5 +134,12 @@ RSpec.describe OllamaAgent::DiffPathValidator do
       expect(normalized).not_to include("***")
       expect(described_class.call(normalized, root, "x.md")).to be_nil
     end
+
+    it "does not expand literal \\n when the string already contains real newlines" do
+      raw = "--- a/f.md\\n+++ b/f.md\n@@ -1,1 +1,1 @@\n-a\n+b"
+      normalized = described_class.normalize_diff(raw)
+      expect(normalized).to include("+++")
+      expect(normalized).to include("\\n")
+    end
   end
 end

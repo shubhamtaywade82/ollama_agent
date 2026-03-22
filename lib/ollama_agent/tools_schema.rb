@@ -75,4 +75,6 @@ module OllamaAgent
       }
     }
   ].freeze
+
+  READ_ONLY_TOOLS = TOOLS.reject { |t| t.dig(:function, :name) == "edit_file" }.freeze
 end
