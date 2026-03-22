@@ -1,6 +1,13 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
+gem_root = File.expand_path("..", __dir__)
+$LOAD_PATH.unshift(File.join(gem_root, "lib"))
+
+# From a checkout, load the Gemfile so ollama-client and other deps resolve without `bundle exec`.
+gemfile = File.join(gem_root, "Gemfile")
+require "bundler/setup" if File.file?(gemfile)
+
 require "ollama_agent"
 
 OllamaAgent::CLI.start(ARGV)

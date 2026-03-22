@@ -34,6 +34,8 @@ From the project you want the agent to modify (set the working directory accordi
 bundle exec ruby exe/ollama_agent ask "Update the README.md with current codebase"
 ```
 
+From this repository after `bundle install`, `ruby exe/ollama_agent` (without `bundle exec`) also works: the executable adds `lib` to the load path and loads `bundler/setup` when a `Gemfile` is present.
+
 Apply proposed patches without interactive confirmation:
 
 ```bash
