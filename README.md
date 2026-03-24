@@ -64,7 +64,7 @@ Interactive REPL:
 bundle exec ruby exe/ollama_agent ask --interactive
 ```
 
-Self-review modes (default project root is the loaded gem tree unless you set `--root` or `OLLAMA_AGENT_ROOT`):
+Self-review modes (default project root is the **current working directory** unless you set `--root` or `OLLAMA_AGENT_ROOT`):
 
 ```bash
 # Mode 1 — analysis only (default)
@@ -114,7 +114,7 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_BASE_URL` | Ollama API base URL (default from ollama-client: `http://localhost:11434`; use `https://ollama.com` for cloud) |
 | `OLLAMA_API_KEY` | API key for Ollama Cloud (`https://ollama.com`); optional for local HTTP |
 | `OLLAMA_AGENT_MODEL` | Model name (overrides default from ollama-client) |
-| `OLLAMA_AGENT_ROOT` | Project root (defaults to current working directory) |
+| `OLLAMA_AGENT_ROOT` | Project root for tools (`list_files`, `read_file`, etc.). Defaults to **current working directory** when unset (CLI never falls back to the gem install path). |
 | `OLLAMA_AGENT_DEBUG` | Set to `1` to print validation diagnostics on stderr |
 | `OLLAMA_AGENT_MAX_TURNS` | Max chat rounds with tool calls (default: 64) |
 | `OLLAMA_AGENT_TIMEOUT` | HTTP read/open timeout in seconds for Ollama requests (default **120**; use `ask --timeout` / `-t` to override per run) |
@@ -149,6 +149,8 @@ Bundled bodies were copied from Cursor `SKILL.md` files under `~/.cursor/skills/
 Many full skills can be **large**; use `OLLAMA_AGENT_SKILLS_INCLUDE` to trim for small-context models.
 
 CLI flags (also available on `ask`, `self_review`, `improve`): `--no-skills`, `--skill-paths 'path1:path2/dir'`.
+
+To run **`self_review` / `ask` against the installed gem’s source** (e.g. to hack on `ollama_agent` itself), pass an explicit root, for example `--root "$(bundle show ollama_agent)"` or a path to a git clone.
 
 ## Troubleshooting
 

@@ -161,7 +161,7 @@ module OllamaAgent
 
     def resolved_root_for_self_review
       raw = options[:root] || ENV.fetch("OLLAMA_AGENT_ROOT", nil)
-      base = raw.to_s.strip.empty? ? OllamaAgent.gem_root : raw
+      base = raw.to_s.strip.empty? ? Dir.pwd : raw
       File.expand_path(base)
     end
 
@@ -201,7 +201,7 @@ module OllamaAgent
     end
 
     # Build an Agent for the `ask` command.
-    # Use the same root resolution as other commands, falling back to the gem root.
+    # Same root as `self_review` / interactive: cwd when unset (see README).
     def build_agent
       Agent.new(
         model: options[:model],
