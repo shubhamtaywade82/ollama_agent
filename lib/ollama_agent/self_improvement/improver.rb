@@ -32,7 +32,9 @@ module OllamaAgent
 
       # rubocop:disable Metrics/ParameterLists -- mirrors CLI; keeps call sites explicit
       # rubocop:disable Metrics/MethodLength
-      def run(model: nil, root: nil, yes: false, semi: true, apply: false, http_timeout: nil, think: nil, client: nil)
+      def run(model: nil, root: nil, yes: false, semi: true, apply: false, http_timeout: nil, think: nil, client: nil,
+              skill_paths: nil, skills_enabled: nil, skills_include: nil, skills_exclude: nil,
+              external_skills_enabled: nil)
         source_root = resolve_source_root(root)
         sandbox_root = Dir.mktmpdir("ollama_agent_improve_")
         policy = semi ? PatchRisk.method(:assess).to_proc : nil
@@ -46,7 +48,12 @@ module OllamaAgent
             confirm_patches: !yes,
             patch_policy: policy,
             http_timeout: http_timeout,
-            think: think
+            think: think,
+            skill_paths: skill_paths,
+            skills_enabled: skills_enabled,
+            skills_include: skills_include,
+            skills_exclude: skills_exclude,
+            external_skills_enabled: external_skills_enabled
           )
           restore_build_essentials_from_source(source_root, sandbox_root)
           missing = missing_gemfile_failure(source_root, sandbox_root)

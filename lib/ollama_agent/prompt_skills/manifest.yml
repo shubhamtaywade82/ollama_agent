@@ -1,0 +1,25 @@
+# Ordered bundled prompt skills (ids used by OLLAMA_AGENT_SKILLS_INCLUDE / EXCLUDE).
+version: 1
+skills:
+  - id: clean_ruby
+    file: clean_ruby.md
+  - id: ruby_style
+    file: ruby_style.md
+  - id: rubocop
+    file: rubocop.md
+  - id: solid
+    file: solid.md
+  - id: solid_ruby
+    file: solid_ruby.md
+  - id: design_patterns
+    file: design_patterns.md
+  - id: rspec
+    file: rspec.md
+  - id: rails_style
+    file: rails_style.md
+  - id: rails_best_practices
+    file: rails_best_practices.md
+  - id: code_review
+    file: code_review.md
+  - id: ollama_agent_patterns
+    file: ollama_agent_patterns.md

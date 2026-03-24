@@ -132,6 +132,23 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_AGENT_RUBY_INDEX_MAX_CHARS` | Max characters of index output per search (default **60000**) |
 | `OLLAMA_AGENT_MAX_READ_FILE_BYTES` | Max bytes for a **full** `read_file` (no line range); larger files return an error (default **2097152**, 2 MiB). Line-range reads stream and are not limited by this cap. |
 | `OLLAMA_AGENT_INDEX_REBUILD` | The Prism index is rebuilt when this env value **changes** (e.g. unset → `1`); it is **not** rebuilt on every tool call while it stays `1`. |
+| `OLLAMA_AGENT_SKILLS` | `1`/`on`/`0`/`off` — include **bundled** prompt skills (default **on**). Same as `--no-skills` on the CLI when off. |
+| `OLLAMA_AGENT_SKILLS_INCLUDE` | Comma-separated **manifest ids** to load (omit = all bundled). Example: `ruby_style,rubocop,code_review`. |
+| `OLLAMA_AGENT_SKILLS_EXCLUDE` | Comma-separated ids to skip from the bundled set. |
+| `OLLAMA_AGENT_SKILL_PATHS` | Extra `.md` files or directories, **colon-separated** (Unix `PATH` style). Directory entries load all `*.md` in sorted order. Merged with `--skill-paths`. |
+| `OLLAMA_AGENT_EXTERNAL_SKILLS` | `1`/`0` — include content from `OLLAMA_AGENT_SKILL_PATHS` (default **on**). Set `0` to use bundled-only without unsetting paths. |
+
+### Prompt skills (bundled + optional paths)
+
+The system prompt is the **base agent instructions** (`AgentPrompt`) plus optional **Markdown** sections. Bundled files live under `lib/ollama_agent/prompt_skills/` and are listed in `manifest.yml`. Each file may use Cursor-style YAML frontmatter (`---` … `---`); the loader strips frontmatter before sending text to the model.
+
+**Manifest ids** (in load order): `clean_ruby`, `ruby_style`, `rubocop`, `solid`, `solid_ruby`, `design_patterns`, `rspec`, `rails_style`, `rails_best_practices`, `code_review`, `ollama_agent_patterns`.
+
+Bundled bodies were copied from Cursor `SKILL.md` files under `~/.cursor/skills/` (and `ollama_agent_patterns` from this repo’s `.cursor/skills/ollama-agent-patterns`). Re-copy when you update those skills upstream.
+
+Many full skills can be **large**; use `OLLAMA_AGENT_SKILLS_INCLUDE` to trim for small-context models.
+
+CLI flags (also available on `ask`, `self_review`, `improve`): `--no-skills`, `--skill-paths 'path1:path2/dir'`.
 
 ## Troubleshooting
 

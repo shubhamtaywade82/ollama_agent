@@ -163,6 +163,20 @@ RSpec.describe OllamaAgent::Agent do
       expect(prompt).to include("analysis-only")
       expect(prompt).not_to include("edit_file last")
     end
+
+    it "uses base prompt only when skills_enabled is false" do
+      agent = described_class.new(client: instance_double(Ollama::Client), root: root, confirm_patches: false,
+                                  skills_enabled: false)
+      expect(agent.send(:system_prompt)).to eq(OllamaAgent::AgentPrompt.text.strip)
+    end
+
+    it "includes a bundled skill section when skills are enabled and narrowed by id" do
+      agent = described_class.new(client: instance_double(Ollama::Client), root: root, confirm_patches: false,
+                                  skills_enabled: true, skills_include: "rubocop")
+      prompt = agent.send(:system_prompt)
+      expect(prompt).to include("## rubocop")
+      expect(prompt).to include("RuboCop")
+    end
   end
 
   describe "read_only and tools" do

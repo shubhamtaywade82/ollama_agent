@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "agent_prompt"
+require_relative "prompt_skills"
 require_relative "console"
 require_relative "ollama_connection"
 require_relative "tools_schema"
@@ -22,8 +23,11 @@ module OllamaAgent
     attr_reader :client, :root
 
     # rubocop:disable Metrics/ParameterLists -- CLI and tests pass explicit dependencies
+    # rubocop:disable Metrics/MethodLength
     def initialize(client: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil, think: nil,
-                   read_only: false, patch_policy: nil)
+                   read_only: false, patch_policy: nil,
+                   skill_paths: nil, skills_enabled: nil, skills_include: nil, skills_exclude: nil,
+                   external_skills_enabled: nil)
       @model = model || default_model
       @root = File.expand_path(root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
       @confirm_patches = confirm_patches
@@ -31,8 +35,14 @@ module OllamaAgent
       @patch_policy = patch_policy
       @http_timeout_override = http_timeout
       @think = think
+      @skill_paths = skill_paths
+      @skills_enabled = skills_enabled
+      @skills_include = skills_include
+      @skills_exclude = skills_exclude
+      @external_skills_enabled = external_skills_enabled
       @client = client || build_default_client
     end
+    # rubocop:enable Metrics/MethodLength
     # rubocop:enable Metrics/ParameterLists
 
     def run(query)
@@ -126,9 +136,43 @@ module OllamaAgent
     end
 
     def system_prompt
-      return AgentPrompt.self_review_text if @read_only
+      base = @read_only ? AgentPrompt.self_review_text : AgentPrompt.text
+      PromptSkills.compose(
+        base: base,
+        skills_enabled: resolved_skills_enabled,
+        skills_include: resolved_skills_include,
+        skills_exclude: resolved_skills_exclude,
+        skill_paths: resolved_skill_paths,
+        external_skills_enabled: resolved_external_skills_enabled
+      )
+    end
 
-      AgentPrompt.text
+    def resolved_skills_enabled
+      return @skills_enabled unless @skills_enabled.nil?
+
+      PromptSkills.env_truthy("OLLAMA_AGENT_SKILLS", default: true)
+    end
+
+    def resolved_skills_include
+      return @skills_include unless @skills_include.nil?
+
+      PromptSkills.parse_id_list(ENV.fetch("OLLAMA_AGENT_SKILLS_INCLUDE", nil))
+    end
+
+    def resolved_skills_exclude
+      return @skills_exclude unless @skills_exclude.nil?
+
+      PromptSkills.parse_id_list(ENV.fetch("OLLAMA_AGENT_SKILLS_EXCLUDE", nil))
+    end
+
+    def resolved_skill_paths
+      @skill_paths
+    end
+
+    def resolved_external_skills_enabled
+      return @external_skills_enabled unless @external_skills_enabled.nil?
+
+      PromptSkills.env_truthy("OLLAMA_AGENT_EXTERNAL_SKILLS", default: true)
     end
 
     def append_tool_results(messages, tool_calls)

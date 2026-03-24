@@ -3,6 +3,7 @@
 require "thor"
 
 require_relative "agent"
+require_relative "prompt_skills"
 
 module OllamaAgent
   # Thor CLI for single-shot and interactive agent sessions.
@@ -19,6 +20,10 @@ module OllamaAgent
     method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
     method_option :think, type: :string, desc: "Thinking mode: true|false|high|medium|low (see OLLAMA_AGENT_THINK)"
+    method_option :no_skills, type: :boolean, default: false,
+                              desc: "Disable bundled prompt skills (same as OLLAMA_AGENT_SKILLS=0)"
+    method_option :skill_paths, type: :string,
+                                desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
     def ask(query = nil)
       agent = build_agent
 
@@ -54,6 +59,10 @@ module OllamaAgent
                          desc: "interactive/automated: auto-approve obvious patches; prompt for risky (default: true)"
     method_option :apply, type: :boolean, default: false,
                           desc: "automated only: after green tests, copy changed files from sandbox into --root"
+    method_option :no_skills, type: :boolean, default: false,
+                              desc: "Disable bundled prompt skills (same as OLLAMA_AGENT_SKILLS=0)"
+    method_option :skill_paths, type: :string,
+                                desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
     def self_review
       dispatch_self_review_mode(SelfImprovement::Modes.normalize(options[:mode]))
     end
@@ -70,6 +79,10 @@ module OllamaAgent
                          desc: "Without -y: auto-approve obvious patches; prompt for risky (default: true)"
     method_option :apply, type: :boolean, default: false,
                           desc: "After green tests, copy changed files from sandbox into --root"
+    method_option :no_skills, type: :boolean, default: false,
+                              desc: "Disable bundled prompt skills (same as OLLAMA_AGENT_SKILLS=0)"
+    method_option :skill_paths, type: :string,
+                                desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
     def improve
       ensure_improve_mode_only_automated!
       dispatch_self_review_mode("automated")
@@ -117,7 +130,8 @@ module OllamaAgent
         read_only: true,
         confirm_patches: false,
         http_timeout: options[:timeout],
-        think: options[:think]
+        think: options[:think],
+        **skill_agent_options
       )
       SelfImprovement::Analyzer.new(agent).run
     end
@@ -137,7 +151,7 @@ module OllamaAgent
         patch_policy: semi ? PatchRisk.method(:assess).to_proc : nil,
         http_timeout: options[:timeout],
         think: options[:think]
-      }
+      }.merge(skill_agent_options)
     end
 
     def run_mode_automated
@@ -151,6 +165,7 @@ module OllamaAgent
       File.expand_path(base)
     end
 
+    # rubocop:disable Metrics/AbcSize -- mirrors Improver.run keyword list
     def improve_run_options
       {
         model: options[:model],
@@ -160,8 +175,9 @@ module OllamaAgent
         apply: options[:apply],
         http_timeout: options[:timeout],
         think: options[:think]
-      }
+      }.merge(skill_agent_options)
     end
+    # rubocop:enable Metrics/AbcSize
 
     def report_improve_result(result)
       unless result[:success]
@@ -192,8 +208,17 @@ module OllamaAgent
         root: resolved_root_for_self_review,
         confirm_patches: !options[:yes],
         http_timeout: options[:timeout],
-        think: options[:think]
+        think: options[:think],
+        **skill_agent_options
       )
+    end
+
+    def skill_agent_options
+      out = {}
+      out[:skills_enabled] = false if options[:no_skills]
+      paths = PromptSkills.split_paths(options[:skill_paths])
+      out[:skill_paths] = paths unless paths.empty?
+      out
     end
 
     def start_interactive(agent)
