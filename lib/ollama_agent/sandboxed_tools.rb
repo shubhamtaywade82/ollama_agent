@@ -10,6 +10,7 @@ require_relative "patch_support"
 require_relative "repo_list"
 require_relative "ruby_index_tool_support"
 require_relative "tool_arguments"
+require_relative "external_agents"
 
 module OllamaAgent
   # File read, search, and patch application constrained to a project root.
@@ -30,6 +31,8 @@ module OllamaAgent
       when "search_code" then execute_search_code(args)
       when "list_files" then execute_list_files(args)
       when "edit_file" then execute_edit_file_tool(args)
+      when "list_external_agents" then execute_list_external_agents(args)
+      when "delegate_to_agent" then execute_delegate_to_agent_tool(args)
       else "Unknown tool: #{name}"
       end
     end
@@ -68,6 +71,62 @@ module OllamaAgent
       return missing_tool_argument("edit_file", "diff") if diff.nil?
 
       edit_file(path, diff)
+    end
+
+    def execute_list_external_agents(_args)
+      return "list_external_agents is only available in orchestrator mode." unless @orchestrator
+
+      require "json"
+      rows = external_registry.agents.map { |a| ExternalAgents::Probe.fetch_status(a) }
+      JSON.pretty_generate(rows)
+    end
+
+    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+    def execute_delegate_to_agent_tool(args)
+      return "delegate_to_agent is only available in orchestrator mode." unless @orchestrator
+      return "delegate_to_agent is disabled in read-only mode." if @read_only
+
+      id = tool_arg(args, "agent_id")
+      task = tool_arg(args, "task")
+      return missing_tool_argument("delegate_to_agent", "agent_id") if blank_tool_value?(id)
+      return missing_tool_argument("delegate_to_agent", "task") if blank_tool_value?(task)
+
+      agent_def = external_registry.find(id.to_s)
+      return "Unknown agent_id: #{id}. Call list_external_agents first." unless agent_def
+
+      exe = ExternalAgents::Probe.resolve_executable(agent_def)
+      return "Agent #{id} is not available (not on PATH). Check list_external_agents." unless exe
+
+      return "Cancelled by user" if @confirm_delegation && !user_confirms_delegate?(id, task)
+
+      timeout_sec = integer_or(tool_arg(args, "timeout_seconds"), agent_def["timeout_sec"] || 600)
+      paths = tool_arg(args, "paths")
+      paths = [] unless paths.is_a?(Array)
+
+      ExternalAgents::Runner.run(
+        agent_def: agent_def,
+        root: @root,
+        executable: exe,
+        task: task,
+        context_summary: tool_arg(args, "context_summary").to_s,
+        paths: paths,
+        timeout_sec: timeout_sec
+      )
+    rescue ArgumentError => e
+      e.message
+    end
+    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
+
+    def external_registry
+      @external_registry ||= ExternalAgents::Registry.load
+    end
+
+    def user_confirms_delegate?(agent_id, task)
+      puts Console.patch_title("Delegate to #{agent_id}:")
+      puts task.to_s[0, 2000]
+      puts "..." if task.to_s.length > 2000
+      print Console.apply_prompt("Run external agent? (y/n) ")
+      $stdin.gets.to_s.chomp.casecmp("y").zero?
     end
 
     def read_file(path, start_line: nil, end_line: nil)

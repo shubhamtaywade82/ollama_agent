@@ -1,0 +1,60 @@
+# Default external CLI agents (override via ~/.config/ollama_agent/agents.yml or OLLAMA_AGENT_EXTERNAL_AGENTS_CONFIG).
+# argv uses placeholders: binary, task_file, root — subshell interpolation is not supported (argv array only).
+version: 1
+agents:
+  - id: claude_cli
+    binary: claude
+    env_path: OLLAMA_AGENT_CLAUDE_CLI_PATH
+    capabilities:
+      - code_edit
+      - large_context
+    argv:
+      - "%{binary}"
+      - "-p"
+      - "%{task_file}"
+    version_argv:
+      - "%{binary}"
+      - "--version"
+    timeout_sec: 600
+
+  - id: gemini_cli
+    binary: gemini
+    env_path: OLLAMA_AGENT_GEMINI_CLI_PATH
+    capabilities:
+      - code_edit
+    argv:
+      - "%{binary}"
+      - "-p"
+      - "%{task_file}"
+    version_argv:
+      - "%{binary}"
+      - "--version"
+    timeout_sec: 600
+
+  - id: codex_cli
+    binary: codex
+    env_path: OLLAMA_AGENT_CODEX_CLI_PATH
+    capabilities:
+      - code_edit
+    argv:
+      - "%{binary}"
+      - "exec"
+      - "%{task_file}"
+    version_argv:
+      - "%{binary}"
+      - "--version"
+    timeout_sec: 600
+
+  - id: cursor_cli
+    binary: cursor
+    env_path: OLLAMA_AGENT_CURSOR_CLI_PATH
+    capabilities:
+      - code_edit
+    argv:
+      - "%{binary}"
+      - "-p"
+      - "%{task_file}"
+    version_argv:
+      - "%{binary}"
+      - "--version"
+    timeout_sec: 600

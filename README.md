@@ -16,6 +16,7 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
   - **`interactive`** (alias `2`, `fix`) — full tools on `--root`; you confirm each patch (like `ask`); optional `-y` / `--semi`.
   - **`automated`** (alias `3`, `sandbox`) — temp copy, agent edits, **`bundle exec rspec`** in the sandbox, optional **`--apply`** to merge into your checkout.
 - **`improve`** — same as **`self_review --mode automated`** (you can pass **`--mode automated`** explicitly; other modes belong on **`self_review`**).
+- **`orchestrate`** / **`OLLAMA_AGENT_ORCHESTRATOR=1`** — optional **orchestrator** tools to probe and delegate to other local CLI agents (see [Orchestrator](#orchestrator-external-cli-agents)); **`agents`** lists availability.
 
 ## Requirements
 
@@ -151,6 +152,17 @@ Many full skills can be **large**; use `OLLAMA_AGENT_SKILLS_INCLUDE` to trim for
 CLI flags (also available on `ask`, `self_review`, `improve`): `--no-skills`, `--skill-paths 'path1:path2/dir'`.
 
 To run **`self_review` / `ask` against the installed gem’s source** (e.g. to hack on `ollama_agent` itself), pass an explicit root, for example `--root "$(bundle show ollama_agent)"` or a path to a git clone.
+
+### Orchestrator (external CLI agents)
+
+Use the **`orchestrate`** command (or **`OLLAMA_AGENT_ORCHESTRATOR=1`** with **`ask`**) to expose tools **`list_external_agents`** and **`delegate_to_agent`**. The Ollama model should gather context with **`read_file` / `search_code`**, list installed CLIs, then delegate a **short** task + context to an external agent (Claude Code, Gemini CLI, Codex, Cursor CLI, etc.). Definitions live in `lib/ollama_agent/external_agents/default_agents.yml`; override or extend via **`~/.config/ollama_agent/agents.yml`** or **`OLLAMA_AGENT_EXTERNAL_AGENTS_CONFIG`**.
+
+- **`ollama_agent agents`** — print a table of configured agents and whether each binary is on `PATH`.
+- **`ollama_agent doctor`** — alias for `agents`.
+- **`delegate_to_agent`** runs a **fixed argv** (no shell) with **`cwd`** = project root; output is capped (**`OLLAMA_AGENT_DELEGATE_MAX_OUTPUT_BYTES`**, default 100k). Confirm each run unless **`-y`**.
+- Delegation audit logs: set **`OLLAMA_AGENT_DELEGATE_LOG=1`** (or `OLLAMA_AGENT_DEBUG=1`) to emit a structured stderr line with agent id, argv, env keys (names only), exit code, and duration.
+- Adjust **`argv` / `version_argv`** in YAML to match your real CLI (vendor flags differ). If a tool has no stable non-interactive mode, do not expose it in the registry.
+- Tool contract version: **`OllamaAgent::ORCHESTRATOR_TOOLS_SCHEMA_VERSION`**.
 
 ## Troubleshooting
 

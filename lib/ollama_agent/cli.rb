@@ -3,6 +3,7 @@
 require "thor"
 
 require_relative "agent"
+require_relative "external_agents"
 require_relative "prompt_skills"
 
 module OllamaAgent
@@ -37,6 +38,41 @@ module OllamaAgent
       end
     end
 
+    desc "orchestrate [QUERY]", "Like ask, with tools to list/delegate to external CLI agents (Claude, Gemini, …)"
+    method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
+    method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
+    method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches and run delegations without confirmation"
+    method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
+    method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
+    method_option :think, type: :string, desc: "Thinking mode: true|false|high|medium|low (see OLLAMA_AGENT_THINK)"
+    method_option :no_skills, type: :boolean, default: false,
+                              desc: "Disable bundled prompt skills (same as OLLAMA_AGENT_SKILLS=0)"
+    method_option :skill_paths, type: :string,
+                                desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
+    def orchestrate(query = nil)
+      agent = build_orchestrator_agent
+
+      if options[:interactive]
+        start_interactive(agent)
+      elsif query
+        agent.run(query)
+      else
+        puts Console.error_line("Error: provide a QUERY or use --interactive")
+        exit 1
+      end
+    end
+
+    desc "agents", "List configured external CLI agents and whether they are on PATH"
+    def agents
+      reg = ExternalAgents::Registry.load
+      ExternalAgents::Probe.print_table(reg)
+    end
+
+    desc "doctor", "Alias for agents"
+    def doctor
+      agents
+    end
+
     desc "self_review", "Self-review / improvement: --mode analysis | interactive | automated (see help)"
     method_option :mode, type: :string, default: "analysis",
                          desc: "analysis (1)=read-only report; interactive (2)=confirm patches in tree; " \
@@ -50,7 +86,7 @@ module OllamaAgent
       Aliases: 1/2/3, readonly, fix, confirm, sandbox, full.
     HELP
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
-    method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or gem root)"
+    method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
     method_option :think, type: :string, desc: "Thinking mode: true|false|high|medium|low (see OLLAMA_AGENT_THINK)"
     method_option :yes, type: :boolean, aliases: "-y",
@@ -71,7 +107,7 @@ module OllamaAgent
     method_option :mode, type: :string, default: "automated",
                          desc: "Optional; must be automated (or 3, sandbox, full). Other modes: use self_review --mode"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
-    method_option :root, type: :string, desc: "Source tree to copy and test (default: OLLAMA_AGENT_ROOT or gem root)"
+    method_option :root, type: :string, desc: "Source tree to copy and test (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
     method_option :think, type: :string, desc: "Thinking mode: true|false|high|medium|low (see OLLAMA_AGENT_THINK)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply all patches without confirmation"
@@ -202,13 +238,37 @@ module OllamaAgent
 
     # Build an Agent for the `ask` command.
     # Same root as `self_review` / interactive: cwd when unset (see README).
+    # rubocop:disable Metrics/MethodLength
     def build_agent
+      orch = orchestrator_mode?
       Agent.new(
         model: options[:model],
         root: resolved_root_for_self_review,
         confirm_patches: !options[:yes],
         http_timeout: options[:timeout],
         think: options[:think],
+        orchestrator: orch,
+        confirm_delegation: orch ? !options[:yes] : true,
+        **skill_agent_options
+      )
+    end
+    # rubocop:enable Metrics/MethodLength
+
+    def orchestrator_mode?
+      return true if ENV.fetch("OLLAMA_AGENT_ORCHESTRATOR", "0").to_s == "1"
+
+      ENV.fetch("OLLAMA_AGENT_MODE", "").to_s.strip.casecmp("orchestrator").zero?
+    end
+
+    def build_orchestrator_agent
+      Agent.new(
+        model: options[:model],
+        root: resolved_root_for_self_review,
+        confirm_patches: !options[:yes],
+        http_timeout: options[:timeout],
+        think: options[:think],
+        orchestrator: true,
+        confirm_delegation: !options[:yes],
         **skill_agent_options
       )
     end

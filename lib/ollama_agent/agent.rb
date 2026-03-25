@@ -27,7 +27,8 @@ module OllamaAgent
     def initialize(client: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil, think: nil,
                    read_only: false, patch_policy: nil,
                    skill_paths: nil, skills_enabled: nil, skills_include: nil, skills_exclude: nil,
-                   external_skills_enabled: nil)
+                   external_skills_enabled: nil,
+                   orchestrator: false, confirm_delegation: nil)
       @model = model || default_model
       @root = File.expand_path(root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
       @confirm_patches = confirm_patches
@@ -40,6 +41,8 @@ module OllamaAgent
       @skills_include = skills_include
       @skills_exclude = skills_exclude
       @external_skills_enabled = external_skills_enabled
+      @orchestrator = orchestrator
+      @confirm_delegation = confirm_delegation.nil? || confirm_delegation
       @client = client || build_default_client
     end
     # rubocop:enable Metrics/MethodLength
@@ -96,7 +99,7 @@ module OllamaAgent
     def chat_request_args(messages)
       args = {
         messages: messages,
-        tools: @read_only ? READ_ONLY_TOOLS : TOOLS,
+        tools: OllamaAgent.tools_for(read_only: @read_only, orchestrator: @orchestrator),
         model: @model,
         options: { temperature: 0.2 }
       }
@@ -135,9 +138,10 @@ module OllamaAgent
       DEFAULT_HTTP_TIMEOUT
     end
 
+    # rubocop:disable Metrics/MethodLength -- compose + optional orchestrator addon
     def system_prompt
       base = @read_only ? AgentPrompt.self_review_text : AgentPrompt.text
-      PromptSkills.compose(
+      composed = PromptSkills.compose(
         base: base,
         skills_enabled: resolved_skills_enabled,
         skills_include: resolved_skills_include,
@@ -145,7 +149,11 @@ module OllamaAgent
         skill_paths: resolved_skill_paths,
         external_skills_enabled: resolved_external_skills_enabled
       )
+      return composed unless @orchestrator
+
+      [composed, AgentPrompt.orchestrator_addon].join("\n\n---\n\n")
     end
+    # rubocop:enable Metrics/MethodLength
 
     def resolved_skills_enabled
       return @skills_enabled unless @skills_enabled.nil?

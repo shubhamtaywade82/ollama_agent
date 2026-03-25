@@ -55,5 +55,14 @@ module OllamaAgent
         Do not paste JSON tool calls in prose; tools run only via native tool calls from the API.
       PROMPT
     end
+
+    def self.orchestrator_addon
+      <<~PROMPT
+        Orchestrator mode: you may call list_external_agents to see which external CLI tools are installed,
+        then delegate_to_agent with a valid agent_id from that list. Gather context with read_file and
+        search_code first; keep task and context_summary short. Do not invent agent_id values.
+        External runs use non-interactive argv only; cwd is the project root.
+      PROMPT
+    end
   end
 end
