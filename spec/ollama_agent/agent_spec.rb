@@ -242,4 +242,55 @@ RSpec.describe OllamaAgent::Agent do
       expect { agent.run("x") }.not_to raise_error
     end
   end
+
+  describe "streaming hooks" do
+    it "exposes a Hooks instance" do
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:chat).and_return(
+        Ollama::Response.new("message" => { "role" => "assistant", "content" => "done" })
+      )
+      agent = described_class.new(client: client, root: root)
+      expect(agent.hooks).to be_a(OllamaAgent::Streaming::Hooks)
+    end
+
+    it "emits on_tool_call and on_tool_result when a tool executes" do
+      File.write(File.join(root, "f.txt"), "content")
+
+      tool_response = Ollama::Response.new(
+        "message" => {
+          "role" => "assistant", "content" => "",
+          "tool_calls" => [
+            { "id" => "1", "function" => { "name" => "read_file",
+                                           "arguments" => { "path" => "f.txt" }.to_json } }
+          ]
+        }
+      )
+      final = Ollama::Response.new("message" => { "role" => "assistant", "content" => "ok" })
+
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:chat).and_return(tool_response, final)
+
+      tool_calls   = []
+      tool_results = []
+      agent = described_class.new(client: client, root: root, confirm_patches: false)
+      agent.hooks.on(:on_tool_call)   { |p| tool_calls   << p[:name] }
+      agent.hooks.on(:on_tool_result) { |p| tool_results << p[:name] }
+
+      agent.run("read f")
+      expect(tool_calls).to   eq(["read_file"])
+      expect(tool_results).to eq(["read_file"])
+    end
+
+    it "emits on_complete when the loop finishes" do
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:chat).and_return(
+        Ollama::Response.new("message" => { "role" => "assistant", "content" => "done" })
+      )
+      agent = described_class.new(client: client, root: root)
+      completed = false
+      agent.hooks.on(:on_complete) { |_| completed = true }
+      agent.run("hello")
+      expect(completed).to be true
+    end
+  end
 end

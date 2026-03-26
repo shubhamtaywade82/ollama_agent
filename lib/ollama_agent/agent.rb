@@ -9,6 +9,7 @@ require_relative "sandboxed_tools"
 require_relative "think_param"
 require_relative "timeout_param"
 require_relative "tool_content_parser"
+require_relative "streaming/hooks"
 
 module OllamaAgent
   # Runs a tool-calling loop against Ollama: read files, search, apply unified diffs.
@@ -20,7 +21,7 @@ module OllamaAgent
     # ollama-client defaults to 30s; multi-turn tool chats often need longer on local hardware.
     DEFAULT_HTTP_TIMEOUT = 120
 
-    attr_reader :client, :root
+    attr_reader :client, :root, :hooks
 
     # rubocop:disable Metrics/ParameterLists -- CLI and tests pass explicit dependencies
     # rubocop:disable Metrics/MethodLength
@@ -43,6 +44,7 @@ module OllamaAgent
       @external_skills_enabled = external_skills_enabled
       @orchestrator = orchestrator
       @confirm_delegation = confirm_delegation.nil? || confirm_delegation
+      @hooks = Streaming::Hooks.new
       @client = client || build_default_client
     end
     # rubocop:enable Metrics/MethodLength
@@ -60,17 +62,23 @@ module OllamaAgent
     private
 
     def execute_agent_turns(messages)
+      @current_turn = 0
       max_turns.times do
-        message = chat_assistant_message(messages)
+        @current_turn += 1
+        message    = chat_assistant_message(messages)
         tool_calls = tool_calls_from(message)
-
         messages << message.to_h
-        return if tool_calls.empty?
+        break if tool_calls.empty?
 
         append_tool_results(messages, tool_calls)
       end
 
-      warn "ollama_agent: maximum tool rounds (#{max_turns}) reached" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+      @hooks.emit(:on_complete, { messages: messages, turns: @current_turn })
+      warn "ollama_agent: maximum tool rounds (#{max_turns}) reached" if ENV["OLLAMA_AGENT_DEBUG"] == "1" && @current_turn >= max_turns
+    end
+
+    def current_turn
+      @current_turn || 0
     end
 
     def tool_calls_from(message)
@@ -185,7 +193,9 @@ module OllamaAgent
 
     def append_tool_results(messages, tool_calls)
       tool_calls.each do |tool_call|
+        @hooks.emit(:on_tool_call, { name: tool_call.name, args: tool_call.arguments || {}, turn: current_turn })
         result = execute_tool(tool_call.name, tool_call.arguments || {})
+        @hooks.emit(:on_tool_result, { name: tool_call.name, result: result.to_s, turn: current_turn })
         messages << tool_message(tool_call, result)
       end
     end

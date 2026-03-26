@@ -25,6 +25,8 @@ module OllamaAgent
                               desc: "Disable bundled prompt skills (same as OLLAMA_AGENT_SKILLS=0)"
     method_option :skill_paths, type: :string,
                                 desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
+    method_option :stream, type: :boolean, default: false,
+                           desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
     def ask(query = nil)
       agent = build_agent
 
@@ -49,6 +51,8 @@ module OllamaAgent
                               desc: "Disable bundled prompt skills (same as OLLAMA_AGENT_SKILLS=0)"
     method_option :skill_paths, type: :string,
                                 desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
+    method_option :stream, type: :boolean, default: false,
+                           desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
     def orchestrate(query = nil)
       agent = build_orchestrator_agent
 
@@ -99,6 +103,8 @@ module OllamaAgent
                               desc: "Disable bundled prompt skills (same as OLLAMA_AGENT_SKILLS=0)"
     method_option :skill_paths, type: :string,
                                 desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
+    method_option :stream, type: :boolean, default: false,
+                           desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
     def self_review
       dispatch_self_review_mode(SelfImprovement::Modes.normalize(options[:mode]))
     end
@@ -119,6 +125,8 @@ module OllamaAgent
                               desc: "Disable bundled prompt skills (same as OLLAMA_AGENT_SKILLS=0)"
     method_option :skill_paths, type: :string,
                                 desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
+    method_option :stream, type: :boolean, default: false,
+                           desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
     def improve
       ensure_improve_mode_only_automated!
       dispatch_self_review_mode("automated")
@@ -240,17 +248,19 @@ module OllamaAgent
     # Same root as `self_review` / interactive: cwd when unset (see README).
     # rubocop:disable Metrics/MethodLength
     def build_agent
-      orch = orchestrator_mode?
-      Agent.new(
-        model: options[:model],
-        root: resolved_root_for_self_review,
-        confirm_patches: !options[:yes],
-        http_timeout: options[:timeout],
-        think: options[:think],
-        orchestrator: orch,
+      orch  = orchestrator_mode?
+      agent = Agent.new(
+        model:              options[:model],
+        root:               resolved_root_for_self_review,
+        confirm_patches:    !options[:yes],
+        http_timeout:       options[:timeout],
+        think:              options[:think],
+        orchestrator:       orch,
         confirm_delegation: orch ? !options[:yes] : true,
         **skill_agent_options
       )
+      attach_console_streamer(agent) if stream_enabled?
+      agent
     end
     # rubocop:enable Metrics/MethodLength
 
@@ -261,16 +271,18 @@ module OllamaAgent
     end
 
     def build_orchestrator_agent
-      Agent.new(
-        model: options[:model],
-        root: resolved_root_for_self_review,
-        confirm_patches: !options[:yes],
-        http_timeout: options[:timeout],
-        think: options[:think],
-        orchestrator: true,
+      agent = Agent.new(
+        model:              options[:model],
+        root:               resolved_root_for_self_review,
+        confirm_patches:    !options[:yes],
+        http_timeout:       options[:timeout],
+        think:              options[:think],
+        orchestrator:       true,
         confirm_delegation: !options[:yes],
         **skill_agent_options
       )
+      attach_console_streamer(agent) if stream_enabled?
+      agent
     end
 
     def skill_agent_options
@@ -279,6 +291,14 @@ module OllamaAgent
       paths = PromptSkills.split_paths(options[:skill_paths])
       out[:skill_paths] = paths unless paths.empty?
       out
+    end
+
+    def stream_enabled?
+      options[:stream] || ENV.fetch("OLLAMA_AGENT_STREAM", "0") == "1"
+    end
+
+    def attach_console_streamer(agent)
+      Streaming::ConsoleStreamer.new.attach(agent.hooks)
     end
 
     def start_interactive(agent)

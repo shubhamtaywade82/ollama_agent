@@ -132,5 +132,15 @@ module OllamaAgent
     def error_line(text)
       red(text)
     end
+
+    def tool_call_line(name, args)
+      keys = Array(args&.keys).first(2).join(", ")
+      cyan("[tool→] #{name}(#{keys})")
+    end
+
+    def tool_result_line(name, result)
+      preview = result.to_s[0, 60].gsub(/\s+/, " ")
+      dim("[tool←] #{name}: #{preview}")
+    end
   end
 end
