@@ -10,6 +10,8 @@ require_relative "think_param"
 require_relative "timeout_param"
 require_relative "tool_content_parser"
 require_relative "streaming/hooks"
+require_relative "resilience/retry_middleware"
+require_relative "resilience/audit_logger"
 
 module OllamaAgent
   # Runs a tool-calling loop against Ollama: read files, search, apply unified diffs.
@@ -29,7 +31,8 @@ module OllamaAgent
                    read_only: false, patch_policy: nil,
                    skill_paths: nil, skills_enabled: nil, skills_include: nil, skills_exclude: nil,
                    external_skills_enabled: nil,
-                   orchestrator: false, confirm_delegation: nil)
+                   orchestrator: false, confirm_delegation: nil,
+                   max_retries: nil, audit: false)
       @model = model || default_model
       @root = File.expand_path(root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
       @confirm_patches = confirm_patches
@@ -44,7 +47,10 @@ module OllamaAgent
       @external_skills_enabled = external_skills_enabled
       @orchestrator = orchestrator
       @confirm_delegation = confirm_delegation.nil? || confirm_delegation
+      @max_retries = max_retries
+      @audit       = audit
       @hooks = Streaming::Hooks.new
+      attach_audit_logger if resolved_audit_enabled
       @client = client || build_default_client
     end
     # rubocop:enable Metrics/MethodLength
@@ -155,7 +161,50 @@ module OllamaAgent
       @http_timeout_seconds = resolved_http_timeout_seconds
       config.timeout = @http_timeout_seconds
       OllamaConnection.apply_env_to_config(config)
-      Ollama::Client.new(config: config)
+      ollama_client = Ollama::Client.new(config: config)
+      Resilience::RetryMiddleware.new(
+        client:       ollama_client,
+        max_attempts: resolved_max_retries,
+        hooks:        @hooks,
+        base_delay:   resolved_retry_base_delay
+      )
+    end
+
+    def resolved_max_retries
+      return @max_retries unless @max_retries.nil?
+
+      v = ENV.fetch("OLLAMA_AGENT_MAX_RETRIES", nil)
+      return Resilience::RetryMiddleware::DEFAULT_MAX_ATTEMPTS if v.nil? || v.to_s.strip.empty?
+
+      Integer(v)
+    rescue ArgumentError, TypeError
+      Resilience::RetryMiddleware::DEFAULT_MAX_ATTEMPTS
+    end
+
+    def resolved_retry_base_delay
+      v = ENV.fetch("OLLAMA_AGENT_RETRY_BASE_DELAY", nil)
+      return Resilience::RetryMiddleware::DEFAULT_BASE_DELAY if v.nil? || v.to_s.strip.empty?
+
+      Float(v)
+    rescue ArgumentError, TypeError
+      Resilience::RetryMiddleware::DEFAULT_BASE_DELAY
+    end
+
+    def resolved_audit_enabled
+      return @audit unless @audit == false
+
+      ENV.fetch("OLLAMA_AGENT_AUDIT", "0") == "1"
+    end
+
+    def audit_log_dir
+      custom = ENV.fetch("OLLAMA_AGENT_AUDIT_LOG_PATH", nil)
+      return custom if custom && !custom.to_s.strip.empty?
+
+      File.join(@root, ".ollama_agent", "logs")
+    end
+
+    def attach_audit_logger
+      Resilience::AuditLogger.new(log_dir: audit_log_dir, hooks: @hooks).attach
     end
 
     def resolved_http_timeout_seconds

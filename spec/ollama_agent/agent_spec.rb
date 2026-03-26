@@ -106,18 +106,21 @@ RSpec.describe OllamaAgent::Agent do
   end
 
   describe "default HTTP client" do
+    # agent.client is now a RetryMiddleware wrapping an Ollama::Client
+    def ollama_config(agent)
+      agent.client.instance_variable_get(:@client).instance_variable_get(:@config)
+    end
+
     it "defaults to 120s when OLLAMA_AGENT_TIMEOUT is unset" do
       ENV.delete("OLLAMA_AGENT_TIMEOUT")
       agent = described_class.new(root: root)
-      config = agent.client.instance_variable_get(:@config)
-      expect(config.timeout).to eq(120)
+      expect(ollama_config(agent).timeout).to eq(120)
     end
 
     it "sets Ollama read timeout from OLLAMA_AGENT_TIMEOUT" do
       ENV["OLLAMA_AGENT_TIMEOUT"] = "90"
       agent = described_class.new(root: root)
-      config = agent.client.instance_variable_get(:@config)
-      expect(config.timeout).to eq(90)
+      expect(ollama_config(agent).timeout).to eq(90)
     ensure
       ENV.delete("OLLAMA_AGENT_TIMEOUT")
     end
@@ -125,8 +128,7 @@ RSpec.describe OllamaAgent::Agent do
     it "prefers http_timeout keyword over OLLAMA_AGENT_TIMEOUT" do
       ENV["OLLAMA_AGENT_TIMEOUT"] = "90"
       agent = described_class.new(root: root, http_timeout: 45)
-      config = agent.client.instance_variable_get(:@config)
-      expect(config.timeout).to eq(45)
+      expect(ollama_config(agent).timeout).to eq(45)
     ensure
       ENV.delete("OLLAMA_AGENT_TIMEOUT")
     end
@@ -135,9 +137,8 @@ RSpec.describe OllamaAgent::Agent do
       ENV["OLLAMA_BASE_URL"] = "https://ollama.com"
       ENV["OLLAMA_API_KEY"] = "test-key"
       agent = described_class.new(root: root)
-      config = agent.client.instance_variable_get(:@config)
-      expect(config.base_url).to eq("https://ollama.com")
-      expect(config.api_key).to eq("test-key")
+      expect(ollama_config(agent).base_url).to eq("https://ollama.com")
+      expect(ollama_config(agent).api_key).to eq("test-key")
     ensure
       ENV.delete("OLLAMA_BASE_URL")
       ENV.delete("OLLAMA_API_KEY")
