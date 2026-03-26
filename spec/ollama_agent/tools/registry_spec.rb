@@ -27,6 +27,16 @@ RSpec.describe OllamaAgent::Tools::Registry do
       described_class.register("my_tool", schema: {}) { "x" }
       expect(described_class.custom_tool?("my_tool")).to be true
     end
+
+    it "passes read_only: true through to the handler" do
+      received_read_only = nil
+      described_class.register("check_ro", schema: {}) do |_args, root:, read_only:|
+        received_read_only = read_only
+        "ok"
+      end
+      described_class.execute_custom("check_ro", {}, root: "/tmp", read_only: true)
+      expect(received_read_only).to be true
+    end
   end
 
   describe ".custom_schemas" do
