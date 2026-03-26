@@ -26,7 +26,12 @@ RSpec.describe OllamaAgent::Runner do
     end
 
     it "accepts stream: true without error" do
-      expect { described_class.build(root: tmpdir, stream: false) }.not_to raise_error
+      expect { described_class.build(root: tmpdir, stream: true) }.not_to raise_error
+    end
+
+    it "attaches a ConsoleStreamer subscriber when stream: true" do
+      runner = described_class.build(root: tmpdir, stream: true)
+      expect(runner.hooks.subscribed?(:on_token)).to be true
     end
   end
 
