@@ -106,6 +106,12 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
         result = agent.send(:execute_tool, "write_file", { "content" => "x" })
         expect(result).to include("Missing required").and include("path")
       end
+
+      it "returns an error when content argument is missing" do
+        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+        result = agent.send(:execute_tool, "write_file", { "path" => "f.rb" })
+        expect(result).to include("Missing required").and include("content")
+      end
     end
   end
 

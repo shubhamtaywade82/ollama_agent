@@ -87,6 +87,7 @@ module OllamaAgent
       path = tool_arg(args, "path")
       content = tool_arg(args, "content")
       return missing_tool_argument("write_file", "path") if blank_tool_value?(path)
+      # nil means truly absent; empty string is valid (truncates file to zero bytes).
       return missing_tool_argument("write_file", "content") if content.nil?
 
       write_file(path, content)
