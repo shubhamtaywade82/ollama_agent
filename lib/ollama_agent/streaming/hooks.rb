@@ -13,6 +13,8 @@ module OllamaAgent
 
       # Register a handler block for a named event.
       def on(event, &block)
+        raise ArgumentError, "a block is required" unless block_given?
+
         @handlers[event] << block
       end
 

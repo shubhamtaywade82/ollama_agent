@@ -34,6 +34,14 @@ RSpec.describe OllamaAgent::Streaming::Hooks do
       hooks.on(:on_token) { |_| raise "boom" }
       expect { hooks.emit(:on_token, { token: "x", turn: 1 }) }.not_to raise_error
     end
+
+    it "continues calling subsequent handlers after one raises" do
+      calls = []
+      hooks.on(:on_token) { |_| raise "boom" }
+      hooks.on(:on_token) { |_| calls << :second }
+      hooks.emit(:on_token, { token: "x", turn: 1 })
+      expect(calls).to eq([:second])
+    end
   end
 
   describe "#subscribed?" do
