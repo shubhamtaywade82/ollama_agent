@@ -1,20 +1,28 @@
-# lib/ollama_agent/tools/registry.rb
 # frozen_string_literal: true
 
 module OllamaAgent
+  # Provides tool registration and execution helpers for OllamaAgent.
   module Tools
     # Delegate class-methods so consumers call OllamaAgent::Tools.register(...)
-    def self.register(name, schema:, &block)     = Registry.register(name, schema: schema, &block)
-    def self.custom_tool?(name)                  = Registry.custom_tool?(name)
-    def self.execute_custom(name, args, **kw)    = Registry.execute_custom(name, args, **kw)
-    def self.custom_schemas                      = Registry.custom_schemas
-    def self.reset!                              = Registry.reset!
+    def self.register(name, schema:, &)     = Registry.register(name, schema: schema, &)
+    def self.custom_tool?(name)             = Registry.custom_tool?(name)
 
+    def self.execute_custom(name, args, root:, read_only:)
+      Registry.execute_custom(name, args, root: root, read_only: read_only)
+    end
+
+    def self.custom_schemas                 = Registry.custom_schemas
+    def self.reset!                         = Registry.reset!
+
+    # Stores and executes custom tool definitions registered by users.
     module Registry
       @custom_tools = {}
 
       class << self
         def register(name, schema:, &handler)
+          raise ArgumentError, "handler block required" unless block_given?
+          raise ArgumentError, "schema must be a Hash" unless schema.is_a?(Hash)
+
           @custom_tools[name.to_s] = { schema: schema, handler: handler }
         end
 

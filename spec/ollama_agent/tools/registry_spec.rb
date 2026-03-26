@@ -7,7 +7,15 @@ RSpec.describe OllamaAgent::Tools::Registry do
   before { described_class.reset! }
   after  { described_class.reset! }
 
-  describe ".register and .execute_custom" do
+  describe ".register" do
+    it "reports custom_tool? correctly" do
+      expect(described_class.custom_tool?("my_tool")).to be false
+      described_class.register("my_tool", schema: {}) { "x" }
+      expect(described_class.custom_tool?("my_tool")).to be true
+    end
+  end
+
+  describe ".execute_custom" do
     it "executes a registered custom tool handler" do
       described_class.register("my_tool",
         schema: { type: "object", properties: {}, required: [] }
@@ -20,12 +28,6 @@ RSpec.describe OllamaAgent::Tools::Registry do
     it "returns an error message for an unknown custom tool" do
       result = described_class.execute_custom("nope", {}, root: "/tmp", read_only: false)
       expect(result).to include("Unknown custom tool")
-    end
-
-    it "reports custom_tool? correctly" do
-      expect(described_class.custom_tool?("my_tool")).to be false
-      described_class.register("my_tool", schema: {}) { "x" }
-      expect(described_class.custom_tool?("my_tool")).to be true
     end
 
     it "passes read_only: true through to the handler" do
