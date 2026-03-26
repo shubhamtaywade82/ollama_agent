@@ -13,6 +13,7 @@ require_relative "ollama_agent/context/manager"
 require_relative "ollama_agent/session/session"
 require_relative "ollama_agent/session/store"
 require_relative "ollama_agent/agent"
+require_relative "ollama_agent/runner"
 require_relative "ollama_agent/cli"
 
 # Public namespace for the Ollama-backed coding agent gem (CLI, Agent, tools, self-improvement helpers).
