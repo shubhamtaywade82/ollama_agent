@@ -12,6 +12,8 @@ require_relative "tool_content_parser"
 require_relative "streaming/hooks"
 require_relative "resilience/retry_middleware"
 require_relative "resilience/audit_logger"
+require_relative "context/manager"
+require_relative "session/store"
 
 module OllamaAgent
   # Runs a tool-calling loop against Ollama: read files, search, apply unified diffs.
@@ -26,13 +28,14 @@ module OllamaAgent
     attr_reader :client, :root, :hooks
 
     # rubocop:disable Metrics/ParameterLists -- CLI and tests pass explicit dependencies
-    # rubocop:disable Metrics/MethodLength
+    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
     def initialize(client: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil, think: nil,
                    read_only: false, patch_policy: nil,
                    skill_paths: nil, skills_enabled: nil, skills_include: nil, skills_exclude: nil,
                    external_skills_enabled: nil,
                    orchestrator: false, confirm_delegation: nil,
-                   max_retries: nil, audit: nil)
+                   max_retries: nil, audit: nil,
+                   session_id: nil, resume: false)
       @model = model || default_model
       @root = File.expand_path(root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
       @confirm_patches = confirm_patches
@@ -47,34 +50,39 @@ module OllamaAgent
       @external_skills_enabled = external_skills_enabled
       @orchestrator = orchestrator
       @confirm_delegation = confirm_delegation.nil? || confirm_delegation
-      @max_retries = max_retries
-      @audit       = audit
+      @max_retries      = max_retries
+      @audit            = audit
+      @session_id       = session_id
+      @resume           = resume
+      @context_manager  = Context::Manager.new
       @hooks = Streaming::Hooks.new
       attach_audit_logger if resolved_audit_enabled
       @client = client || build_default_client
     end
-    # rubocop:enable Metrics/MethodLength
+    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
     # rubocop:enable Metrics/ParameterLists
 
     def run(query)
-      messages = [
-        { role: "system", content: system_prompt },
-        { role: "user", content: query }
-      ]
+      prior    = @session_id && @resume ? Session::Store.resume(session_id: @session_id, root: @root) : []
+      messages = prior.empty? ? [{ role: "system", content: system_prompt }] : prior
+      messages << { role: "user", content: query }
+      Session::Store.save(session_id: @session_id, root: @root, message: messages.last) if @session_id
 
       execute_agent_turns(messages)
     end
 
     private
 
-    # rubocop:disable Metrics/MethodLength -- turn counter + hooks + debug warn exceed 10 LOC
+    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- turn counter + hooks + context trim + session save
     def execute_agent_turns(messages)
       @current_turn = 0
       max_turns.times do
         @current_turn += 1
-        message    = chat_assistant_message(messages)
+        trimmed    = @context_manager.trim(messages)
+        message    = chat_assistant_message(trimmed)
         tool_calls = tool_calls_from(message)
         messages << message.to_h
+        save_message_to_session(message.to_h)
         break if tool_calls.empty?
 
         append_tool_results(messages, tool_calls)
@@ -85,7 +93,7 @@ module OllamaAgent
 
       warn "ollama_agent: maximum tool rounds (#{max_turns}) reached"
     end
-    # rubocop:enable Metrics/MethodLength
+    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
 
     def current_turn
       @current_turn || 0
@@ -270,7 +278,14 @@ module OllamaAgent
         result = execute_tool(tool_call.name, tool_call.arguments || {})
         @hooks.emit(:on_tool_result, { name: tool_call.name, result: result.to_s, turn: current_turn })
         messages << tool_message(tool_call, result)
+        save_message_to_session(messages.last)
       end
+    end
+
+    def save_message_to_session(msg)
+      return unless @session_id
+
+      Session::Store.save(session_id: @session_id, root: @root, message: msg)
     end
 
     def tool_message(tool_call, result)

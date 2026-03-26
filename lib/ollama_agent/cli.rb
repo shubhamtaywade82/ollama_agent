@@ -31,6 +31,9 @@ module OllamaAgent
                           desc: "Enable structured audit log under .ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
     method_option :max_retries, type: :numeric,
                                 desc: "HTTP retry attempts (0=disable, default 3)"
+    method_option :session, type: :string,  desc: "Named session id (saves/resumes conversation)"
+    method_option :resume,  type: :boolean, default: false,
+                            desc: "Resume the named (or most recent) session"
     def ask(query = nil)
       agent = build_agent
 
@@ -72,6 +75,19 @@ module OllamaAgent
         puts Console.error_line("Error: provide a QUERY or use --interactive")
         exit 1
       end
+    end
+
+    desc "sessions", "List saved sessions for the current project root"
+    method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
+    def sessions
+      root = resolved_root_for_self_review
+      list = Session::Store.list(root: root)
+      if list.empty?
+        puts "No sessions found in #{root}"
+        return
+      end
+      puts "SESSION ID                      STARTED"
+      list.each { |s| puts format("%-30<id>s  %<started>s", id: s.session_id, started: s.started_at) }
     end
 
     desc "agents", "List configured external CLI agents and whether they are on PATH"
@@ -258,7 +274,7 @@ module OllamaAgent
 
     # Build an Agent for the `ask` command.
     # Same root as `self_review` / interactive: cwd when unset (see README).
-    # rubocop:disable Metrics/MethodLength
+    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- session + orchestrator + audit kwargs exceed limits
     def build_agent
       orch  = orchestrator_mode?
       agent = Agent.new(
@@ -271,12 +287,22 @@ module OllamaAgent
         confirm_delegation: orch ? !options[:yes] : true,
         audit: options[:audit],
         max_retries: options[:max_retries],
+        session_id: resolved_session_id,
+        resume: options[:resume] || false,
         **skill_agent_options
       )
       attach_console_streamer(agent) if stream_enabled?
       agent
     end
-    # rubocop:enable Metrics/MethodLength
+    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
+
+    def resolved_session_id
+      return options[:session] if options[:session]
+      return nil unless options[:resume]
+
+      list = Session::Store.list(root: resolved_root_for_self_review)
+      list.first&.session_id
+    end
 
     def orchestrator_mode?
       return true if ENV.fetch("OLLAMA_AGENT_ORCHESTRATOR", "0").to_s == "1"
