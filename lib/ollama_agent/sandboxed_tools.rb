@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "fileutils"
 require "open3"
 require "pathname"
 
@@ -24,18 +25,27 @@ module OllamaAgent
 
     private
 
+    # rubocop:disable Metrics/MethodLength, Metrics/CyclomaticComplexity
     def execute_tool(name, args)
       args = coerce_tool_arguments(args)
+
+      # Custom tools registered by library consumers
+      if Tools::Registry.custom_tool?(name)
+        return Tools::Registry.execute_custom(name, args, root: @root, read_only: @read_only)
+      end
+
       case name
-      when "read_file" then execute_read_file(args)
-      when "search_code" then execute_search_code(args)
-      when "list_files" then execute_list_files(args)
-      when "edit_file" then execute_edit_file_tool(args)
+      when "read_file"            then execute_read_file(args)
+      when "search_code"          then execute_search_code(args)
+      when "list_files"           then execute_list_files(args)
+      when "edit_file"            then execute_edit_file_tool(args)
+      when "write_file"           then execute_write_file_tool(args)
       when "list_external_agents" then execute_list_external_agents(args)
-      when "delegate_to_agent" then execute_delegate_to_agent_tool(args)
+      when "delegate_to_agent"    then execute_delegate_to_agent_tool(args)
       else "Unknown tool: #{name}"
       end
     end
+    # rubocop:enable Metrics/MethodLength, Metrics/CyclomaticComplexity
 
     def execute_read_file(args)
       path = tool_arg(args, "path")
@@ -72,6 +82,36 @@ module OllamaAgent
 
       edit_file(path, diff)
     end
+
+    def execute_write_file_tool(args)
+      path = tool_arg(args, "path")
+      content = tool_arg(args, "content")
+      return missing_tool_argument("write_file", "path") if blank_tool_value?(path)
+      return missing_tool_argument("write_file", "content") if content.nil?
+
+      write_file(path, content)
+    end
+
+    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
+    def write_file(path, content)
+      return disallowed_path_message(path) unless path_allowed?(path)
+      return "write_file is disabled in read-only mode." if @read_only
+
+      if @confirm_patches
+        puts Console.patch_title("Proposed write_file for #{path}:")
+        puts content.to_s[0, 2000]
+        print Console.apply_prompt("Write file? (y/n) ")
+        return "Cancelled by user" unless $stdin.gets.to_s.chomp.casecmp("y").zero?
+      end
+
+      abs = resolve_path(path)
+      FileUtils.mkdir_p(File.dirname(abs))
+      File.write(abs, content.to_s, encoding: Encoding::UTF_8)
+      "Written: #{path}"
+    rescue Errno::EACCES => e
+      "Error writing file: #{e.message}"
+    end
+    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
 
     def execute_list_external_agents(_args)
       return "list_external_agents is only available in orchestrator mode." unless @orchestrator

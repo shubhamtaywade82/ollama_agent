@@ -73,6 +73,40 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       result = agent.send(:execute_tool, "edit_file", args)
       expect(result).to eq("Patch applied successfully.")
     end
+
+    context "write_file" do
+      it "creates a new file under the project root" do
+        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+        result = agent.send(:execute_tool, "write_file", { "path" => "new.rb", "content" => "# hello\n" })
+        expect(result).to eq("Written: new.rb")
+        expect(File.read(File.join(tmpdir, "new.rb"))).to eq("# hello\n")
+      end
+
+      it "overwrites an existing file" do
+        File.write(File.join(tmpdir, "existing.rb"), "old\n")
+        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+        agent.send(:execute_tool, "write_file", { "path" => "existing.rb", "content" => "new\n" })
+        expect(File.read(File.join(tmpdir, "existing.rb"))).to eq("new\n")
+      end
+
+      it "rejects paths outside the project root" do
+        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+        result = agent.send(:execute_tool, "write_file", { "path" => "../../etc/passwd", "content" => "x" })
+        expect(result).to include("project root")
+      end
+
+      it "is disabled in read-only mode" do
+        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false, read_only: true)
+        result = agent.send(:execute_tool, "write_file", { "path" => "f.rb", "content" => "x" })
+        expect(result).to include("read-only")
+      end
+
+      it "returns an error when path argument is missing" do
+        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+        result = agent.send(:execute_tool, "write_file", { "content" => "x" })
+        expect(result).to include("Missing required").and include("path")
+      end
+    end
   end
 
   describe "#read_file" do

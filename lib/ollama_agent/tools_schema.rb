@@ -74,10 +74,26 @@ module OllamaAgent # rubocop:disable Metrics/ModuleLength -- schema tables; spli
           required: %w[path diff]
         }
       }
+    },
+    {
+      type: "function",
+      function: {
+        name: "write_file",
+        description: "Create or overwrite a file under the project root with full UTF-8 content. " \
+                     "Use for new files or complete rewrites. Prefer edit_file for surgical changes.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "File path relative to project root" },
+            content: { type: "string", description: "Full file content to write" }
+          },
+          required: %w[path content]
+        }
+      }
     }
   ].freeze
 
-  READ_ONLY_TOOLS = TOOLS.reject { |t| t.dig(:function, :name) == "edit_file" }.freeze
+  READ_ONLY_TOOLS = TOOLS.reject { |t| %w[edit_file write_file].include?(t.dig(:function, :name)) }.freeze
 
   ORCHESTRATOR_LIST_TOOL = {
     type: "function",
@@ -127,6 +143,7 @@ module OllamaAgent # rubocop:disable Metrics/ModuleLength -- schema tables; spli
 
   def self.tools_for(read_only:, orchestrator:)
     base = read_only ? READ_ONLY_TOOLS : TOOLS
+    base += OllamaAgent::Tools::Registry.custom_schemas
     return base unless orchestrator
 
     base + (read_only ? ORCHESTRATOR_READ_ONLY_TOOLS : ORCHESTRATOR_TOOLS)
