@@ -42,7 +42,7 @@ module OllamaAgent
       private
 
       def backoff(attempt)
-        jitter = rand * 0.5
+        jitter = @base_delay > 0 ? rand * 0.5 : 0
         [(@base_delay * (2**(attempt - 1))) + jitter, 30.0].min
       end
     end

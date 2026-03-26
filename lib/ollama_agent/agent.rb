@@ -32,7 +32,7 @@ module OllamaAgent
                    skill_paths: nil, skills_enabled: nil, skills_include: nil, skills_exclude: nil,
                    external_skills_enabled: nil,
                    orchestrator: false, confirm_delegation: nil,
-                   max_retries: nil, audit: false)
+                   max_retries: nil, audit: nil)
       @model = model || default_model
       @root = File.expand_path(root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
       @confirm_patches = confirm_patches
@@ -193,7 +193,7 @@ module OllamaAgent
     end
 
     def resolved_audit_enabled
-      return @audit unless @audit == false
+      return @audit unless @audit.nil?
 
       ENV.fetch("OLLAMA_AGENT_AUDIT", "0") == "1"
     end
