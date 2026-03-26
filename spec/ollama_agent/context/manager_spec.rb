@@ -67,6 +67,18 @@ RSpec.describe OllamaAgent::Context::Manager do
     end
   end
 
+  describe "env var OLLAMA_AGENT_MAX_TOKENS" do
+    it "uses the env var as the default token budget" do
+      messages = [sys_msg, user_msg("x " * 500), user_msg("last")]
+      manager  = described_class.new  # no explicit max_tokens
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with("OLLAMA_AGENT_MAX_TOKENS", nil).and_return("100")
+      small_manager = described_class.new
+      trimmed = small_manager.trim(messages)
+      expect(trimmed.size).to be < messages.size
+    end
+  end
+
   describe OllamaAgent::Context::TokenCounter do
     it "estimates tokens as chars / 4" do
       expect(described_class.estimate("hello")).to eq(1)    # 5 / 4 = 1 (integer division)
