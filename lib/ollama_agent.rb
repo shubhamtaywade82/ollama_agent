@@ -6,6 +6,8 @@ require_relative "ollama_agent/console"
 require_relative "ollama_agent/tools/registry"
 require_relative "ollama_agent/streaming/hooks"
 require_relative "ollama_agent/streaming/console_streamer"
+require_relative "ollama_agent/resilience/retry_middleware"
+require_relative "ollama_agent/resilience/audit_logger"
 require_relative "ollama_agent/agent"
 require_relative "ollama_agent/cli"
 

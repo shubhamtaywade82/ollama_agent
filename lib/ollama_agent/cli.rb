@@ -27,6 +27,10 @@ module OllamaAgent
                                 desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
     method_option :stream, type: :boolean, default: false,
                            desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
+    method_option :audit, type: :boolean, default: false,
+                          desc: "Enable structured audit log under .ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
+    method_option :max_retries, type: :numeric,
+                                desc: "HTTP retry attempts (0=disable, default 3)"
     def ask(query = nil)
       agent = build_agent
 
@@ -53,6 +57,10 @@ module OllamaAgent
                                 desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
     method_option :stream, type: :boolean, default: false,
                            desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
+    method_option :audit, type: :boolean, default: false,
+                          desc: "Enable structured audit log under .ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
+    method_option :max_retries, type: :numeric,
+                                desc: "HTTP retry attempts (0=disable, default 3)"
     def orchestrate(query = nil)
       agent = build_orchestrator_agent
 
@@ -261,6 +269,8 @@ module OllamaAgent
         think: options[:think],
         orchestrator: orch,
         confirm_delegation: orch ? !options[:yes] : true,
+        audit: options[:audit],
+        max_retries: options[:max_retries],
         **skill_agent_options
       )
       attach_console_streamer(agent) if stream_enabled?
@@ -284,6 +294,8 @@ module OllamaAgent
         think: options[:think],
         orchestrator: true,
         confirm_delegation: !options[:yes],
+        audit: options[:audit],
+        max_retries: options[:max_retries],
         **skill_agent_options
       )
       attach_console_streamer(agent) if stream_enabled?

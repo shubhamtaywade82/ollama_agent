@@ -22,6 +22,7 @@ module OllamaAgent
         @base_delay   = base_delay.to_f
       end
 
+      # rubocop:disable Metrics/MethodLength -- retry loop with backoff needs multiple steps
       def chat(**args)
         attempt = 0
         begin
@@ -36,12 +37,13 @@ module OllamaAgent
           retry
         end
       end
+      # rubocop:enable Metrics/MethodLength
 
       private
 
       def backoff(attempt)
         jitter = rand * 0.5
-        [@base_delay * (2**(attempt - 1)) + jitter, 30.0].min
+        [(@base_delay * (2**(attempt - 1))) + jitter, 30.0].min
       end
     end
   end

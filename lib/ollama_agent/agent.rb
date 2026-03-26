@@ -156,6 +156,7 @@ module OllamaAgent
       ENV["OLLAMA_AGENT_MODEL"] || Ollama::Config.new.model
     end
 
+    # rubocop:disable Metrics/MethodLength -- wraps Ollama client with retry; needs 11 lines
     def build_default_client
       config = Ollama::Config.new
       @http_timeout_seconds = resolved_http_timeout_seconds
@@ -163,12 +164,13 @@ module OllamaAgent
       OllamaConnection.apply_env_to_config(config)
       ollama_client = Ollama::Client.new(config: config)
       Resilience::RetryMiddleware.new(
-        client:       ollama_client,
+        client: ollama_client,
         max_attempts: resolved_max_retries,
-        hooks:        @hooks,
-        base_delay:   resolved_retry_base_delay
+        hooks: @hooks,
+        base_delay: resolved_retry_base_delay
       )
     end
+    # rubocop:enable Metrics/MethodLength
 
     def resolved_max_retries
       return @max_retries unless @max_retries.nil?
