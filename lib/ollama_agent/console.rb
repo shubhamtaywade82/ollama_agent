@@ -134,7 +134,7 @@ module OllamaAgent
     end
 
     def tool_call_line(name, args)
-      keys = Array(args&.keys).first(2).join(", ")
+      keys = args.is_a?(Hash) ? args.keys.first(2).join(", ") : ""
       cyan("[tool→] #{name}(#{keys})")
     end
 

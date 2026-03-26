@@ -61,6 +61,7 @@ module OllamaAgent
 
     private
 
+    # rubocop:disable Metrics/MethodLength -- turn counter + hooks + debug warn exceed 10 LOC
     def execute_agent_turns(messages)
       @current_turn = 0
       max_turns.times do
@@ -74,8 +75,11 @@ module OllamaAgent
       end
 
       @hooks.emit(:on_complete, { messages: messages, turns: @current_turn })
-      warn "ollama_agent: maximum tool rounds (#{max_turns}) reached" if ENV["OLLAMA_AGENT_DEBUG"] == "1" && @current_turn >= max_turns
+      return unless ENV["OLLAMA_AGENT_DEBUG"] == "1" && @current_turn >= max_turns
+
+      warn "ollama_agent: maximum tool rounds (#{max_turns}) reached"
     end
+    # rubocop:enable Metrics/MethodLength
 
     def current_turn
       @current_turn || 0
@@ -95,12 +99,30 @@ module OllamaAgent
     end
 
     def chat_assistant_message(messages)
-      response = @client.chat(**chat_request_args(messages))
+      if @hooks.subscribed?(:on_token)
+        stream_assistant_message(messages)
+      else
+        block_assistant_message(messages)
+      end
+    end
 
+    def block_assistant_message(messages)
+      response = @client.chat(**chat_request_args(messages))
       message = response.message
       raise Error, "Empty assistant message" if message.nil?
 
       announce_assistant_content(message)
+      message
+    end
+
+    def stream_assistant_message(messages)
+      ollama_hooks = {
+        on_token: ->(token) { @hooks.emit(:on_token, { token: token, turn: current_turn }) }
+      }
+      response = @client.chat(**chat_request_args(messages), hooks: ollama_hooks)
+      message = response.message
+      raise Error, "Empty assistant message" if message.nil?
+
       message
     end
 

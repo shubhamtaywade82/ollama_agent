@@ -281,6 +281,20 @@ RSpec.describe OllamaAgent::Agent do
       expect(tool_results).to eq(["read_file"])
     end
 
+    it "uses streaming path when on_token subscriber is registered" do
+      tokens_received = []
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:chat) do |**kwargs|
+        kwargs[:hooks][:on_token].call("hello ")
+        kwargs[:hooks][:on_token].call("world")
+        Ollama::Response.new("message" => { "role" => "assistant", "content" => "hello world" })
+      end
+      agent = described_class.new(client: client, root: root)
+      agent.hooks.on(:on_token) { |p| tokens_received << p[:token] }
+      agent.run("hi")
+      expect(tokens_received).to eq(["hello ", "world"])
+    end
+
     it "emits on_complete when the loop finishes" do
       client = instance_double(Ollama::Client)
       allow(client).to receive(:chat).and_return(

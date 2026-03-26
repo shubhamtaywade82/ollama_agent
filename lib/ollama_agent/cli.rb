@@ -167,6 +167,7 @@ module OllamaAgent
       exit 1
     end
 
+    # rubocop:disable Metrics/MethodLength -- stream attachment adds one line over limit
     def run_mode_analysis
       agent = Agent.new(
         model: options[:model],
@@ -177,11 +178,14 @@ module OllamaAgent
         think: options[:think],
         **skill_agent_options
       )
+      attach_console_streamer(agent) if stream_enabled?
       SelfImprovement::Analyzer.new(agent).run
     end
+    # rubocop:enable Metrics/MethodLength
 
     def run_mode_interactive
       agent = Agent.new(**interactive_agent_keywords)
+      attach_console_streamer(agent) if stream_enabled?
       SelfImprovement::Analyzer.new(agent).run(SelfImprovement::Analyzer::INTERACTIVE_PROMPT)
     end
 
@@ -250,12 +254,12 @@ module OllamaAgent
     def build_agent
       orch  = orchestrator_mode?
       agent = Agent.new(
-        model:              options[:model],
-        root:               resolved_root_for_self_review,
-        confirm_patches:    !options[:yes],
-        http_timeout:       options[:timeout],
-        think:              options[:think],
-        orchestrator:       orch,
+        model: options[:model],
+        root: resolved_root_for_self_review,
+        confirm_patches: !options[:yes],
+        http_timeout: options[:timeout],
+        think: options[:think],
+        orchestrator: orch,
         confirm_delegation: orch ? !options[:yes] : true,
         **skill_agent_options
       )
@@ -270,20 +274,22 @@ module OllamaAgent
       ENV.fetch("OLLAMA_AGENT_MODE", "").to_s.strip.casecmp("orchestrator").zero?
     end
 
+    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- mirrors build_agent; stream attachment adds one line
     def build_orchestrator_agent
       agent = Agent.new(
-        model:              options[:model],
-        root:               resolved_root_for_self_review,
-        confirm_patches:    !options[:yes],
-        http_timeout:       options[:timeout],
-        think:              options[:think],
-        orchestrator:       true,
+        model: options[:model],
+        root: resolved_root_for_self_review,
+        confirm_patches: !options[:yes],
+        http_timeout: options[:timeout],
+        think: options[:think],
+        orchestrator: true,
         confirm_delegation: !options[:yes],
         **skill_agent_options
       )
       attach_console_streamer(agent) if stream_enabled?
       agent
     end
+    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
 
     def skill_agent_options
       out = {}

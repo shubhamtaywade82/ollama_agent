@@ -8,9 +8,12 @@ module OllamaAgent
     # Auto-attached by CLI when --stream is passed and stdout is a TTY.
     class ConsoleStreamer
       def attach(hooks)
-        hooks.on(:on_token)       { |p| print p[:token]; $stdout.flush }
-        hooks.on(:on_tool_call)   { |p| warn Console.tool_call_line(p[:name], p[:args]) }
-        hooks.on(:on_tool_result) { |p| warn Console.tool_result_line(p[:name], p[:result]) }
+        hooks.on(:on_token) do |payload|
+          print payload[:token]
+          $stdout.flush
+        end
+        hooks.on(:on_tool_call)   { |payload| warn Console.tool_call_line(payload[:name], payload[:args]) }
+        hooks.on(:on_tool_result) { |payload| warn Console.tool_result_line(payload[:name], payload[:result]) }
         hooks.on(:on_complete)    { puts }
       end
     end
