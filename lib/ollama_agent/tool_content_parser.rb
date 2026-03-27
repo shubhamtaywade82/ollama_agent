@@ -5,7 +5,7 @@ require "json"
 module OllamaAgent
   # Parses JSON tool lines from assistant prose when OLLAMA_AGENT_PARSE_TOOL_JSON=1 (fallback for weak models).
   module ToolContentParser
-    KNOWN_TOOLS = %w[list_files read_file search_code edit_file].freeze
+    KNOWN_TOOLS = %w[list_files read_file search_code edit_file write_file].freeze
 
     SyntheticToolCall = Struct.new(:id, :name, :arguments)
 

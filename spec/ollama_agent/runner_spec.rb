@@ -33,6 +33,11 @@ RSpec.describe OllamaAgent::Runner do
       runner = described_class.build(root: tmpdir, stream: true)
       expect(runner.hooks.subscribed?(:on_token)).to be true
     end
+
+    it "accepts max_tokens and context_summarize without error" do
+      runner = described_class.build(root: tmpdir, max_tokens: 16_384, context_summarize: true)
+      expect(runner).to be_a(described_class)
+    end
   end
 
   describe "#run" do

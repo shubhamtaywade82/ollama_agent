@@ -45,6 +45,8 @@ module OllamaAgent
       stream:          false,
       session_id:      nil,
       resume:          false,
+      max_tokens:      nil,
+      context_summarize: false,
       max_retries:     nil,
       audit:           nil,
       read_only:       false,
@@ -58,6 +60,7 @@ module OllamaAgent
       new(
         root: root, model: model, stream: stream,
         session_id: session_id, resume: resume,
+        max_tokens: max_tokens, context_summarize: context_summarize,
         max_retries: max_retries, audit: audit, read_only: read_only,
         skills_enabled: skills_enabled, skill_paths: skill_paths,
         confirm_patches: confirm_patches, orchestrator: orchestrator,
@@ -81,6 +84,7 @@ module OllamaAgent
 
     # rubocop:disable Metrics/MethodLength, Metrics/ParameterLists
     def initialize(root:, model:, stream:, session_id:, resume:,
+                   max_tokens:, context_summarize:,
                    max_retries:, audit:, read_only:, skills_enabled:, skill_paths:,
                    confirm_patches:, orchestrator:, think:, http_timeout:)
       @session_id = session_id
@@ -98,7 +102,9 @@ module OllamaAgent
         session_id: session_id,
         resume: resume,
         max_retries: max_retries,
-        audit: audit
+        audit: audit,
+        max_tokens: max_tokens,
+        context_summarize: context_summarize
       )
 
       Streaming::ConsoleStreamer.new.attach(@agent.hooks) if stream

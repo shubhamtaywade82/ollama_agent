@@ -34,6 +34,10 @@ module OllamaAgent
     method_option :session, type: :string,  desc: "Named session id (saves/resumes conversation)"
     method_option :resume,  type: :boolean, default: false,
                             desc: "Resume the named (or most recent) session"
+    method_option :max_tokens, type: :numeric,
+                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
+    method_option :context_summarize, type: :boolean, default: false,
+                                      desc: "Summarize dropped context vs sliding window"
     def ask(query = nil)
       agent = build_agent
 
@@ -64,6 +68,10 @@ module OllamaAgent
                           desc: "Enable structured audit log under .ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
     method_option :max_retries, type: :numeric,
                                 desc: "HTTP retry attempts (0=disable, default 3)"
+    method_option :max_tokens, type: :numeric,
+                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
+    method_option :context_summarize, type: :boolean, default: false,
+                                      desc: "Summarize dropped context vs sliding window"
     def orchestrate(query = nil)
       agent = build_orchestrator_agent
 
@@ -129,6 +137,10 @@ module OllamaAgent
                                 desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
     method_option :stream, type: :boolean, default: false,
                            desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
+    method_option :max_tokens, type: :numeric,
+                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
+    method_option :context_summarize, type: :boolean, default: false,
+                                      desc: "Summarize dropped context vs sliding window"
     def self_review
       dispatch_self_review_mode(SelfImprovement::Modes.normalize(options[:mode]))
     end
@@ -151,6 +163,10 @@ module OllamaAgent
                                 desc: "Extra .md paths or dirs, colon-separated; merged with OLLAMA_AGENT_SKILL_PATHS"
     method_option :stream, type: :boolean, default: false,
                            desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
+    method_option :max_tokens, type: :numeric,
+                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
+    method_option :context_summarize, type: :boolean, default: false,
+                                      desc: "Summarize dropped context vs sliding window"
     def improve
       ensure_improve_mode_only_automated!
       dispatch_self_review_mode("automated")
@@ -200,6 +216,8 @@ module OllamaAgent
         confirm_patches: false,
         http_timeout: options[:timeout],
         think: options[:think],
+        max_tokens: options[:max_tokens],
+        context_summarize: options[:context_summarize],
         **skill_agent_options
       )
       attach_console_streamer(agent) if stream_enabled?
@@ -222,7 +240,9 @@ module OllamaAgent
         confirm_patches: !options[:yes],
         patch_policy: semi ? PatchRisk.method(:assess).to_proc : nil,
         http_timeout: options[:timeout],
-        think: options[:think]
+        think: options[:think],
+        max_tokens: options[:max_tokens],
+        context_summarize: options[:context_summarize]
       }.merge(skill_agent_options)
     end
 
@@ -246,7 +266,9 @@ module OllamaAgent
         semi: options[:semi] != false,
         apply: options[:apply],
         http_timeout: options[:timeout],
-        think: options[:think]
+        think: options[:think],
+        max_tokens: options[:max_tokens],
+        context_summarize: options[:context_summarize]
       }.merge(skill_agent_options)
     end
     # rubocop:enable Metrics/AbcSize
@@ -289,6 +311,8 @@ module OllamaAgent
         max_retries: options[:max_retries],
         session_id: resolved_session_id,
         resume: options[:resume] || false,
+        max_tokens: options[:max_tokens],
+        context_summarize: options[:context_summarize],
         **skill_agent_options
       )
       attach_console_streamer(agent) if stream_enabled?
@@ -322,6 +346,8 @@ module OllamaAgent
         confirm_delegation: !options[:yes],
         audit: options[:audit],
         max_retries: options[:max_retries],
+        max_tokens: options[:max_tokens],
+        context_summarize: options[:context_summarize],
         **skill_agent_options
       )
       attach_console_streamer(agent) if stream_enabled?

@@ -35,7 +35,8 @@ module OllamaAgent
                    external_skills_enabled: nil,
                    orchestrator: false, confirm_delegation: nil,
                    max_retries: nil, audit: nil,
-                   session_id: nil, resume: false)
+                   session_id: nil, resume: false,
+                   max_tokens: nil, context_summarize: nil)
       @model = model || default_model
       @root = File.expand_path(root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
       @confirm_patches = confirm_patches
@@ -54,7 +55,9 @@ module OllamaAgent
       @audit            = audit
       @session_id       = session_id
       @resume           = resume
-      @context_manager  = Context::Manager.new
+      @max_tokens       = max_tokens
+      @context_summarize = context_summarize
+      @context_manager  = Context::Manager.new(max_tokens: @max_tokens, context_summarize: @context_summarize)
       @hooks = Streaming::Hooks.new
       attach_audit_logger if resolved_audit_enabled
       @client = client || build_default_client
@@ -65,6 +68,12 @@ module OllamaAgent
     def run(query)
       prior    = @session_id && @resume ? Session::Store.resume(session_id: @session_id, root: @root) : []
       messages = prior.empty? ? [{ role: "system", content: system_prompt }] : prior
+      # If resuming a session that didn't save the system prompt (bug in early 0.2.0), prepend it.
+      first = messages.first
+      unless first && (first[:role] == "system" || first["role"] == "system")
+        messages.unshift({ role: "system", content: system_prompt })
+      end
+
       messages << { role: "user", content: query }
       Session::Store.save(session_id: @session_id, root: @root, message: messages.last) if @session_id
 
