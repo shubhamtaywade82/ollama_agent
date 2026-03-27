@@ -74,7 +74,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       expect(result).to eq("Patch applied successfully.")
     end
 
-    context "write_file" do
+    context "when using write_file" do
       it "creates a new file under the project root" do
         agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
         result = agent.send(:execute_tool, "write_file", { "path" => "new.rb", "content" => "# hello\n" })

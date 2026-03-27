@@ -35,7 +35,7 @@ module OllamaAgent
     method_option :resume,  type: :boolean, default: false,
                             desc: "Resume the named (or most recent) session"
     method_option :max_tokens, type: :numeric,
-                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
+                               desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
     method_option :context_summarize, type: :boolean, default: false,
                                       desc: "Summarize dropped context vs sliding window"
     def ask(query = nil)
@@ -69,7 +69,7 @@ module OllamaAgent
     method_option :max_retries, type: :numeric,
                                 desc: "HTTP retry attempts (0=disable, default 3)"
     method_option :max_tokens, type: :numeric,
-                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
+                               desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
     method_option :context_summarize, type: :boolean, default: false,
                                       desc: "Summarize dropped context vs sliding window"
     def orchestrate(query = nil)
@@ -138,7 +138,7 @@ module OllamaAgent
     method_option :stream, type: :boolean, default: false,
                            desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
     method_option :max_tokens, type: :numeric,
-                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
+                               desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
     method_option :context_summarize, type: :boolean, default: false,
                                       desc: "Summarize dropped context vs sliding window"
     def self_review
@@ -164,7 +164,7 @@ module OllamaAgent
     method_option :stream, type: :boolean, default: false,
                            desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
     method_option :max_tokens, type: :numeric,
-                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
+                               desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
     method_option :context_summarize, type: :boolean, default: false,
                                       desc: "Summarize dropped context vs sliding window"
     def improve
@@ -207,7 +207,7 @@ module OllamaAgent
       exit 1
     end
 
-    # rubocop:disable Metrics/MethodLength -- stream attachment adds one line over limit
+    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- stream + context kwargs exceed limits
     def run_mode_analysis
       agent = Agent.new(
         model: options[:model],
@@ -223,7 +223,7 @@ module OllamaAgent
       attach_console_streamer(agent) if stream_enabled?
       SelfImprovement::Analyzer.new(agent).run
     end
-    # rubocop:enable Metrics/MethodLength
+    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
 
     def run_mode_interactive
       agent = Agent.new(**interactive_agent_keywords)
@@ -231,6 +231,7 @@ module OllamaAgent
       SelfImprovement::Analyzer.new(agent).run(SelfImprovement::Analyzer::INTERACTIVE_PROMPT)
     end
 
+    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- context kwargs push over limit
     def interactive_agent_keywords
       semi = options[:semi] != false
       {
@@ -245,6 +246,7 @@ module OllamaAgent
         context_summarize: options[:context_summarize]
       }.merge(skill_agent_options)
     end
+    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
 
     def run_mode_automated
       result = SelfImprovement::Improver.new.run(**improve_run_options)
@@ -257,7 +259,7 @@ module OllamaAgent
       File.expand_path(base)
     end
 
-    # rubocop:disable Metrics/AbcSize -- mirrors Improver.run keyword list
+    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- context kwargs push over limit
     def improve_run_options
       {
         model: options[:model],
@@ -271,7 +273,7 @@ module OllamaAgent
         context_summarize: options[:context_summarize]
       }.merge(skill_agent_options)
     end
-    # rubocop:enable Metrics/AbcSize
+    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
     def report_improve_result(result)
       unless result[:success]

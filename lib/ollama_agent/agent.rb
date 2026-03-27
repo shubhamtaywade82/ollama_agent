@@ -57,7 +57,7 @@ module OllamaAgent
       @resume           = resume
       @max_tokens       = max_tokens
       @context_summarize = context_summarize
-      @context_manager  = Context::Manager.new(max_tokens: @max_tokens, context_summarize: @context_summarize)
+      @context_manager = Context::Manager.new(max_tokens: @max_tokens, context_summarize: @context_summarize)
       @hooks = Streaming::Hooks.new
       attach_audit_logger if resolved_audit_enabled
       @client = client || build_default_client
@@ -65,6 +65,7 @@ module OllamaAgent
     # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
     # rubocop:enable Metrics/ParameterLists
 
+    # rubocop:disable Metrics/CyclomaticComplexity -- session resume + system-prompt guard branches
     def run(query)
       prior    = @session_id && @resume ? Session::Store.resume(session_id: @session_id, root: @root) : []
       messages = prior.empty? ? [{ role: "system", content: system_prompt }] : prior
@@ -79,6 +80,7 @@ module OllamaAgent
 
       execute_agent_turns(messages)
     end
+    # rubocop:enable Metrics/CyclomaticComplexity
 
     private
 

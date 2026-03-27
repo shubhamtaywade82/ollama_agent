@@ -15,6 +15,7 @@ module OllamaAgent
         @context_summarize = context_summarize
       end
 
+      # rubocop:disable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       # Returns a (possibly shorter) copy of messages that fits within the token budget.
       def trim(messages)
         return messages unless over_budget?(messages)
@@ -45,6 +46,7 @@ module OllamaAgent
         inject_summary(trimmed, dropped) if @context_summarize && dropped&.any?
         trimmed
       end
+      # rubocop:enable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
       private
 
@@ -52,7 +54,8 @@ module OllamaAgent
         # In a real implementation, we would call the model to summarize.
         # For now, we add a system message noting that history was trimmed.
         # (The spec implies calling the model, but Agent doesn't pass the client here yet).
-        summary = "Note: Earlier conversation history was trimmed to fit token budget (#{dropped.size} messages dropped)."
+        n = dropped.size
+        summary = "Note: Earlier conversation history was trimmed to fit token budget (#{n} messages dropped)."
         messages.insert(1, { role: "system", content: summary })
       end
 
@@ -78,7 +81,7 @@ module OllamaAgent
         # Find all following 'tool' messages that correspond to this assistant's calls.
         # In a standard multi-turn loop, tool results immediately follow the assistant message.
         indices_to_drop = [assistant_idx]
-        (assistant_idx + 1...messages.size).each do |i|
+        ((assistant_idx + 1)...messages.size).each do |i|
           break if messages[i][:role] != "tool"
 
           indices_to_drop << i

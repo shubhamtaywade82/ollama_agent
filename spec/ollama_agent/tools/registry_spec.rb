@@ -18,8 +18,8 @@ RSpec.describe OllamaAgent::Tools::Registry do
   describe ".execute_custom" do
     it "executes a registered custom tool handler" do
       described_class.register("my_tool",
-        schema: { type: "object", properties: {}, required: [] }
-      ) { |args, root:, read_only:| "result:#{args["x"]}" }
+                               schema: { type: "object", properties: {},
+                                         required: [] }) { |args, root:, read_only:| "result:#{args["x"]}" } # rubocop:disable Lint/UnusedBlockArgument
 
       result = described_class.execute_custom("my_tool", { "x" => "42" }, root: "/tmp", read_only: false)
       expect(result).to eq("result:42")
@@ -32,7 +32,7 @@ RSpec.describe OllamaAgent::Tools::Registry do
 
     it "passes read_only: true through to the handler" do
       received_read_only = nil
-      described_class.register("check_ro", schema: {}) do |_args, root:, read_only:|
+      described_class.register("check_ro", schema: {}) do |_args, root:, read_only:| # rubocop:disable Lint/UnusedBlockArgument
         received_read_only = read_only
         "ok"
       end
@@ -44,8 +44,8 @@ RSpec.describe OllamaAgent::Tools::Registry do
   describe ".custom_schemas" do
     it "returns tool schemas in ollama tool format" do
       described_class.register("do_thing",
-        schema: { description: "does a thing", properties: { x: { type: "string" } }, required: ["x"] }
-      ) { "ok" }
+                               schema: { description: "does a thing", properties: { x: { type: "string" } },
+                                         required: ["x"] }) { "ok" }
 
       schemas = described_class.custom_schemas
       expect(schemas.size).to eq(1)

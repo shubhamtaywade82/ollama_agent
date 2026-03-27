@@ -29,7 +29,7 @@ RSpec.describe OllamaAgent::Context::Manager do
     end
 
     it "never trims the system message" do
-      system_content = "system " * 1000  # ~2000 chars ≈ 500 tokens
+      system_content = "system " * 1000 # ~2000 chars ≈ 500 tokens
       manager  = described_class.new(max_tokens: 600)
       messages = [sys_msg(system_content), user_msg("short"), assistant_msg("short")]
       trimmed  = manager.trim(messages)
@@ -70,7 +70,7 @@ RSpec.describe OllamaAgent::Context::Manager do
   describe "env var OLLAMA_AGENT_MAX_TOKENS" do
     it "uses the env var as the default token budget" do
       messages = [sys_msg, user_msg("x " * 500), user_msg("last")]
-      manager  = described_class.new  # no explicit max_tokens
+      described_class.new # no explicit max_tokens
       allow(ENV).to receive(:fetch).and_call_original
       allow(ENV).to receive(:fetch).with("OLLAMA_AGENT_MAX_TOKENS", nil).and_return("100")
       small_manager = described_class.new
@@ -81,7 +81,7 @@ RSpec.describe OllamaAgent::Context::Manager do
 
   describe OllamaAgent::Context::TokenCounter do
     it "estimates tokens as chars / 4" do
-      expect(described_class.estimate("hello")).to eq(1)    # 5 / 4 = 1 (integer division)
+      expect(described_class.estimate("hello")).to eq(1) # 5 / 4 = 1 (integer division)
       expect(described_class.estimate("x" * 400)).to eq(100)
     end
   end

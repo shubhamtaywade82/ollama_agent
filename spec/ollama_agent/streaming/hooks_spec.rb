@@ -50,7 +50,7 @@ RSpec.describe OllamaAgent::Streaming::Hooks do
     end
 
     it "returns true after a handler is registered" do
-      hooks.on(:on_token) { |_| }
+      hooks.on(:on_token) { |_payload| nil }
       expect(hooks.subscribed?(:on_token)).to be true
     end
   end

@@ -8,6 +8,7 @@ require_relative "../../../lib/ollama_agent/session/store"
 
 RSpec.describe OllamaAgent::Session::Store do
   let(:root) { Dir.mktmpdir }
+
   after { FileUtils.remove_entry(root) }
 
   describe ".save and .load" do
@@ -34,8 +35,8 @@ RSpec.describe OllamaAgent::Session::Store do
   describe ".list" do
     it "lists sessions for a root, newest first" do
       described_class.save(session_id: "alpha", root: root, message: { role: "user", content: "x" })
-      sleep 0.01  # ensure different mtime
-      described_class.save(session_id: "beta",  root: root, message: { role: "user", content: "y" })
+      sleep 0.01 # ensure different mtime
+      described_class.save(session_id: "beta", root: root, message: { role: "user", content: "y" })
       list = described_class.list(root: root)
       expect(list.map { |s| s[:session_id] }).to eq(%w[beta alpha])
     end

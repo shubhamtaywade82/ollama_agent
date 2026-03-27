@@ -3,6 +3,7 @@
 module OllamaAgent
   # ANSI styling for TTY output. Respects https://no-color.org/ via NO_COLOR.
   # Assistant replies use tty-markdown when enabled (headings, lists, bold, code blocks).
+  # rubocop:disable Metrics/ModuleLength -- single-responsibility output module; methods are all short
   module Console
     module_function
 
@@ -143,4 +144,5 @@ module OllamaAgent
       dim("[tool←] #{name}: #{preview}")
     end
   end
+  # rubocop:enable Metrics/ModuleLength
 end

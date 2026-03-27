@@ -7,11 +7,12 @@ require_relative "../../../lib/ollama_agent/streaming/hooks"
 RSpec.describe OllamaAgent::Resilience::RetryMiddleware do
   let(:hooks) { OllamaAgent::Streaming::Hooks.new }
 
+  # rubocop:disable RSpec/VerifiedDoubles -- generic test doubles; no real Ollama::Client dependency
   def make_client(responses)
     client = double("client")
-    allow(client).to receive(:chat).and_invoke(*responses.map { |r|
+    allow(client).to receive(:chat).and_invoke(*responses.map do |r|
       r.is_a?(Class) ? ->(**_) { raise r } : ->(**_) { r }
-    })
+    end)
     client
   end
 
@@ -58,4 +59,5 @@ RSpec.describe OllamaAgent::Resilience::RetryMiddleware do
       expect { mw.chat(messages: [], tools: [], model: "m") }.to raise_error(Timeout::Error)
     end
   end
+  # rubocop:enable RSpec/VerifiedDoubles
 end

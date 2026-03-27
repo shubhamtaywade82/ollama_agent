@@ -6,6 +6,7 @@ require_relative "../../../lib/ollama_agent/streaming/console_streamer"
 
 RSpec.describe OllamaAgent::Streaming::ConsoleStreamer do
   subject(:streamer) { described_class.new }
+
   let(:hooks) { OllamaAgent::Streaming::Hooks.new }
 
   it "registers handlers for on_token, on_tool_call, on_tool_result, and on_complete" do

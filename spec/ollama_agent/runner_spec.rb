@@ -5,6 +5,7 @@ require "tmpdir"
 
 RSpec.describe OllamaAgent::Runner do
   let(:tmpdir) { Dir.mktmpdir }
+
   after { FileUtils.remove_entry(tmpdir) }
 
   def stub_client_with(content)
@@ -45,8 +46,8 @@ RSpec.describe OllamaAgent::Runner do
       runner = described_class.build(root: tmpdir)
       # inject a stub client to avoid hitting real Ollama
       agent  = OllamaAgent::Agent.new(
-        client:          stub_client_with("All done."),
-        root:            tmpdir,
+        client: stub_client_with("All done."),
+        root: tmpdir,
         confirm_patches: false
       )
       allow(runner).to receive(:agent).and_return(agent)
@@ -59,7 +60,9 @@ RSpec.describe OllamaAgent::Runner do
     after  { OllamaAgent::Tools.reset! }
 
     it "registers a custom tool accessible via OllamaAgent::Tools" do
-      OllamaAgent::Tools.register(:my_tool, schema: { description: "test", properties: {}, required: [] }) do |_args, root:, read_only:|
+      OllamaAgent::Tools.register(:my_tool,
+                                  schema: { description: "test", properties: {},
+                                            required: [] }) do |_args, root:, read_only:| # rubocop:disable Lint/UnusedBlockArgument
         "custom result"
       end
       expect(OllamaAgent::Tools.custom_tool?("my_tool")).to be true
