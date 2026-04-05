@@ -7,6 +7,10 @@ RSpec.describe OllamaAgent::Streaming::Hooks do
   subject(:hooks) { described_class.new }
 
   describe "#on and #emit" do
+    it "raises ArgumentError with MISSING_BLOCK_MESSAGE when no block given" do
+      expect { hooks.on(:on_token) }.to raise_error(ArgumentError, described_class::MISSING_BLOCK_MESSAGE)
+    end
+
     it "calls a registered handler when the event is emitted" do
       received = []
       hooks.on(:on_token) { |p| received << p[:token] }

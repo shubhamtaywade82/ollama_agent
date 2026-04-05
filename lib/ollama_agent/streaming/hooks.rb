@@ -7,13 +7,15 @@ module OllamaAgent
     class Hooks
       EVENTS = %i[on_token on_chunk on_tool_call on_tool_result on_complete on_error on_retry].freeze
 
+      MISSING_BLOCK_MESSAGE = "Hooks require a block when registering a handler"
+
       def initialize
         @handlers = Hash.new { |h, k| h[k] = [] }
       end
 
       # Register a handler block for a named event.
       def on(event, &block)
-        raise ArgumentError, "a block is required" unless block_given?
+        raise ArgumentError, MISSING_BLOCK_MESSAGE unless block_given?
 
         @handlers[event] << block
       end

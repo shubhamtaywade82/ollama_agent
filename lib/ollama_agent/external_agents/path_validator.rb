@@ -11,9 +11,12 @@ module OllamaAgent
             next if p.to_s.strip.empty?
 
             abs = File.expand_path(p, root)
-            unless within_root?(abs, root)
-              raise ArgumentError, "path outside project root: #{p}"
+            next if within_root?(abs, root)
+
+            if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+              warn "ollama_agent: PathValidator rejected path outside project root (#{p.inspect})"
             end
+            raise ArgumentError, "path outside project root"
           end
         end
 

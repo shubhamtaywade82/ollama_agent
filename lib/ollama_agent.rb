@@ -20,6 +20,8 @@ require_relative "ollama_agent/cli"
 module OllamaAgent
   class Error < StandardError; end
 
+  class ConfigurationError < Error; end
+
   def self.gem_root
     File.expand_path("..", __dir__)
   end

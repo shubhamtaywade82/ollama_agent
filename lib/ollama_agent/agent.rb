@@ -14,97 +14,129 @@ require_relative "resilience/retry_middleware"
 require_relative "resilience/audit_logger"
 require_relative "context/manager"
 require_relative "session/store"
+require_relative "env_config"
+require_relative "agent/agent_config"
+require_relative "agent/client_wiring"
+require_relative "agent/prompt_wiring"
+require_relative "agent/session_wiring"
 
 module OllamaAgent
   # Runs a tool-calling loop against Ollama: read files, search, apply unified diffs.
-  # rubocop:disable Metrics/ClassLength -- Facade for chat loop, tools, and HTTP client wiring
+  # Public entry: {#run}. Other instance methods are internal to the agent loop.
+  # rubocop:disable Metrics/ClassLength -- facade coordinates includes and turn loop
   class Agent
     include SandboxedTools
+    include ClientWiring
+    include PromptWiring
+    include SessionWiring
 
     MAX_TURNS = 64
-    # ollama-client defaults to 30s; multi-turn tool chats often need longer on local hardware.
     DEFAULT_HTTP_TIMEOUT = 120
 
     attr_reader :client, :root, :hooks
 
-    # rubocop:disable Metrics/ParameterLists -- CLI and tests pass explicit dependencies
-    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
-    def initialize(client: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil, think: nil,
+    # @param config [AgentConfig, nil] when set, keyword options are ignored (use {Runner} or build {AgentConfig}).
+    # rubocop:disable Metrics/ParameterLists
+    # rubocop:disable Metrics/MethodLength
+    def initialize(client: nil, config: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil,
+                   think: nil,
                    read_only: false, patch_policy: nil,
                    skill_paths: nil, skills_enabled: nil, skills_include: nil, skills_exclude: nil,
                    external_skills_enabled: nil,
                    orchestrator: false, confirm_delegation: nil,
                    max_retries: nil, audit: nil,
                    session_id: nil, resume: false,
-                   max_tokens: nil, context_summarize: nil)
-      @model = model || default_model
-      @root = File.expand_path(root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
-      @confirm_patches = confirm_patches
-      @read_only = read_only
-      @patch_policy = patch_policy
-      @http_timeout_override = http_timeout
-      @think = think
-      @skill_paths = skill_paths
-      @skills_enabled = skills_enabled
-      @skills_include = skills_include
-      @skills_exclude = skills_exclude
-      @external_skills_enabled = external_skills_enabled
-      @orchestrator = orchestrator
-      @confirm_delegation = confirm_delegation.nil? || confirm_delegation
-      @max_retries      = max_retries
-      @audit            = audit
-      @session_id       = session_id
-      @resume           = resume
-      @max_tokens       = max_tokens
-      @context_summarize = context_summarize
+                   max_tokens: nil, context_summarize: nil,
+                   stdin: $stdin, stdout: $stdout)
+      cfg = config || AgentConfig.new(
+        model: model, root: root, confirm_patches: confirm_patches, http_timeout: http_timeout, think: think,
+        read_only: read_only, patch_policy: patch_policy,
+        skill_paths: skill_paths, skills_enabled: skills_enabled, skills_include: skills_include,
+        skills_exclude: skills_exclude, external_skills_enabled: external_skills_enabled,
+        orchestrator: orchestrator, confirm_delegation: confirm_delegation,
+        max_retries: max_retries, audit: audit, session_id: session_id, resume: resume,
+        max_tokens: max_tokens, context_summarize: context_summarize, stdin: stdin, stdout: stdout
+      )
+      apply_agent_config(cfg)
+      @user_prompt = UserPrompt.new(stdin: cfg.stdin, stdout: cfg.stdout)
       @context_manager = Context::Manager.new(max_tokens: @max_tokens, context_summarize: @context_summarize)
       @hooks = Streaming::Hooks.new
       attach_audit_logger if resolved_audit_enabled
       @client = client || build_default_client
     end
-    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
+    # rubocop:enable Metrics/MethodLength
     # rubocop:enable Metrics/ParameterLists
 
-    # rubocop:disable Metrics/CyclomaticComplexity -- session resume + system-prompt guard branches
     def run(query)
-      prior    = @session_id && @resume ? Session::Store.resume(session_id: @session_id, root: @root) : []
-      messages = prior.empty? ? [{ role: "system", content: system_prompt }] : prior
-      # If resuming a session that didn't save the system prompt (bug in early 0.2.0), prepend it.
-      first = messages.first
-      unless first && (first[:role] == "system" || first["role"] == "system")
-        messages.unshift({ role: "system", content: system_prompt })
-      end
-
-      messages << { role: "user", content: query }
-      Session::Store.save(session_id: @session_id, root: @root, message: messages.last) if @session_id
-
+      messages = build_messages_for_run(query)
       execute_agent_turns(messages)
     end
-    # rubocop:enable Metrics/CyclomaticComplexity
 
     private
 
-    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- turn counter + hooks + context trim + session save
+    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- maps AgentConfig to ivars + resolved max turns
+    def apply_agent_config(cfg)
+      @model = cfg.model || default_model
+      @root = File.expand_path(cfg.root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
+      @confirm_patches = cfg.confirm_patches
+      @read_only = cfg.read_only
+      @patch_policy = cfg.patch_policy
+      @http_timeout_override = cfg.http_timeout
+      @think = cfg.think
+      @skill_paths = cfg.skill_paths
+      @skills_enabled = cfg.skills_enabled
+      @skills_include = cfg.skills_include
+      @skills_exclude = cfg.skills_exclude
+      @external_skills_enabled = cfg.external_skills_enabled
+      @orchestrator = cfg.orchestrator
+      @confirm_delegation = cfg.resolved_confirm_delegation
+      @max_retries = cfg.max_retries
+      @audit = cfg.audit
+      @session_id = cfg.session_id
+      @resume = cfg.resume
+      @max_tokens = cfg.max_tokens
+      @context_summarize = cfg.context_summarize
+      strict = EnvConfig.strict_env?
+      @max_turns = EnvConfig.fetch_int("OLLAMA_AGENT_MAX_TURNS", MAX_TURNS, strict: strict)
+    end
+    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
+
+    # rubocop:disable Metrics/MethodLength -- turn loop with early break
     def execute_agent_turns(messages)
       @current_turn = 0
-      max_turns.times do
+      @max_turns.times do
         @current_turn += 1
-        trimmed    = @context_manager.trim(messages)
-        message    = chat_assistant_message(trimmed)
+        trimmed = trimmed_messages_for_chat(messages)
+        message = chat_assistant_message(trimmed)
         tool_calls = tool_calls_from(message)
-        messages << message.to_h
-        save_message_to_session(message.to_h)
+        persist_assistant_turn(messages, message)
         break if tool_calls.empty?
 
         append_tool_results(messages, tool_calls)
       end
-
-      @hooks.emit(:on_complete, { messages: messages, turns: @current_turn })
-      return unless ENV["OLLAMA_AGENT_DEBUG"] == "1" && @current_turn >= max_turns
-
-      warn "ollama_agent: maximum tool rounds (#{max_turns}) reached"
+      emit_turn_complete(messages)
+      warn_max_turns_if_needed
     end
-    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
+    # rubocop:enable Metrics/MethodLength
+
+    def trimmed_messages_for_chat(messages)
+      @context_manager.trim(messages)
+    end
+
+    def persist_assistant_turn(messages, message)
+      messages << message.to_h
+      save_message_to_session(message.to_h)
+    end
+
+    def emit_turn_complete(messages)
+      @hooks.emit(:on_complete, { messages: messages, turns: @current_turn })
+    end
+
+    def warn_max_turns_if_needed
+      return unless ENV["OLLAMA_AGENT_DEBUG"] == "1" && @current_turn >= @max_turns
+
+      warn "ollama_agent: maximum tool rounds (#{@max_turns}) reached"
+    end
 
     def current_turn
       @current_turn || 0
@@ -115,12 +147,6 @@ module OllamaAgent
       return calls unless calls.empty? && ToolContentParser.enabled?
 
       ToolContentParser.synthetic_calls(message.content)
-    end
-
-    def max_turns
-      Integer(ENV.fetch("OLLAMA_AGENT_MAX_TURNS", MAX_TURNS.to_s))
-    rescue ArgumentError, TypeError
-      MAX_TURNS
     end
 
     def chat_assistant_message(messages)
@@ -152,15 +178,19 @@ module OllamaAgent
     end
 
     def chat_request_args(messages)
-      args = {
+      base_chat_request_args(messages).tap do |args|
+        th = resolve_think
+        args[:think] = th unless th.nil?
+      end
+    end
+
+    def base_chat_request_args(messages)
+      {
         messages: messages,
         tools: OllamaAgent.tools_for(read_only: @read_only, orchestrator: @orchestrator),
         model: @model,
         options: { temperature: 0.2 }
       }
-      th = resolve_think
-      args[:think] = th unless th.nil?
-      args
     end
 
     def announce_assistant_content(message)
@@ -173,141 +203,6 @@ module OllamaAgent
 
     def default_model
       ENV["OLLAMA_AGENT_MODEL"] || Ollama::Config.new.model
-    end
-
-    # rubocop:disable Metrics/MethodLength -- wraps Ollama client with retry; needs 11 lines
-    def build_default_client
-      config = Ollama::Config.new
-      @http_timeout_seconds = resolved_http_timeout_seconds
-      config.timeout = @http_timeout_seconds
-      OllamaConnection.apply_env_to_config(config)
-      ollama_client = Ollama::Client.new(config: config)
-      Resilience::RetryMiddleware.new(
-        client: ollama_client,
-        max_attempts: resolved_max_retries,
-        hooks: @hooks,
-        base_delay: resolved_retry_base_delay
-      )
-    end
-    # rubocop:enable Metrics/MethodLength
-
-    def resolved_max_retries
-      return @max_retries unless @max_retries.nil?
-
-      v = ENV.fetch("OLLAMA_AGENT_MAX_RETRIES", nil)
-      return Resilience::RetryMiddleware::DEFAULT_MAX_ATTEMPTS if v.nil? || v.to_s.strip.empty?
-
-      Integer(v)
-    rescue ArgumentError, TypeError
-      Resilience::RetryMiddleware::DEFAULT_MAX_ATTEMPTS
-    end
-
-    def resolved_retry_base_delay
-      v = ENV.fetch("OLLAMA_AGENT_RETRY_BASE_DELAY", nil)
-      return Resilience::RetryMiddleware::DEFAULT_BASE_DELAY if v.nil? || v.to_s.strip.empty?
-
-      Float(v)
-    rescue ArgumentError, TypeError
-      Resilience::RetryMiddleware::DEFAULT_BASE_DELAY
-    end
-
-    def resolved_audit_enabled
-      return @audit unless @audit.nil?
-
-      ENV.fetch("OLLAMA_AGENT_AUDIT", "0") == "1"
-    end
-
-    def audit_log_dir
-      custom = ENV.fetch("OLLAMA_AGENT_AUDIT_LOG_PATH", nil)
-      return custom if custom && !custom.to_s.strip.empty?
-
-      File.join(@root, ".ollama_agent", "logs")
-    end
-
-    def attach_audit_logger
-      Resilience::AuditLogger.new(log_dir: audit_log_dir, hooks: @hooks).attach
-    end
-
-    def resolved_http_timeout_seconds
-      parsed = TimeoutParam.parse_positive(@http_timeout_override)
-      return parsed if parsed
-
-      parsed = TimeoutParam.parse_positive(ENV.fetch("OLLAMA_AGENT_TIMEOUT", nil))
-      return parsed if parsed
-
-      DEFAULT_HTTP_TIMEOUT
-    end
-
-    # rubocop:disable Metrics/MethodLength -- compose + optional orchestrator addon
-    def system_prompt
-      base = @read_only ? AgentPrompt.self_review_text : AgentPrompt.text
-      composed = PromptSkills.compose(
-        base: base,
-        skills_enabled: resolved_skills_enabled,
-        skills_include: resolved_skills_include,
-        skills_exclude: resolved_skills_exclude,
-        skill_paths: resolved_skill_paths,
-        external_skills_enabled: resolved_external_skills_enabled
-      )
-      return composed unless @orchestrator
-
-      [composed, AgentPrompt.orchestrator_addon].join("\n\n---\n\n")
-    end
-    # rubocop:enable Metrics/MethodLength
-
-    def resolved_skills_enabled
-      return @skills_enabled unless @skills_enabled.nil?
-
-      PromptSkills.env_truthy("OLLAMA_AGENT_SKILLS", default: true)
-    end
-
-    def resolved_skills_include
-      return @skills_include unless @skills_include.nil?
-
-      PromptSkills.parse_id_list(ENV.fetch("OLLAMA_AGENT_SKILLS_INCLUDE", nil))
-    end
-
-    def resolved_skills_exclude
-      return @skills_exclude unless @skills_exclude.nil?
-
-      PromptSkills.parse_id_list(ENV.fetch("OLLAMA_AGENT_SKILLS_EXCLUDE", nil))
-    end
-
-    def resolved_skill_paths
-      @skill_paths
-    end
-
-    def resolved_external_skills_enabled
-      return @external_skills_enabled unless @external_skills_enabled.nil?
-
-      PromptSkills.env_truthy("OLLAMA_AGENT_EXTERNAL_SKILLS", default: true)
-    end
-
-    def append_tool_results(messages, tool_calls)
-      tool_calls.each do |tool_call|
-        @hooks.emit(:on_tool_call, { name: tool_call.name, args: tool_call.arguments || {}, turn: current_turn })
-        result = execute_tool(tool_call.name, tool_call.arguments || {})
-        @hooks.emit(:on_tool_result, { name: tool_call.name, result: result.to_s, turn: current_turn })
-        messages << tool_message(tool_call, result)
-        save_message_to_session(messages.last)
-      end
-    end
-
-    def save_message_to_session(msg)
-      return unless @session_id
-
-      Session::Store.save(session_id: @session_id, root: @root, message: msg)
-    end
-
-    def tool_message(tool_call, result)
-      msg = {
-        role: "tool",
-        name: tool_call.name,
-        content: result.to_s
-      }
-      id = tool_call.id
-      msg[:tool_call_id] = id if id && !id.to_s.empty?
-      msg
     end
   end
   # rubocop:enable Metrics/ClassLength

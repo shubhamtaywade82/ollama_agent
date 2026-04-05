@@ -143,6 +143,21 @@ RSpec.describe OllamaAgent::Agent do
       ENV.delete("OLLAMA_BASE_URL")
       ENV.delete("OLLAMA_API_KEY")
     end
+
+    it "warns on stderr when OLLAMA_AGENT_TIMEOUT is invalid and OLLAMA_AGENT_DEBUG is on" do
+      ENV["OLLAMA_AGENT_TIMEOUT"] = "not-a-number"
+      ENV["OLLAMA_AGENT_DEBUG"] = "1"
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:chat)
+      agent = described_class.new(client: client, root: root, confirm_patches: false)
+      expect do
+        agent.send(:resolved_http_timeout_seconds)
+      end.to output(/OLLAMA_AGENT_TIMEOUT/).to_stderr
+      expect(agent.send(:resolved_http_timeout_seconds)).to eq(120)
+    ensure
+      ENV.delete("OLLAMA_AGENT_TIMEOUT")
+      ENV.delete("OLLAMA_AGENT_DEBUG")
+    end
   end
 
   describe "system_prompt" do
@@ -244,6 +259,20 @@ RSpec.describe OllamaAgent::Agent do
     end
   end
 
+  describe "OLLAMA_AGENT_STRICT_ENV" do
+    it "raises ConfigurationError when OLLAMA_AGENT_MAX_TURNS is invalid" do
+      ENV["OLLAMA_AGENT_STRICT_ENV"] = "1"
+      ENV["OLLAMA_AGENT_MAX_TURNS"] = "not-int"
+      client = instance_double(Ollama::Client)
+      expect do
+        described_class.new(client: client, root: root)
+      end.to raise_error(OllamaAgent::ConfigurationError, /OLLAMA_AGENT_MAX_TURNS/)
+    ensure
+      ENV.delete("OLLAMA_AGENT_STRICT_ENV")
+      ENV.delete("OLLAMA_AGENT_MAX_TURNS")
+    end
+  end
+
   describe "streaming hooks" do
     it "exposes a Hooks instance" do
       client = instance_double(Ollama::Client)
@@ -280,6 +309,14 @@ RSpec.describe OllamaAgent::Agent do
       agent.run("read f")
       expect(tool_calls).to   eq(["read_file"])
       expect(tool_results).to eq(["read_file"])
+    end
+
+    it "calls chat without hooks when on_token is not subscribed" do
+      response = Ollama::Response.new("message" => { "role" => "assistant", "content" => "ok" })
+      client = instance_spy(Ollama::Client, chat: response)
+      agent = described_class.new(client: client, root: root, confirm_patches: false)
+      agent.run("question")
+      expect(client).to have_received(:chat).with(hash_not_including(:hooks)).once
     end
 
     it "uses streaming path when on_token subscriber is registered" do

@@ -76,6 +76,25 @@ RSpec.describe OllamaAgent::ToolRuntime::Loop do
     expect(finish.calls).to eq(1)
   end
 
+  it "accepts plan_extractor as an alias for planner" do
+    finish = finish_class.new
+    registry = OllamaAgent::ToolRuntime::Registry.new([finish])
+    extractor = fake_planner_class.new([{ "tool" => "finish", "args" => {} }])
+    memory = OllamaAgent::ToolRuntime::Memory.new
+    executor = OllamaAgent::ToolRuntime::Executor.new
+
+    loop_runner = described_class.new(
+      plan_extractor: extractor,
+      registry: registry,
+      executor: executor,
+      memory: memory,
+      max_steps: 5
+    )
+    expect(loop_runner.plan_extractor).to eq(extractor)
+    expect(loop_runner.planner).to eq(extractor)
+    expect(loop_runner.run(context: "c")).to eq({ "status" => "done" })
+  end
+
   it "raises MaxStepsExceeded when the loop never terminates" do
     registry = OllamaAgent::ToolRuntime::Registry.new([noop_class.new])
     planner = fake_planner_class.new(Array.new(15) { { "tool" => "noop", "args" => {} } })

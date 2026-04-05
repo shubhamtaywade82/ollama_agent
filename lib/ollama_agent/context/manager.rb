@@ -19,28 +19,25 @@ module OllamaAgent
       # Returns a (possibly shorter) copy of messages that fits within the token budget.
       def trim(messages)
         normalized = messages.map { |m| m.transform_keys(&:to_sym) }
-        return normalized unless over_budget?(normalized)
+        estimates = normalized.map { |m| TokenCounter.estimate(m[:content].to_s) }
+        return normalized unless over_budget_sum?(estimates)
 
         trimmed = normalized.dup
-        # We want to keep the system message and the very last user message.
-        # Everything else is fair game for the sliding window.
+        est = estimates.dup
         last_user_idx = trimmed.rindex { |m| m[:role] == "user" }
-
-        # Optional: collect dropped messages for summarization
         dropped = [] if @context_summarize
 
-        while over_budget?(trimmed)
+        while over_budget_sum?(est)
           drop_idx = find_droppable_index(trimmed, last_user_idx)
           break if drop_idx.nil?
 
           msgs = if assistant_with_tool_calls?(trimmed[drop_idx])
-                   drop_assistant_and_tool_results(trimmed, drop_idx)
+                   drop_assistant_and_tool_results(trimmed, est, drop_idx)
                  else
+                   est.delete_at(drop_idx)
                    [trimmed.delete_at(drop_idx)]
                  end
           dropped&.concat(msgs)
-
-          # Re-find last user index as it might have shifted
           last_user_idx = trimmed.rindex { |m| m[:role] == "user" }
         end
 
@@ -52,20 +49,13 @@ module OllamaAgent
       private
 
       def inject_summary(messages, dropped)
-        # In a real implementation, we would call the model to summarize.
-        # For now, we add a system message noting that history was trimmed.
-        # (The spec implies calling the model, but Agent doesn't pass the client here yet).
         n = dropped.size
         summary = "Note: Earlier conversation history was trimmed to fit token budget (#{n} messages dropped)."
         messages.insert(1, { role: "system", content: summary })
       end
 
-      def over_budget?(messages)
-        total_tokens(messages) > (@max_tokens * TRIM_THRESHOLD).to_i
-      end
-
-      def total_tokens(messages)
-        messages.sum { |m| TokenCounter.estimate(m[:content].to_s) }
+      def over_budget_sum?(estimates)
+        estimates.sum > (@max_tokens * TRIM_THRESHOLD).to_i
       end
 
       def find_droppable_index(messages, last_user_idx)
@@ -78,9 +68,8 @@ module OllamaAgent
         message[:role] == "assistant" && message[:tool_calls] && !message[:tool_calls].empty?
       end
 
-      def drop_assistant_and_tool_results(messages, assistant_idx)
-        # Find all following 'tool' messages that correspond to this assistant's calls.
-        # In a standard multi-turn loop, tool results immediately follow the assistant message.
+      # rubocop:disable Metrics/MethodLength -- drop contiguous tool rows and parallel token estimates
+      def drop_assistant_and_tool_results(messages, estimates, assistant_idx)
         indices_to_drop = [assistant_idx]
         ((assistant_idx + 1)...messages.size).each do |i|
           break if messages[i][:role] != "tool"
@@ -88,14 +77,15 @@ module OllamaAgent
           indices_to_drop << i
         end
 
-        # Return the actual messages for summarization or logging
         dropped_messages = indices_to_drop.map { |i| messages[i] }
-
-        # Delete from highest index to lowest to maintain index stability during deletion
-        indices_to_drop.sort.reverse_each { |i| messages.delete_at(i) }
+        indices_to_drop.sort.reverse_each do |i|
+          messages.delete_at(i)
+          estimates.delete_at(i)
+        end
 
         dropped_messages
       end
+      # rubocop:enable Metrics/MethodLength
 
       def env_max_tokens
         v = ENV.fetch("OLLAMA_AGENT_MAX_TOKENS", nil)

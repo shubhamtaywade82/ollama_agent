@@ -2,11 +2,14 @@
 
 require "json"
 require "ollama_client"
+require_relative "plan_extractor"
 
 module OllamaAgent
   module ToolRuntime
     # Asks an Ollama chat model for the next tool call as a single JSON object.
     class OllamaJsonPlanner
+      include PlanExtractor
+
       # @param model [String, nil] when nil or blank, uses {OllamaAgent::Agent} rules:
       #   `ENV["OLLAMA_AGENT_MODEL"]` if set, else `Ollama::Config.new.model`
       def initialize(client:, model: nil, chat_options: nil)

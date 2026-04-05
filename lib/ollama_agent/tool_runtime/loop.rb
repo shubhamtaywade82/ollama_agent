@@ -5,11 +5,15 @@ module OllamaAgent
     # Think → resolve tool → execute → observe (memory); stops when a tool returns `status: "done"` or max_steps.
     # {#run} returns the last tool result (the object returned from {Executor#execute} on the final step).
     class Loop
-      attr_reader :max_steps
+      attr_reader :max_steps, :plan_extractor
+
+      alias planner plan_extractor
 
       # rubocop:disable Metrics/ParameterLists -- runtime wiring matches plan (planner, registry, executor, memory, logger)
-      def initialize(planner:, registry:, executor:, memory:, logger: nil, max_steps: 10)
-        @planner = planner
+      def initialize(registry:, executor:, memory:, logger: nil, max_steps: 10, plan_extractor: nil, planner: nil)
+        @plan_extractor = plan_extractor || planner
+        raise ArgumentError, "plan_extractor or planner is required" if @plan_extractor.nil?
+
         @registry = registry
         @executor = executor
         @memory = memory
@@ -36,7 +40,7 @@ module OllamaAgent
       private
 
       def plan_and_execute(context)
-        thought = @planner.next_step(context: context, memory: @memory, registry: @registry)
+        thought = @plan_extractor.next_step(context: context, memory: @memory, registry: @registry)
         action = @registry.resolve(thought)
         raise InvalidPlanError, "invalid tool plan: #{thought.inspect}" unless action
 

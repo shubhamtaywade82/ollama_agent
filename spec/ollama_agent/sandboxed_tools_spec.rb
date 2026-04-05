@@ -4,6 +4,8 @@ require "spec_helper"
 require "open3"
 
 RSpec.describe "OllamaAgent::SandboxedTools" do
+  before { OllamaAgent::SearchBackend.clear_cache! }
+
   def patch_supports_dry_run?
     out, = Open3.capture2e("patch", "--help")
     out.include?("dry-run")
@@ -135,6 +137,54 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       expect(out).to include("file too large").and include("10").and include("start_line")
     ensure
       ENV.delete("OLLAMA_AGENT_MAX_READ_FILE_BYTES")
+      FileUtils.remove_entry(tmpdir)
+    end
+
+    it "allows a full read when file size equals the byte limit exactly" do
+      tmpdir = Dir.mktmpdir
+      ENV["OLLAMA_AGENT_MAX_READ_FILE_BYTES"] = "10"
+      File.write(File.join(tmpdir, "edge.txt"), "x" * 10)
+      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      expect(agent.send(:read_file, "edge.txt")).to eq("x" * 10)
+    ensure
+      ENV.delete("OLLAMA_AGENT_MAX_READ_FILE_BYTES")
+      FileUtils.remove_entry(tmpdir)
+    end
+
+    it "rejects a full read when file is one byte over the limit" do
+      tmpdir = Dir.mktmpdir
+      ENV["OLLAMA_AGENT_MAX_READ_FILE_BYTES"] = "10"
+      File.write(File.join(tmpdir, "over.txt"), "x" * 11)
+      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      expect(agent.send(:read_file, "over.txt")).to include("file too large")
+    ensure
+      ENV.delete("OLLAMA_AGENT_MAX_READ_FILE_BYTES")
+      FileUtils.remove_entry(tmpdir)
+    end
+
+    it "rejects read via symlink escape", unless: Gem.win_platform? do
+      tmpdir = Dir.mktmpdir
+      outside = Dir.mktmpdir
+      File.write(File.join(outside, "secret.txt"), "nope")
+      File.symlink(outside, File.join(tmpdir, "bad"))
+      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      expect(agent.send(:read_file, "bad/secret.txt")).to include("project root")
+    ensure
+      FileUtils.remove_entry(tmpdir)
+      FileUtils.remove_entry(outside)
+    end
+  end
+
+  describe "search_code directory default" do
+    it "treats empty string directory like the project root" do
+      tmpdir = Dir.mktmpdir
+      File.write(File.join(tmpdir, "f.rb"), "needle\n")
+      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      allow(agent).to receive_messages(rg_available?: true, grep_available?: false)
+      allow(agent).to receive(:search_with_ripgrep).and_return("f.rb:1:needle")
+      agent.send(:execute_tool, "search_code", { "pattern" => "needle", "directory" => "" })
+      expect(agent).to have_received(:search_with_ripgrep).with("needle", ".")
+    ensure
       FileUtils.remove_entry(tmpdir)
     end
   end

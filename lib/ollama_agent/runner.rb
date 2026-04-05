@@ -37,6 +37,8 @@ module OllamaAgent
     # @param orchestrator [Boolean] enable external agent delegation
     # @param think [String, nil] thinking mode (true/false/high/medium/low)
     # @param http_timeout [Integer, nil] HTTP timeout in seconds
+    # @param stdin [IO] input for patch/write/delegate confirmations (default +$stdin+)
+    # @param stdout [IO] output for confirmation prompts (default +$stdout+)
     # @return [Runner]
     # rubocop:disable Metrics/ParameterLists -- library facade must expose all Agent options
     def self.build(
@@ -55,7 +57,9 @@ module OllamaAgent
       confirm_patches: true,
       orchestrator:    false,
       think:           nil,
-      http_timeout:    nil
+      http_timeout:    nil,
+      stdin:           $stdin,
+      stdout:          $stdout
     )
       new(
         root: root, model: model, stream: stream,
@@ -64,7 +68,8 @@ module OllamaAgent
         max_retries: max_retries, audit: audit, read_only: read_only,
         skills_enabled: skills_enabled, skill_paths: skill_paths,
         confirm_patches: confirm_patches, orchestrator: orchestrator,
-        think: think, http_timeout: http_timeout
+        think: think, http_timeout: http_timeout,
+        stdin: stdin, stdout: stdout
       )
     end
     # rubocop:enable Metrics/ParameterLists
@@ -86,10 +91,11 @@ module OllamaAgent
     def initialize(root:, model:, stream:, session_id:, resume:,
                    max_tokens:, context_summarize:,
                    max_retries:, audit:, read_only:, skills_enabled:, skill_paths:,
-                   confirm_patches:, orchestrator:, think:, http_timeout:)
+                   confirm_patches:, orchestrator:, think:, http_timeout:,
+                   stdin:, stdout:)
       @session_id = session_id
 
-      @agent = Agent.new(
+      config = Agent::AgentConfig.new(
         root: root,
         model: model,
         confirm_patches: confirm_patches,
@@ -104,8 +110,11 @@ module OllamaAgent
         max_retries: max_retries,
         audit: audit,
         max_tokens: max_tokens,
-        context_summarize: context_summarize
+        context_summarize: context_summarize,
+        stdin: stdin,
+        stdout: stdout
       )
+      @agent = Agent.new(config: config)
 
       Streaming::ConsoleStreamer.new.attach(@agent.hooks) if stream
     end

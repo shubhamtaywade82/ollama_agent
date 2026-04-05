@@ -4,6 +4,7 @@ require "pathname"
 
 module OllamaAgent
   # Validates unified diffs: hunk headers and path alignment with edit_file (applyability is patch --dry-run).
+  # rubocop:disable Metrics/ClassLength -- normalization helpers live alongside validation
   class DiffPathValidator
     # Legacy context-diff hunks (`--- N,M ----`) are not unified diffs; models sometimes emit them by mistake.
     CONTEXT_DIFF_HUNK = /^\s*---\s+\d+\s*,\s*\d+\s*----\s*$/m
@@ -14,16 +15,36 @@ module OllamaAgent
 
     # Normalizes newlines and escaped "\\n" sequences models sometimes send in tool args.
     def self.normalize_diff(diff)
-      d = diff.to_s
-      d = d.gsub("\r\n", "\n").gsub("\r", "\n")
-      d = d.gsub("\\\\n", "\n").gsub("\\n", "\n") if d.include?("\\n") && !d.include?("\n")
+      d = normalize_newlines(diff.to_s)
+      d = expand_escaped_newlines_when_no_real_newlines(d)
       d = strip_cursor_patch_markers(d)
-      # Strip trailing commas on ---/+++ lines (models copy commas from bad examples).
-      d = d.gsub(/^((?:---|\+\+\+)[^\n]+),\s*$/m, "\\1")
-      # Split "--- a/foo @@ -1,3" when glued on one line (common LLM mistake).
-      d = d.gsub(/(\S)\s(@@ -\d[^\n]*)/, "\\1\n\\2")
-      d += "\n" unless d.empty? || d.end_with?("\n")
-      d
+      d = strip_trailing_commas_on_headers(d)
+      d = split_glued_hunk_headers(d)
+      ensure_trailing_newline(d)
+    end
+
+    def self.normalize_newlines(diff)
+      diff.gsub("\r\n", "\n").gsub("\r", "\n")
+    end
+
+    def self.expand_escaped_newlines_when_no_real_newlines(diff)
+      return diff unless diff.include?("\\n") && !diff.include?("\n")
+
+      diff.gsub("\\\\n", "\n").gsub("\\n", "\n")
+    end
+
+    def self.strip_trailing_commas_on_headers(diff)
+      diff.gsub(/^((?:---|\+\+\+)[^\n]+),\s*$/m, "\\1")
+    end
+
+    def self.split_glued_hunk_headers(diff)
+      diff.gsub(/(\S)\s(@@ -\d[^\n]*)/, "\\1\n\\2")
+    end
+
+    def self.ensure_trailing_newline(diff)
+      return diff if diff.empty? || diff.end_with?("\n")
+
+      "#{diff}\n"
     end
 
     def self.strip_cursor_patch_markers(diff)
@@ -138,4 +159,5 @@ module OllamaAgent
       Pathname(path).cleanpath.to_s
     end
   end
+  # rubocop:enable Metrics/ClassLength
 end

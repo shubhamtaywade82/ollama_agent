@@ -37,7 +37,8 @@ module OllamaAgent
         Re-read the file with read_file, then rebuild the diff using exact lines from that file (not placeholders).
         The @@ hunk line counts must match the hunk body the way git diff would emit them.
       MSG
-      hint.empty? ? msg : "#{msg}\n#{hint}"
+      body = hint.empty? ? msg : "#{msg}\n#{hint}"
+      body.end_with?("\n") ? body : "#{body}\n"
     end
 
     def patch_stderr_hint(detail)

@@ -118,6 +118,7 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_AGENT_MODEL` | Model name (overrides default from ollama-client) |
 | `OLLAMA_AGENT_ROOT` | Project root for tools (`list_files`, `read_file`, etc.). Defaults to **current working directory** when unset (CLI never falls back to the gem install path). |
 | `OLLAMA_AGENT_DEBUG` | Set to `1` to print validation diagnostics on stderr |
+| `OLLAMA_AGENT_STRICT_ENV` | Set to `1` so invalid numeric env values (e.g. `OLLAMA_AGENT_MAX_TURNS`) raise `ConfigurationError` instead of falling back to defaults |
 | `OLLAMA_AGENT_MAX_TURNS` | Max chat rounds with tool calls (default: 64) |
 | `OLLAMA_AGENT_TIMEOUT` | HTTP read/open timeout in seconds for Ollama requests (default **120**; use `ask --timeout` / `-t` to override per run) |
 | `OLLAMA_AGENT_PARSE_TOOL_JSON` | Set to `1` to run tools parsed from JSON lines in assistant text (fallback when the model does not emit native tool calls) |
@@ -133,6 +134,8 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_AGENT_RUBY_INDEX_MAX_LINES` | Max result lines for `search_code` class/module/method modes (default **200**) |
 | `OLLAMA_AGENT_RUBY_INDEX_MAX_CHARS` | Max characters of index output per search (default **60000**) |
 | `OLLAMA_AGENT_MAX_READ_FILE_BYTES` | Max bytes for a **full** `read_file` (no line range); larger files return an error (default **2097152**, 2 MiB). Line-range reads stream and are not limited by this cap. |
+| `OLLAMA_AGENT_RG_PATH` | Absolute path to `rg` for `search_code` text mode (optional; otherwise resolved via `command -v rg`) |
+| `OLLAMA_AGENT_GREP_PATH` | Absolute path to `grep` fallback (optional; otherwise `command -v grep`) |
 | `OLLAMA_AGENT_INDEX_REBUILD` | The Prism index is rebuilt when this env value **changes** (e.g. unset → `1`); it is **not** rebuilt on every tool call while it stays `1`. |
 | `OLLAMA_AGENT_SKILLS` | `1`/`on`/`0`/`off` — include **bundled** prompt skills (default **on**). Same as `--no-skills` on the CLI when off. |
 | `OLLAMA_AGENT_SKILLS_INCLUDE` | Comma-separated **manifest ids** to load (omit = all bundled). Example: `ruby_style,rubocop,code_review`. |
@@ -169,7 +172,7 @@ Use the **`orchestrate`** command (or **`OLLAMA_AGENT_ORCHESTRATOR=1`** with **`
 
 Most of this README is **CLI-first** (commands and environment variables above). The same capabilities exist as **Ruby APIs**—the [Features](#features) list (file tools, `self_review` / `improve`, orchestrator, skills, etc.) is implemented under `lib/ollama_agent/`. For a **layer diagram** (agent → tools → hooks → session), see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**Coding agent — `Runner` (facade)** — Stable entry for apps: `OllamaAgent::Runner.build(root:, model:, stream:, session_id:, resume:, read_only:, orchestrator:, skills_enabled:, skill_paths:, audit:, max_tokens:, context_summarize:, ...)` then `#run(query)`. Exposes `#hooks` (`Streaming::Hooks`) for `:on_token`, `:on_tool_call`, `:on_tool_result`, `:on_complete`. Full keyword list: [`lib/ollama_agent/runner.rb`](lib/ollama_agent/runner.rb).
+**Coding agent — `Runner` (facade)** — Stable entry for apps: `OllamaAgent::Runner.build(root:, model:, stream:, session_id:, resume:, read_only:, orchestrator:, skills_enabled:, skill_paths:, audit:, max_tokens:, context_summarize:, stdin:, stdout:, ...)` then `#run(query)`. Optional **`stdin`** / **`stdout`** (default TTY) feed patch/write/delegate confirmations—use `StringIO` in tests or automation to avoid blocking on `$stdin.gets`. Exposes `#hooks` (`Streaming::Hooks`) for `:on_token`, `:on_tool_call`, `:on_tool_result`, `:on_complete`. Full keyword list: [`lib/ollama_agent/runner.rb`](lib/ollama_agent/runner.rb).
 
 **Coding agent — `Agent` (direct)** — `OllamaAgent::Agent.new(client:, root:, ...)` when you inject an `Ollama::Client` (or test double), tweak options the CLI does not expose, or skip `Runner`.
 

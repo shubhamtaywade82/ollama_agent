@@ -16,6 +16,12 @@ RSpec.describe OllamaAgent::Resilience::RetryMiddleware do
     client
   end
 
+  def build_http_400_error
+    skip "Ollama::HTTPError not defined" unless defined?(Ollama::HTTPError)
+
+    Ollama::HTTPError.new("HTTP 400: bad request")
+  end
+
   describe "#chat" do
     it "passes through when the first call succeeds" do
       response = double("response")
@@ -41,6 +47,15 @@ RSpec.describe OllamaAgent::Resilience::RetryMiddleware do
       client = make_client([ArgumentError])
       mw     = described_class.new(client: client, max_attempts: 3, hooks: hooks, base_delay: 0)
       expect { mw.chat(messages: [], tools: [], model: "m") }.to raise_error(ArgumentError)
+    end
+
+    it "does not retry Ollama::HTTPError with status 400" do
+      err = build_http_400_error
+      client = instance_spy(Ollama::Client)
+      allow(client).to receive(:chat).and_raise(err)
+      mw = described_class.new(client: client, max_attempts: 3, hooks: hooks, base_delay: 0)
+      expect { mw.chat(messages: [], tools: [], model: "m") }.to raise_error(err.class, /HTTP 400/)
+      expect(client).to have_received(:chat).once
     end
 
     it "emits on_retry hook on each retry attempt" do
@@ -70,7 +85,9 @@ RSpec.describe OllamaAgent::Resilience::RetryMiddleware do
 
     it "retries on Ollama::Error if defined" do
       # Mock Ollama::Error if not present
+      # rubocop:disable RSpec/LeakyConstantDeclaration -- minimal stand-in when gem omits the class
       module Ollama; class Error < StandardError; end; end unless defined?(Ollama::Error)
+      # rubocop:enable RSpec/LeakyConstantDeclaration
       response = double("response")
       client   = make_client([Ollama::Error, response])
       mw       = described_class.new(client: client, max_attempts: 3, hooks: hooks, base_delay: 0)
