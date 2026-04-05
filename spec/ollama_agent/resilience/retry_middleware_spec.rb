@@ -58,6 +58,24 @@ RSpec.describe OllamaAgent::Resilience::RetryMiddleware do
       mw     = described_class.new(client: client, max_attempts: 1, hooks: hooks, base_delay: 0)
       expect { mw.chat(messages: [], tools: [], model: "m") }.to raise_error(Timeout::Error)
     end
+
+    it "retries on SocketError if defined" do
+      # Mock SocketError if not present
+      stub_const("SocketError", Class.new(StandardError)) unless defined?(SocketError)
+      response = double("response")
+      client   = make_client([SocketError, response])
+      mw       = described_class.new(client: client, max_attempts: 3, hooks: hooks, base_delay: 0)
+      expect(mw.chat(messages: [], tools: [], model: "m")).to eq(response)
+    end
+
+    it "retries on Ollama::Error if defined" do
+      # Mock Ollama::Error if not present
+      module Ollama; class Error < StandardError; end; end unless defined?(Ollama::Error)
+      response = double("response")
+      client   = make_client([Ollama::Error, response])
+      mw       = described_class.new(client: client, max_attempts: 3, hooks: hooks, base_delay: 0)
+      expect(mw.chat(messages: [], tools: [], model: "m")).to eq(response)
+    end
   end
   # rubocop:enable RSpec/VerifiedDoubles
 end
