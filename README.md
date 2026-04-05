@@ -17,6 +17,7 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
   - **`automated`** (alias `3`, `sandbox`) — temp copy, agent edits, **`bundle exec rspec`** in the sandbox, optional **`--apply`** to merge into your checkout.
 - **`improve`** — same as **`self_review --mode automated`** (you can pass **`--mode automated`** explicitly; other modes belong on **`self_review`**).
 - **`orchestrate`** / **`OLLAMA_AGENT_ORCHESTRATOR=1`** — optional **orchestrator** tools to probe and delegate to other local CLI agents (see [Orchestrator](#orchestrator-external-cli-agents)); **`agents`** lists availability.
+- **Ruby API** — embed **`Runner`**, **`Agent`**, custom tools, hooks, sessions, and (optionally) **`ToolRuntime`**; see [Library usage (Ruby)](#library-usage-ruby).
 
 ## Requirements
 
@@ -163,6 +164,64 @@ Use the **`orchestrate`** command (or **`OLLAMA_AGENT_ORCHESTRATOR=1`** with **`
 - Delegation audit logs: set **`OLLAMA_AGENT_DELEGATE_LOG=1`** (or `OLLAMA_AGENT_DEBUG=1`) to emit a structured stderr line with agent id, argv, env keys (names only), exit code, and duration.
 - Adjust **`argv` / `version_argv`** in YAML to match your real CLI (vendor flags differ). If a tool has no stable non-interactive mode, do not expose it in the registry.
 - Tool contract version: **`OllamaAgent::ORCHESTRATOR_TOOLS_SCHEMA_VERSION`**.
+
+### Library usage (Ruby)
+
+Most of this README is **CLI-first** (commands and environment variables above). The same capabilities exist as **Ruby APIs**—the [Features](#features) list (file tools, `self_review` / `improve`, orchestrator, skills, etc.) is implemented under `lib/ollama_agent/`. For a **layer diagram** (agent → tools → hooks → session), see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+**Coding agent — `Runner` (facade)** — Stable entry for apps: `OllamaAgent::Runner.build(root:, model:, stream:, session_id:, resume:, read_only:, orchestrator:, skills_enabled:, skill_paths:, audit:, max_tokens:, context_summarize:, ...)` then `#run(query)`. Exposes `#hooks` (`Streaming::Hooks`) for `:on_token`, `:on_tool_call`, `:on_tool_result`, `:on_complete`. Full keyword list: [`lib/ollama_agent/runner.rb`](lib/ollama_agent/runner.rb).
+
+**Coding agent — `Agent` (direct)** — `OllamaAgent::Agent.new(client:, root:, ...)` when you inject an `Ollama::Client` (or test double), tweak options the CLI does not expose, or skip `Runner`.
+
+**Custom tools (coding agent)** — `OllamaAgent::Tools.register("tool_name", schema: { ... }) { |args, root:, read_only:| ... }` merges extra function definitions into the chat tool list; handlers run in the same sandbox as built-in tools.
+
+**Resilience and observability** — Default client path uses `Resilience::RetryMiddleware`. Structured step logging: enable **`audit: true`** on `Runner.build` or **`OLLAMA_AGENT_AUDIT=1`** (see Environment table). Context trimming: **`max_tokens`** / **`context_summarize`** on `Runner.build`.
+
+**Sessions** — Pass **`session_id`** and optional **`resume: true`** on `Runner.build` to persist messages under `.ollama_agent/sessions/` (`Session::Store`).
+
+**Self-improvement (sandbox)** — CLI commands **`improve`** / **`self_review --mode automated`** wrap `OllamaAgent::SelfImprovement` (sandbox copy, tests, optional merge). Use the CLI for the full flow; the module is available for advanced integration.
+
+**`ToolRuntime` (alternate loop, optional)** — Not used by the CLI. For **non–file-edit** agents (e.g. another gem that defines its own tools), a small **JSON plan** loop: the model returns one object per step `{"tool":"name","args":{...}}`, `ToolRuntime::Registry` resolves it, `Executor` runs your `Tool` subclasses, `Memory` holds short-term history. Use a **swappable planner** (anything implementing `next_step(context:, memory:, registry:)`) such as `OllamaJsonPlanner` (`Ollama::Client#chat` + JSON extraction). **Step-by-step guide:** [docs/TOOL_RUNTIME.md](docs/TOOL_RUNTIME.md).
+
+- **Termination:** a tool may return `{ "status" => "done" }` to stop. Unknown tool names → `OllamaAgent::ToolRuntime::InvalidPlanError`; too many steps → `MaxStepsExceeded`. **`Loop#run`** returns the **last tool result** (same value as the final `Executor#execute` return).
+- **Runnable examples:** `spec/ollama_agent/tool_runtime/`.
+
+**Model and server:** `OllamaJsonPlanner` uses the same default as the coding agent: `OLLAMA_AGENT_MODEL` if set, otherwise `Ollama::Config.new.model` (from ollama-client). The model must exist on whatever host you use. **Use the same client setup as the CLI:** `OllamaAgent::OllamaConnection.apply_env_to_config` copies `OLLAMA_BASE_URL` and `OLLAMA_API_KEY` into `Ollama::Config`. If you only run `Ollama::Client.new(config: Ollama::Config.new)` in `irb`, you stay on **localhost** while `OLLAMA_AGENT_MODEL` may still name a **cloud** model from the README cloud example → **404**. Either apply `apply_env_to_config` (below) or unset the cloud model / pass `model: "llama3.2"`.
+
+```ruby
+require "ollama_agent"
+require "ollama_client"
+
+class EchoTool < OllamaAgent::ToolRuntime::Tool
+  def name = "echo"
+
+  def description = "Echo args"
+
+  def schema = { "type" => "object", "properties" => { "msg" => { "type" => "string" } } }
+
+  def call(args)
+    return { "status" => "done", "echo" => args["msg"] } if args["msg"] == "bye"
+
+    { "status" => "ok", "echo" => args["msg"] }
+  end
+end
+
+registry = OllamaAgent::ToolRuntime::Registry.new([EchoTool.new])
+memory = OllamaAgent::ToolRuntime::Memory.new
+config = Ollama::Config.new
+OllamaAgent::OllamaConnection.apply_env_to_config(config)
+client = Ollama::Client.new(config: config)
+planner = OllamaAgent::ToolRuntime::OllamaJsonPlanner.new(client: client)
+
+last = OllamaAgent::ToolRuntime::Loop.new(
+  planner: planner,
+  registry: registry,
+  executor: OllamaAgent::ToolRuntime::Executor.new,
+  memory: memory,
+  max_steps: 10
+).run(context: "Say hello then echo bye to finish.")
+# last => e.g. { "status" => "done", "echo" => "bye" }
+```
 
 ## Troubleshooting
 

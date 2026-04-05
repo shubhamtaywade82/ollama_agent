@@ -29,3 +29,7 @@ CLI / Runner.run(query)
 | Context Manager | `context/manager.rb` | `--max-tokens N` / `OLLAMA_AGENT_MAX_TOKENS` |
 | Session | `session/store.rb` | `--session NAME` |
 | Runner API | `runner.rb` | `require "ollama_agent"; OllamaAgent::Runner.build(...)` |
+
+## ToolRuntime (parallel path)
+
+The coding agent flow above is **not** the only entry point. `OllamaAgent::ToolRuntime` implements a separate **JSON plan → tool → memory** loop for custom `Tool` classes and injectable planners. It is **not** used by `exe/ollama_agent`. See [TOOL_RUNTIME.md](TOOL_RUNTIME.md).

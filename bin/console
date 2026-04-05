@@ -4,8 +4,12 @@
 require "bundler/setup"
 require "ollama_agent"
 
-# You can add fixtures and/or initialization code here to make experimenting
-# with your gem easier. You can also use a different console, if you like.
+# Ollama client in irb: match exe/ollama_agent — apply env so cloud URL + API key work:
+#   cfg = Ollama::Config.new
+#   OllamaAgent::OllamaConnection.apply_env_to_config(cfg)
+#   client = Ollama::Client.new(config: cfg)
+# Bare Ollama::Config.new talks to localhost only; OLLAMA_AGENT_MODEL may still be a cloud tag → 404.
+# ToolRuntime walkthrough: docs/TOOL_RUNTIME.md
 
 require "irb"
 IRB.start(__FILE__)

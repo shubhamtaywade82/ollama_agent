@@ -25,4 +25,5 @@ module OllamaAgent
   end
 end
 
+require_relative "ollama_agent/tool_runtime"
 require_relative "ollama_agent/self_improvement"
