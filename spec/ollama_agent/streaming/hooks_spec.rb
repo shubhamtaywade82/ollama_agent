@@ -61,7 +61,7 @@ RSpec.describe OllamaAgent::Streaming::Hooks do
 
   describe "EVENTS constant" do
     it "includes all expected event names" do
-      expected = %i[on_token on_chunk on_tool_call on_tool_result on_complete on_error on_retry]
+      expected = %i[on_token on_thinking on_chunk on_tool_call on_tool_result on_complete on_error on_retry]
       expected.each { |e| expect(described_class::EVENTS).to include(e) }
     end
   end

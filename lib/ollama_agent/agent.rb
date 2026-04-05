@@ -68,6 +68,7 @@ module OllamaAgent
     # rubocop:enable Metrics/ParameterLists
 
     def run(query)
+      Console.reset_thinking_session!
       messages = build_messages_for_run(query)
       execute_agent_turns(messages)
     end
@@ -167,10 +168,7 @@ module OllamaAgent
     end
 
     def stream_assistant_message(messages)
-      ollama_hooks = {
-        on_token: ->(token) { @hooks.emit(:on_token, { token: token, turn: current_turn }) }
-      }
-      response = @client.chat(**chat_request_args(messages), hooks: ollama_hooks)
+      response = @client.chat(**chat_request_args(messages), hooks: ollama_stream_hooks)
       message = response.message
       raise Error, "Empty assistant message" if message.nil?
 
@@ -190,6 +188,19 @@ module OllamaAgent
         tools: OllamaAgent.tools_for(read_only: @read_only, orchestrator: @orchestrator),
         model: @model,
         options: { temperature: 0.2 }
+      }
+    end
+
+    def ollama_stream_hooks
+      {
+        on_thinking: ->(fragment) { @hooks.emit(:on_thinking, { token: fragment.to_s, turn: current_turn }) },
+        on_token: lambda do |*args|
+          token = args[0]
+          logprobs = args[1]
+          payload = { token: token, turn: current_turn }
+          payload[:logprobs] = logprobs unless logprobs.nil?
+          @hooks.emit(:on_token, payload)
+        end
       }
     end
 

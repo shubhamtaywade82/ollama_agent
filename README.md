@@ -93,7 +93,9 @@ bundle exec ruby exe/ollama_agent ask -i --think true
 
 The CLI uses **ANSI colors** on a TTY (banner, prompt, patch prompts). **Assistant replies** are rendered as **Markdown** (headings, lists, bold, code fences) via `tty-markdown` when stdout is a TTY and **`NO_COLOR`** is unset. Disable Markdown rendering with **`OLLAMA_AGENT_MARKDOWN=0`**. Disable all colors with **`NO_COLOR`** or **`OLLAMA_AGENT_COLOR=0`**.
 
-When **thinking** is enabled, internal reasoning is shown in a **framed, dim** block labeled **Thinking**; the user-facing reply is labeled **Assistant** in green when the model returns both fields. Thinking text is **plain dim** by default (so it stays visually separate from the reply). Set **`OLLAMA_AGENT_THINKING_MARKDOWN=1`** to render thinking through Markdown too (muted colors).
+When **thinking** is enabled, internal reasoning is shown under a **Thinking** label; the user-facing reply is labeled **Assistant** in green when the model returns both fields. By default (**`OLLAMA_AGENT_THINKING_STYLE=compact`**, Cursor-like), one **Thinking** header is printed per `ask` run and every later reasoning chunk in that run is appended with **blank lines only** (no repeated banner, no rule lines)—including after turns where the model printed tool JSON or other non-empty `content`. Set **`OLLAMA_AGENT_THINKING_STYLE=framed`** for the legacy boxed style (banner + long rulers on every assistant message). Thinking body text is **plain dim** by default. Set **`OLLAMA_AGENT_THINKING_MARKDOWN=1`** to render thinking through Markdown too (muted colors).
+
+With **`--stream`** / **`OLLAMA_AGENT_STREAM=1`**, reasoning streams in **dim** text under a single **Thinking** line, then **`Assistant`** and the reply stream in normal styling—closer to Cursor than printing everything as one token stream. (This uses a small hook on ollama-client’s chat stream; `hooks[:on_thinking]` is also emitted for custom subscribers.)
 
 ### Ollama Cloud
 
@@ -125,7 +127,8 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `NO_COLOR` | Set (any value) to disable ANSI colors (see [no-color.org](https://no-color.org/)) |
 | `OLLAMA_AGENT_COLOR` | Set to `0` to disable colors even on a TTY |
 | `OLLAMA_AGENT_MARKDOWN` | Set to `0` to disable Markdown formatting of assistant replies (plain text only) |
-| `OLLAMA_AGENT_THINKING_MARKDOWN` | Set to `1` to render **thinking** text with Markdown (muted); default is plain dim text inside the Thinking frame |
+| `OLLAMA_AGENT_THINKING_STYLE` | `compact` (default) = one **Thinking** label per run, blank lines between later reasoning chunks; `framed` = repeat full banner/rulers each message |
+| `OLLAMA_AGENT_THINKING_MARKDOWN` | Set to `1` to render **thinking** text with Markdown (muted); default is plain dim text |
 | `OLLAMA_AGENT_THINK` | Model **thinking** mode for compatible models: `true` / `false`, or `high` / `medium` / `low` (see ollama-client `think:`). Empty = omit (server default). |
 | `OLLAMA_AGENT_PATCH_RISK_MAX_DIFF_LINES` | Max changed-line count before a diff is treated as "large" for semi-auto patch risk (default **80**) |
 | `OLLAMA_AGENT_INDEX_REBUILD` | Set to `1` to drop the cached Prism Ruby index before the next symbol search in this process |
@@ -172,7 +175,7 @@ Use the **`orchestrate`** command (or **`OLLAMA_AGENT_ORCHESTRATOR=1`** with **`
 
 Most of this README is **CLI-first** (commands and environment variables above). The same capabilities exist as **Ruby APIs**—the [Features](#features) list (file tools, `self_review` / `improve`, orchestrator, skills, etc.) is implemented under `lib/ollama_agent/`. For a **layer diagram** (agent → tools → hooks → session), see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**Coding agent — `Runner` (facade)** — Stable entry for apps: `OllamaAgent::Runner.build(root:, model:, stream:, session_id:, resume:, read_only:, orchestrator:, skills_enabled:, skill_paths:, audit:, max_tokens:, context_summarize:, stdin:, stdout:, ...)` then `#run(query)`. Optional **`stdin`** / **`stdout`** (default TTY) feed patch/write/delegate confirmations—use `StringIO` in tests or automation to avoid blocking on `$stdin.gets`. Exposes `#hooks` (`Streaming::Hooks`) for `:on_token`, `:on_tool_call`, `:on_tool_result`, `:on_complete`. Full keyword list: [`lib/ollama_agent/runner.rb`](lib/ollama_agent/runner.rb).
+**Coding agent — `Runner` (facade)** — Stable entry for apps: `OllamaAgent::Runner.build(root:, model:, stream:, session_id:, resume:, read_only:, orchestrator:, skills_enabled:, skill_paths:, audit:, max_tokens:, context_summarize:, stdin:, stdout:, ...)` then `#run(query)`. Optional **`stdin`** / **`stdout`** (default TTY) feed patch/write/delegate confirmations—use `StringIO` in tests or automation to avoid blocking on `$stdin.gets`. Exposes `#hooks` (`Streaming::Hooks`) for `:on_token`, `:on_thinking` (streamed reasoning when `stream: true` and the model supports it), `:on_tool_call`, `:on_tool_result`, `:on_complete`. Full keyword list: [`lib/ollama_agent/runner.rb`](lib/ollama_agent/runner.rb).
 
 **Coding agent — `Agent` (direct)** — `OllamaAgent::Agent.new(client:, root:, ...)` when you inject an `Ollama::Client` (or test double), tweak options the CLI does not expose, or skip `Runner`.
 

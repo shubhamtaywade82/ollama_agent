@@ -39,6 +39,69 @@ module OllamaAgent
       markdown_enabled? && ENV["OLLAMA_AGENT_THINKING_MARKDOWN"] == "1"
     end
 
+    # +compact+ (default): one "Thinking" label per agent run; later reasoning uses blank lines only (Cursor-like).
+    # +framed+: repeat the full banner + rulers on every assistant message (legacy).
+    def thinking_framed_style?
+      ENV.fetch("OLLAMA_AGENT_THINKING_STYLE", "compact").to_s.strip.downcase == "framed"
+    end
+
+    # @api private  Reset at the start of each {Agent#run} so multi-turn tool loops share one thinking header.
+    def reset_thinking_session!
+      Thread.current[:ollama_agent_thinking_shown] = false
+      Thread.current[:ollama_agent_stream_thinking_open] = false
+      Thread.current[:ollama_agent_stream_had_thinking] = false
+    end
+
+    def thinking_already_shown_in_session?
+      Thread.current[:ollama_agent_thinking_shown] == true
+    end
+
+    def mark_thinking_shown_in_session!
+      Thread.current[:ollama_agent_thinking_shown] = true
+    end
+
+    # --- Streaming (ollama-client passes thinking only via patched hooks[:on_thinking]) ---
+
+    # Print one dim "Thinking" label, then stream fragments in dim until content tokens arrive.
+    # rubocop:disable Metrics/MethodLength -- label + ANSI state + flush
+    def write_streaming_thinking_fragment(fragment)
+      text = fragment.to_s
+      return if text.empty?
+
+      unless Thread.current[:ollama_agent_stream_thinking_open]
+        Thread.current[:ollama_agent_stream_thinking_open] = true
+        Thread.current[:ollama_agent_stream_had_thinking] = true
+        label = color_enabled? ? "#{dim("Thinking")}\n" : "Thinking\n"
+        print label
+        print "\e[2m" if color_enabled?
+      end
+      print text
+      $stdout.flush
+    end
+    # rubocop:enable Metrics/MethodLength
+
+    # Call before the first streamed content token: closes dim reasoning, optional Assistant heading.
+    def finalize_streaming_thinking_before_content!
+      return unless Thread.current[:ollama_agent_stream_thinking_open]
+
+      Thread.current[:ollama_agent_stream_thinking_open] = false
+      had = Thread.current[:ollama_agent_stream_had_thinking]
+      Thread.current[:ollama_agent_stream_had_thinking] = false
+      print "\e[0m" if color_enabled?
+      puts
+      puts assistant_reply_heading if had
+    end
+
+    # When the model returns only thinking (no content), close ANSI state on stream end.
+    def close_streaming_thinking_if_still_open!
+      return unless Thread.current[:ollama_agent_stream_thinking_open]
+
+      Thread.current[:ollama_agent_stream_thinking_open] = false
+      Thread.current[:ollama_agent_stream_had_thinking] = false
+      print "\e[0m" if color_enabled?
+      puts
+    end
+
     def style(text, *codes)
       return text.to_s unless color_enabled?
 
@@ -86,6 +149,36 @@ module OllamaAgent
       "#{header}#{body}\n#{line}"
     end
 
+    def format_thinking_compact_open(text)
+      label = color_enabled? ? dim("Thinking") : "Thinking"
+      body = thinking_compact_body(text)
+      "#{label}\n#{body}"
+    end
+
+    # Later thinking in the same run (tool rounds, new chat chunks): same block, separated by a blank line.
+    def format_thinking_compact_merge(text)
+      "\n#{thinking_compact_body(text)}"
+    end
+
+    def thinking_compact_body(text)
+      if thinking_markdown_enabled?
+        parsed = markdown_parse(text, thinking: true)
+        return parsed if parsed
+
+        return dim_indent_body(text)
+      end
+
+      dim_indent_body(text)
+    end
+
+    def dim_indent_body(text)
+      s = text.to_s.rstrip
+      return "" if s.empty?
+
+      indent = "  "
+      dim(s.lines.map { |l| "#{indent}#{l.rstrip}" }.join("\n"))
+    end
+
     def assistant_reply_heading
       bold(green("Assistant"))
     end
@@ -114,13 +207,33 @@ module OllamaAgent
 
     # Prints thinking (if any) then main content; duck-types #thinking and #content.
     def puts_assistant_message(message)
-      t = message.thinking
-      c = message.content
-      thinking_present = t && !t.to_s.empty?
-
-      puts format_thinking(t) if thinking_present
-      write_assistant_reply(c, thinking_present) if c && !c.to_s.empty?
+      thinking_present = assistant_message_thinking_present?(message.thinking)
+      if thinking_present
+        puts thinking_output_chunk(message.thinking)
+        mark_thinking_shown_in_session! unless thinking_framed_style?
+      end
+      assistant_reply_if_present(message.content, thinking_present)
     end
+
+    def assistant_message_thinking_present?(text)
+      text && !text.to_s.strip.empty?
+    end
+    private_class_method :assistant_message_thinking_present?
+
+    def assistant_reply_if_present(content, thinking_present)
+      return unless content && !content.to_s.strip.empty?
+
+      write_assistant_reply(content, thinking_present)
+    end
+    private_class_method :assistant_reply_if_present
+
+    def thinking_output_chunk(text)
+      return format_thinking(text) if thinking_framed_style?
+      return format_thinking_compact_open(text) unless thinking_already_shown_in_session?
+
+      format_thinking_compact_merge(text)
+    end
+    private_class_method :thinking_output_chunk
 
     def patch_title(text)
       bold(yellow(text))
