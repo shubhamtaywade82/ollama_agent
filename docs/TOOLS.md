@@ -18,7 +18,9 @@ OllamaAgent::Tools.register(
   return "run_tests is disabled in read-only mode." if read_only
 
   suite = args["suite"] || "spec/"
-  `cd #{root} && bundle exec rspec #{suite} 2>&1`
+  require "open3"
+  output, = Open3.capture2("bundle", "exec", "rspec", suite, chdir: root)
+  output
 end
 
 runner = OllamaAgent::Runner.build(root: "/my/project")

@@ -18,9 +18,10 @@ module OllamaAgent
       # rubocop:disable Metrics/MethodLength, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       # Returns a (possibly shorter) copy of messages that fits within the token budget.
       def trim(messages)
-        return messages unless over_budget?(messages)
+        normalized = messages.map { |m| m.transform_keys(&:to_sym) }
+        return normalized unless over_budget?(normalized)
 
-        trimmed = messages.dup
+        trimmed = normalized.dup
         # We want to keep the system message and the very last user message.
         # Everything else is fair game for the sliding window.
         last_user_idx = trimmed.rindex { |m| m[:role] == "user" }
