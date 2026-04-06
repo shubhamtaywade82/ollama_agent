@@ -17,6 +17,8 @@ module OllamaAgent
     desc "ask [QUERY]", "Run a natural-language task (reads, search, patch)"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
     method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
+    method_option :read_only, type: :boolean, default: false, aliases: "-R",
+                              desc: "Read/search only (no edit_file, write_file, patches, or delegation)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches without confirmation"
     method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
@@ -44,7 +46,7 @@ module OllamaAgent
       if options[:interactive]
         start_interactive(agent)
       elsif query
-        agent.run(query)
+        run_single_shot_agent!(agent, query)
       else
         puts Console.error_line("Error: provide a QUERY or use --interactive")
         exit 1
@@ -54,6 +56,8 @@ module OllamaAgent
     desc "orchestrate [QUERY]", "Like ask, with tools to list/delegate to external CLI agents (Claude, Gemini, …)"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
     method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
+    method_option :read_only, type: :boolean, default: false, aliases: "-R",
+                              desc: "Read/search only (no edit_file, write_file, patches, or delegation)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches and run delegations without confirmation"
     method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
@@ -78,7 +82,7 @@ module OllamaAgent
       if options[:interactive]
         start_interactive(agent)
       elsif query
-        agent.run(query)
+        run_single_shot_agent!(agent, query)
       else
         puts Console.error_line("Error: provide a QUERY or use --interactive")
         exit 1
@@ -304,6 +308,7 @@ module OllamaAgent
       agent = Agent.new(
         model: options[:model],
         root: resolved_root_for_self_review,
+        read_only: options[:read_only],
         confirm_patches: !options[:yes],
         http_timeout: options[:timeout],
         think: options[:think],
@@ -341,6 +346,7 @@ module OllamaAgent
       agent = Agent.new(
         model: options[:model],
         root: resolved_root_for_self_review,
+        read_only: options[:read_only],
         confirm_patches: !options[:yes],
         http_timeout: options[:timeout],
         think: options[:think],
@@ -371,6 +377,17 @@ module OllamaAgent
 
     def attach_console_streamer(agent)
       Streaming::ConsoleStreamer.new.attach(agent.hooks)
+    end
+
+    def run_single_shot_agent!(agent, query)
+      agent.run(query)
+    rescue Ollama::Error, OllamaAgent::Error => e
+      warn Console.error_line("#{e.class}: #{e.message}")
+      exit 1
+    rescue StandardError => e
+      warn Console.error_line("#{e.class}: #{e.message}")
+      warn e.full_message(order: :top, highlight: false) if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+      exit 1
     end
 
     def start_interactive(agent)

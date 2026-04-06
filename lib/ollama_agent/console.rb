@@ -50,6 +50,7 @@ module OllamaAgent
       Thread.current[:ollama_agent_thinking_shown] = false
       Thread.current[:ollama_agent_stream_thinking_open] = false
       Thread.current[:ollama_agent_stream_had_thinking] = false
+      Thread.current[:ollama_agent_stream_thinking_buffer] = nil
     end
 
     def thinking_already_shown_in_session?
@@ -63,22 +64,23 @@ module OllamaAgent
     # --- Streaming (ollama-client passes thinking only via patched hooks[:on_thinking]) ---
 
     # Print one dim "Thinking" label, then stream fragments in dim until content tokens arrive.
-    # rubocop:disable Metrics/MethodLength -- label + ANSI state + flush
+    # Handles both cumulative thinking strings (common from Ollama) and plain deltas; sanitizes UTF-8.
     def write_streaming_thinking_fragment(fragment)
-      text = fragment.to_s
+      text = utf8_for_stream(fragment)
       return if text.empty?
 
-      unless Thread.current[:ollama_agent_stream_thinking_open]
-        Thread.current[:ollama_agent_stream_thinking_open] = true
-        Thread.current[:ollama_agent_stream_had_thinking] = true
-        label = color_enabled? ? "#{dim("Thinking")}\n" : "Thinking\n"
-        print label
-        print "\e[2m" if color_enabled?
-      end
-      print text
+      open_streaming_thinking_section_if_needed
+      to_print = streaming_thinking_increment_to_print(text)
+      return if to_print.empty?
+
+      print to_print
       $stdout.flush
     end
-    # rubocop:enable Metrics/MethodLength
+
+    def write_stream_token(fragment)
+      print utf8_for_stream(fragment)
+      $stdout.flush
+    end
 
     # Call before the first streamed content token: closes dim reasoning, optional Assistant heading.
     def finalize_streaming_thinking_before_content!
@@ -87,6 +89,7 @@ module OllamaAgent
       Thread.current[:ollama_agent_stream_thinking_open] = false
       had = Thread.current[:ollama_agent_stream_had_thinking]
       Thread.current[:ollama_agent_stream_had_thinking] = false
+      Thread.current[:ollama_agent_stream_thinking_buffer] = nil
       print "\e[0m" if color_enabled?
       puts
       puts assistant_reply_heading if had
@@ -98,9 +101,53 @@ module OllamaAgent
 
       Thread.current[:ollama_agent_stream_thinking_open] = false
       Thread.current[:ollama_agent_stream_had_thinking] = false
+      Thread.current[:ollama_agent_stream_thinking_buffer] = nil
       print "\e[0m" if color_enabled?
       puts
     end
+
+    def open_streaming_thinking_section_if_needed
+      return if Thread.current[:ollama_agent_stream_thinking_open]
+
+      Thread.current[:ollama_agent_stream_thinking_open] = true
+      Thread.current[:ollama_agent_stream_had_thinking] = true
+      label = color_enabled? ? "#{dim("Thinking")}\n" : "Thinking\n"
+      print label
+      print "\e[2m" if color_enabled?
+    end
+    private_class_method :open_streaming_thinking_section_if_needed
+
+    # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- cumulative vs delta stream shapes
+    def streaming_thinking_increment_to_print(next_utf8)
+      prev = Thread.current[:ollama_agent_stream_thinking_buffer].to_s
+      if prev.empty?
+        Thread.current[:ollama_agent_stream_thinking_buffer] = next_utf8
+        return next_utf8
+      end
+
+      if next_utf8.start_with?(prev) && next_utf8.bytesize >= prev.bytesize
+        slice = next_utf8.byteslice(prev.bytesize..)
+        Thread.current[:ollama_agent_stream_thinking_buffer] = next_utf8
+        return slice
+      end
+
+      return +"" if next_utf8 == prev
+
+      if next_utf8.bytesize < prev.bytesize
+        Thread.current[:ollama_agent_stream_thinking_buffer] = next_utf8
+        return next_utf8
+      end
+
+      Thread.current[:ollama_agent_stream_thinking_buffer] = prev + next_utf8
+      next_utf8
+    end
+    private_class_method :streaming_thinking_increment_to_print
+    # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
+
+    def utf8_for_stream(fragment)
+      fragment.to_s.encode("UTF-8", invalid: :replace, undef: :replace)
+    end
+    private_class_method :utf8_for_stream
 
     def style(text, *codes)
       return text.to_s unless color_enabled?

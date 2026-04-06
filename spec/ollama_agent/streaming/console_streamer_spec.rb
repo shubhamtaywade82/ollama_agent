@@ -39,4 +39,24 @@ RSpec.describe OllamaAgent::Streaming::ConsoleStreamer do
   ensure
     ENV.delete("OLLAMA_AGENT_COLOR")
   end
+
+  it "prints only the suffix when thinking payloads repeat cumulative text" do
+    ENV["OLLAMA_AGENT_COLOR"] = "0"
+    ENV.delete("NO_COLOR")
+    OllamaAgent::Console.reset_thinking_session!
+    streamer.attach(hooks)
+    expect do
+      hooks.emit(:on_thinking, { token: "ab", turn: 1 })
+      hooks.emit(:on_thinking, { token: "abcd", turn: 1 })
+      hooks.emit(:on_token, { token: "!", turn: 1 })
+      hooks.emit(:on_complete, {})
+    end.to output(<<~OUT).to_stdout
+      Thinking
+      abcd
+      Assistant
+      !
+    OUT
+  ensure
+    ENV.delete("OLLAMA_AGENT_COLOR")
+  end
 end

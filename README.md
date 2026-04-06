@@ -52,6 +52,9 @@ Apply proposed patches without interactive confirmation:
 
 ```bash
 bundle exec ruby exe/ollama_agent ask -y "Your task"
+
+# Review / audit only (no patches, writes, or delegation)—same as a report-style self_review
+bundle exec ruby exe/ollama_agent ask --read-only "Summarize risks in this repo"
 ```
 
 Long-running models (slow local inference):

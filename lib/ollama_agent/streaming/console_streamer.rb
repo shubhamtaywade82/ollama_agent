@@ -14,8 +14,7 @@ module OllamaAgent
         end
         hooks.on(:on_token) do |payload|
           Console.finalize_streaming_thinking_before_content!
-          print payload[:token]
-          $stdout.flush
+          Console.write_stream_token(payload[:token])
         end
         hooks.on(:on_tool_call)   { |payload| warn Console.tool_call_line(payload[:name], payload[:args]) }
         hooks.on(:on_tool_result) { |payload| warn Console.tool_result_line(payload[:name], payload[:result]) }
