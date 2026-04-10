@@ -1,7 +1,12 @@
 # frozen_string_literal: true
 
 require_relative "ollama_agent/version"
+
+env_before_ollama_client = ENV.to_hash
 require "ollama_client"
+require_relative "ollama_agent/global_dotenv"
+OllamaAgent::GlobalDotenv.reconcile_after_ollama_client!(env_before_ollama_client)
+require_relative "ollama_agent/ollama_chat_thinking_stream"
 require_relative "ollama_agent/console"
 require_relative "ollama_agent/tools/registry"
 require_relative "ollama_agent/streaming/hooks"

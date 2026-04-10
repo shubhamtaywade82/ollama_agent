@@ -144,6 +144,18 @@ RSpec.describe OllamaAgent::Agent do
       ENV.delete("OLLAMA_API_KEY")
     end
 
+    it "applies OLLAMA_AGENT_MODEL into Ollama::Config for Ollama Cloud (same id as chat requests)" do
+      ENV["OLLAMA_BASE_URL"] = "https://ollama.com"
+      ENV["OLLAMA_API_KEY"] = "test-key"
+      ENV["OLLAMA_AGENT_MODEL"] = "gpt-oss:120b"
+      agent = described_class.new(root: root)
+      expect(ollama_config(agent).model).to eq("gpt-oss:120b")
+    ensure
+      ENV.delete("OLLAMA_BASE_URL")
+      ENV.delete("OLLAMA_API_KEY")
+      ENV.delete("OLLAMA_AGENT_MODEL")
+    end
+
     it "warns on stderr when OLLAMA_AGENT_TIMEOUT is invalid and OLLAMA_AGENT_DEBUG is on" do
       ENV["OLLAMA_AGENT_TIMEOUT"] = "not-a-number"
       ENV["OLLAMA_AGENT_DEBUG"] = "1"

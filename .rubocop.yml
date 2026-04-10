@@ -3,6 +3,7 @@ AllCops:
   NewCops: enable
   Exclude:
     - "*.gemspec"
+    - "reproduce_429.rb"
 plugins:
   - rubocop-rake
   - rubocop-rspec

@@ -52,6 +52,9 @@ Apply proposed patches without interactive confirmation:
 
 ```bash
 bundle exec ruby exe/ollama_agent ask -y "Your task"
+
+# Review / audit only (no patches, writes, or delegation)—same as a report-style self_review
+bundle exec ruby exe/ollama_agent ask --read-only "Summarize risks in this repo"
 ```
 
 Long-running models (slow local inference):
@@ -77,9 +80,13 @@ bundle exec ruby exe/ollama_agent self_review --mode analysis
 bundle exec ruby exe/ollama_agent self_review --mode interactive
 
 # Mode 3 — sandbox + tests + optional merge back (same as `improve`)
+# Without --apply, edits stay in a temp dir only; pass --apply to copy changed files into your checkout.
 bundle exec ruby exe/ollama_agent self_review --mode automated
+bundle exec ruby exe/ollama_agent self_review --mode automated --apply
 bundle exec ruby exe/ollama_agent improve --apply
 ```
+
+**`ruby_mastery` (optional):** When the [`ruby_mastery`](https://github.com/shubhamtaywade82/ruby_mastery) gem is installed (this repo lists it in the `Gemfile` for development), **`self_review`** (all modes) and **`improve`** prepend a **markdown static-analysis** section to the user prompt. Add the same gem to your app’s `Gemfile` if you want that behavior outside this checkout. Disable with **`--no-ruby-mastery`** or **`OLLAMA_AGENT_RUBY_MASTERY=0`**. Limit size with **`OLLAMA_AGENT_RUBY_MASTERY_MAX_CHARS`** (default `60000`).
 
 For mode 3, `-y` skips all patch prompts; `--no-semi` prompts for every patch when not using `-y`.
 
@@ -93,7 +100,9 @@ bundle exec ruby exe/ollama_agent ask -i --think true
 
 The CLI uses **ANSI colors** on a TTY (banner, prompt, patch prompts). **Assistant replies** are rendered as **Markdown** (headings, lists, bold, code fences) via `tty-markdown` when stdout is a TTY and **`NO_COLOR`** is unset. Disable Markdown rendering with **`OLLAMA_AGENT_MARKDOWN=0`**. Disable all colors with **`NO_COLOR`** or **`OLLAMA_AGENT_COLOR=0`**.
 
-When **thinking** is enabled, internal reasoning is shown in a **framed, dim** block labeled **Thinking**; the user-facing reply is labeled **Assistant** in green when the model returns both fields. Thinking text is **plain dim** by default (so it stays visually separate from the reply). Set **`OLLAMA_AGENT_THINKING_MARKDOWN=1`** to render thinking through Markdown too (muted colors).
+When **thinking** is enabled, internal reasoning is shown under a **Thinking** label; the user-facing reply is labeled **Assistant** in green when the model returns both fields. By default (**`OLLAMA_AGENT_THINKING_STYLE=compact`**, Cursor-like), one **Thinking** header is printed per `ask` run and every later reasoning chunk in that run is appended with **blank lines only** (no repeated banner, no rule lines)—including after turns where the model printed tool JSON or other non-empty `content`. Set **`OLLAMA_AGENT_THINKING_STYLE=framed`** for the legacy boxed style (banner + long rulers on every assistant message). Thinking body text is **plain dim** by default. Set **`OLLAMA_AGENT_THINKING_MARKDOWN=1`** to render thinking through Markdown too (muted colors).
+
+With **`--stream`** / **`OLLAMA_AGENT_STREAM=1`**, reasoning streams in **dim** text under a single **Thinking** line, then **`Assistant`** and the reply stream in normal styling—closer to Cursor than printing everything as one token stream. (This uses a small hook on ollama-client’s chat stream; `hooks[:on_thinking]` is also emitted for custom subscribers.)
 
 ### Ollama Cloud
 
@@ -125,7 +134,8 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `NO_COLOR` | Set (any value) to disable ANSI colors (see [no-color.org](https://no-color.org/)) |
 | `OLLAMA_AGENT_COLOR` | Set to `0` to disable colors even on a TTY |
 | `OLLAMA_AGENT_MARKDOWN` | Set to `0` to disable Markdown formatting of assistant replies (plain text only) |
-| `OLLAMA_AGENT_THINKING_MARKDOWN` | Set to `1` to render **thinking** text with Markdown (muted); default is plain dim text inside the Thinking frame |
+| `OLLAMA_AGENT_THINKING_STYLE` | `compact` (default) = one **Thinking** label per run, blank lines between later reasoning chunks; `framed` = repeat full banner/rulers each message |
+| `OLLAMA_AGENT_THINKING_MARKDOWN` | Set to `1` to render **thinking** text with Markdown (muted); default is plain dim text |
 | `OLLAMA_AGENT_THINK` | Model **thinking** mode for compatible models: `true` / `false`, or `high` / `medium` / `low` (see ollama-client `think:`). Empty = omit (server default). |
 | `OLLAMA_AGENT_PATCH_RISK_MAX_DIFF_LINES` | Max changed-line count before a diff is treated as "large" for semi-auto patch risk (default **80**) |
 | `OLLAMA_AGENT_INDEX_REBUILD` | Set to `1` to drop the cached Prism Ruby index before the next symbol search in this process |
@@ -134,8 +144,8 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_AGENT_RUBY_INDEX_MAX_LINES` | Max result lines for `search_code` class/module/method modes (default **200**) |
 | `OLLAMA_AGENT_RUBY_INDEX_MAX_CHARS` | Max characters of index output per search (default **60000**) |
 | `OLLAMA_AGENT_MAX_READ_FILE_BYTES` | Max bytes for a **full** `read_file` (no line range); larger files return an error (default **2097152**, 2 MiB). Line-range reads stream and are not limited by this cap. |
-| `OLLAMA_AGENT_RG_PATH` | Absolute path to `rg` for `search_code` text mode (optional; otherwise resolved via `command -v rg`) |
-| `OLLAMA_AGENT_GREP_PATH` | Absolute path to `grep` fallback (optional; otherwise `command -v grep`) |
+| `OLLAMA_AGENT_RG_PATH` | Absolute path to `rg` for `search_code` text mode (optional; otherwise first `rg` on `PATH`) |
+| `OLLAMA_AGENT_GREP_PATH` | Absolute path to `grep` fallback (optional; otherwise first `grep` on `PATH`) |
 | `OLLAMA_AGENT_INDEX_REBUILD` | The Prism index is rebuilt when this env value **changes** (e.g. unset → `1`); it is **not** rebuilt on every tool call while it stays `1`. |
 | `OLLAMA_AGENT_SKILLS` | `1`/`on`/`0`/`off` — include **bundled** prompt skills (default **on**). Same as `--no-skills` on the CLI when off. |
 | `OLLAMA_AGENT_SKILLS_INCLUDE` | Comma-separated **manifest ids** to load (omit = all bundled). Example: `ruby_style,rubocop,code_review`. |
@@ -172,7 +182,7 @@ Use the **`orchestrate`** command (or **`OLLAMA_AGENT_ORCHESTRATOR=1`** with **`
 
 Most of this README is **CLI-first** (commands and environment variables above). The same capabilities exist as **Ruby APIs**—the [Features](#features) list (file tools, `self_review` / `improve`, orchestrator, skills, etc.) is implemented under `lib/ollama_agent/`. For a **layer diagram** (agent → tools → hooks → session), see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-**Coding agent — `Runner` (facade)** — Stable entry for apps: `OllamaAgent::Runner.build(root:, model:, stream:, session_id:, resume:, read_only:, orchestrator:, skills_enabled:, skill_paths:, audit:, max_tokens:, context_summarize:, stdin:, stdout:, ...)` then `#run(query)`. Optional **`stdin`** / **`stdout`** (default TTY) feed patch/write/delegate confirmations—use `StringIO` in tests or automation to avoid blocking on `$stdin.gets`. Exposes `#hooks` (`Streaming::Hooks`) for `:on_token`, `:on_tool_call`, `:on_tool_result`, `:on_complete`. Full keyword list: [`lib/ollama_agent/runner.rb`](lib/ollama_agent/runner.rb).
+**Coding agent — `Runner` (facade)** — Stable entry for apps: `OllamaAgent::Runner.build(root:, model:, stream:, session_id:, resume:, read_only:, orchestrator:, skills_enabled:, skill_paths:, audit:, max_tokens:, context_summarize:, stdin:, stdout:, ...)` then `#run(query)`. Optional **`stdin`** / **`stdout`** (default TTY) feed patch/write/delegate confirmations—use `StringIO` in tests or automation to avoid blocking on `$stdin.gets`. Exposes `#hooks` (`Streaming::Hooks`) for `:on_token`, `:on_thinking` (streamed reasoning when `stream: true` and the model supports it), `:on_tool_call`, `:on_tool_result`, `:on_complete`. Full keyword list: [`lib/ollama_agent/runner.rb`](lib/ollama_agent/runner.rb).
 
 **Coding agent — `Agent` (direct)** — `OllamaAgent::Agent.new(client:, root:, ...)` when you inject an `Ollama::Client` (or test double), tweak options the CLI does not expose, or skip `Runner`.
 

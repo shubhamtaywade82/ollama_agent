@@ -5,7 +5,7 @@ module OllamaAgent
     # Lightweight event bus for agent lifecycle events.
     # All layers share one Hooks instance per Agent run.
     class Hooks
-      EVENTS = %i[on_token on_chunk on_tool_call on_tool_result on_complete on_error on_retry].freeze
+      EVENTS = %i[on_token on_thinking on_chunk on_tool_call on_tool_result on_complete on_error on_retry].freeze
 
       MISSING_BLOCK_MESSAGE = "Hooks require a block when registering a handler"
 

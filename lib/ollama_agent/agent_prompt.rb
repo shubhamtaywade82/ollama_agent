@@ -49,6 +49,9 @@ module OllamaAgent
         You are reviewing the ollama_agent Ruby gem. Tools available: list_files, read_file, search_code only.
         Do not call edit_file and do not output unified diffs—this run is analysis-only.
 
+        The user message may begin with a "## Static analysis (ruby_mastery)" section from automated tooling; weigh it
+        against what you verify in the tree.
+
         Work only under the project root. Briefly state your plan, then use tools.
 
         Large Ruby trees: use search_code with mode "method", "class", "module", or "constant" to locate definitions

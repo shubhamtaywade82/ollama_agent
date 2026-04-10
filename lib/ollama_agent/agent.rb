@@ -15,6 +15,7 @@ require_relative "resilience/audit_logger"
 require_relative "context/manager"
 require_relative "session/store"
 require_relative "env_config"
+require_relative "model_env"
 require_relative "agent/agent_config"
 require_relative "agent/client_wiring"
 require_relative "agent/prompt_wiring"
@@ -68,6 +69,7 @@ module OllamaAgent
     # rubocop:enable Metrics/ParameterLists
 
     def run(query)
+      Console.reset_thinking_session!
       messages = build_messages_for_run(query)
       execute_agent_turns(messages)
     end
@@ -167,10 +169,7 @@ module OllamaAgent
     end
 
     def stream_assistant_message(messages)
-      ollama_hooks = {
-        on_token: ->(token) { @hooks.emit(:on_token, { token: token, turn: current_turn }) }
-      }
-      response = @client.chat(**chat_request_args(messages), hooks: ollama_hooks)
+      response = @client.chat(**chat_request_args(messages), hooks: ollama_stream_hooks)
       message = response.message
       raise Error, "Empty assistant message" if message.nil?
 
@@ -193,6 +192,19 @@ module OllamaAgent
       }
     end
 
+    def ollama_stream_hooks
+      {
+        on_thinking: ->(fragment) { @hooks.emit(:on_thinking, { token: fragment.to_s, turn: current_turn }) },
+        on_token: lambda do |*args|
+          token = args[0]
+          logprobs = args[1]
+          payload = { token: token, turn: current_turn }
+          payload[:logprobs] = logprobs unless logprobs.nil?
+          @hooks.emit(:on_token, payload)
+        end
+      }
+    end
+
     def announce_assistant_content(message)
       Console.puts_assistant_message(message)
     end
@@ -202,7 +214,7 @@ module OllamaAgent
     end
 
     def default_model
-      ENV["OLLAMA_AGENT_MODEL"] || Ollama::Config.new.model
+      ModelEnv.default_chat_model
     end
   end
   # rubocop:enable Metrics/ClassLength

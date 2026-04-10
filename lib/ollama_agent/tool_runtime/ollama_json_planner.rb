@@ -2,6 +2,7 @@
 
 require "json"
 require "ollama_client"
+require_relative "../model_env"
 require_relative "plan_extractor"
 
 module OllamaAgent
@@ -10,8 +11,7 @@ module OllamaAgent
     class OllamaJsonPlanner
       include PlanExtractor
 
-      # @param model [String, nil] when nil or blank, uses {OllamaAgent::Agent} rules:
-      #   `ENV["OLLAMA_AGENT_MODEL"]` if set, else `Ollama::Config.new.model`
+      # @param model [String, nil] when nil or blank, uses {OllamaAgent::ModelEnv.default_chat_model}
       def initialize(client:, model: nil, chat_options: nil)
         @client = client
         @model = resolve_model(model)
@@ -35,10 +35,7 @@ module OllamaAgent
         s = explicit.to_s.strip
         return s unless s.empty?
 
-        env = ENV["OLLAMA_AGENT_MODEL"].to_s.strip
-        return env unless env.empty?
-
-        Ollama::Config.new.model
+        ModelEnv.default_chat_model
       end
 
       def build_prompt(context:, memory:, registry:)

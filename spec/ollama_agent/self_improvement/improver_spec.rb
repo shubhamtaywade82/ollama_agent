@@ -80,4 +80,88 @@ RSpec.describe OllamaAgent::SelfImprovement::Improver do
       expect(out[:output]).to include(source)
     end
   end
+
+  describe "#run" do
+    let(:fake_sandbox) { Dir.mktmpdir }
+
+    after do
+      FileUtils.remove_entry(fake_sandbox) if fake_sandbox && Dir.exist?(fake_sandbox)
+    end
+
+    it "accepts max_tokens, context_summarize, stream, and verify without ArgumentError" do
+      File.write(File.join(source, "Gemfile"), "source 'https://rubygems.org'\n")
+      allow(Dir).to receive(:mktmpdir).and_wrap_original do |meth, *args|
+        args == ["ollama_agent_improve_"] ? fake_sandbox : meth.call(*args)
+      end
+      allow(improver).to receive(:copy_project_into_sandbox)
+      allow(improver).to receive(:run_agent_session)
+      allow(improver).to receive(:restore_build_essentials_from_source)
+      allow(improver).to receive_messages(missing_gemfile_failure: nil,
+                                          run_test_suite: { success: true, output: "ok" }, copy_back_if_requested: [])
+
+      result = improver.run(
+        root: source,
+        max_tokens: 12_000,
+        context_summarize: true,
+        stream: true,
+        verify: "rspec"
+      )
+
+      expect(result[:success]).to be(true)
+      expect(improver).to have_received(:run_agent_session).with(
+        fake_sandbox,
+        hash_including(
+          max_tokens: 12_000,
+          context_summarize: true,
+          stream: true,
+          source_root: source,
+          ruby_mastery: true
+        )
+      )
+    end
+  end
+
+  describe "verify step parsing" do
+    it "uses OLLAMA_AGENT_IMPROVE_VERIFY when the verify argument is blank" do
+      allow(ENV).to receive(:fetch).and_call_original
+      allow(ENV).to receive(:fetch).with("OLLAMA_AGENT_IMPROVE_VERIFY", "rspec").and_return("syntax,rubocop")
+
+      expect(improver.send(:normalize_verify_steps, "")).to eq(%w[syntax rubocop])
+    end
+
+    it "orders steps as syntax, rubocop, rspec regardless of token order" do
+      expect(improver.send(:normalize_verify_steps, "rspec,syntax,rubocop")).to eq(%w[syntax rubocop rspec])
+    end
+
+    it "falls back to rspec when every token is unknown" do
+      steps = nil
+      expect { steps = improver.send(:normalize_verify_steps, "bogus,nope") }.to output(/unknown verify/).to_stderr
+      expect(steps).to eq(["rspec"])
+    end
+  end
+
+  describe "#run_changed_ruby_syntax_check" do
+    it "succeeds when no .rb files differ between sandbox and source" do
+      FileUtils.mkdir_p(File.join(source, "lib"))
+      File.write(File.join(source, "lib", "a.rb"), "def x; end\n")
+      FileUtils.mkdir_p(File.join(sandbox, "lib"))
+      File.write(File.join(sandbox, "lib", "a.rb"), "def x; end\n")
+
+      result = improver.send(:run_changed_ruby_syntax_check, sandbox, source)
+
+      expect(result[:success]).to be(true)
+      expect(result[:output]).to include("no changed")
+    end
+
+    it "fails when a changed .rb file is not valid Ruby" do
+      FileUtils.mkdir_p(File.join(source, "lib"))
+      File.write(File.join(source, "lib", "a.rb"), "def ok; end\n")
+      FileUtils.mkdir_p(File.join(sandbox, "lib"))
+      File.write(File.join(sandbox, "lib", "a.rb"), "def ok(")
+
+      result = improver.send(:run_changed_ruby_syntax_check, sandbox, source)
+
+      expect(result[:success]).to be(false)
+    end
+  end
 end

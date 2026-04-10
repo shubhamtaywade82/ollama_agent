@@ -10,7 +10,7 @@ module OllamaAgent
     # Resolves executables and optional --version for registry entries.
     module Probe
       class << self
-        # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity
+        # rubocop:disable Metrics/AbcSize
         def resolve_executable(agent)
           env_key = agent["env_path"]
           if env_key && EnvHelpers.env_present?(env_key)
@@ -26,7 +26,7 @@ module OllamaAgent
 
           nil
         end
-        # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity
+        # rubocop:enable Metrics/AbcSize
 
         # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
         def fetch_status(agent)

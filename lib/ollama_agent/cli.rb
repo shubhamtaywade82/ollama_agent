@@ -17,6 +17,8 @@ module OllamaAgent
     desc "ask [QUERY]", "Run a natural-language task (reads, search, patch)"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
     method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
+    method_option :read_only, type: :boolean, default: false, aliases: "-R",
+                              desc: "Read/search only (no edit_file, write_file, patches, or delegation)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches without confirmation"
     method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
@@ -44,7 +46,7 @@ module OllamaAgent
       if options[:interactive]
         start_interactive(agent)
       elsif query
-        agent.run(query)
+        run_single_shot_agent!(agent, query)
       else
         puts Console.error_line("Error: provide a QUERY or use --interactive")
         exit 1
@@ -54,6 +56,8 @@ module OllamaAgent
     desc "orchestrate [QUERY]", "Like ask, with tools to list/delegate to external CLI agents (Claude, Gemini, …)"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
     method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
+    method_option :read_only, type: :boolean, default: false, aliases: "-R",
+                              desc: "Read/search only (no edit_file, write_file, patches, or delegation)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches and run delegations without confirmation"
     method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
@@ -78,7 +82,7 @@ module OllamaAgent
       if options[:interactive]
         start_interactive(agent)
       elsif query
-        agent.run(query)
+        run_single_shot_agent!(agent, query)
       else
         puts Console.error_line("Error: provide a QUERY or use --interactive")
         exit 1
@@ -141,6 +145,11 @@ module OllamaAgent
                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
     method_option :context_summarize, type: :boolean, default: false,
                                       desc: "Summarize dropped context vs sliding window"
+    method_option :verify, type: :string,
+                           desc: "automated only: comma-separated checks after agent (default: rspec or " \
+                                 "OLLAMA_AGENT_IMPROVE_VERIFY). Steps: syntax, rubocop, rspec"
+    method_option :no_ruby_mastery, type: :boolean, default: false,
+                                    desc: "Skip prepending ruby_mastery static analysis (see OLLAMA_AGENT_RUBY_MASTERY)"
     def self_review
       dispatch_self_review_mode(SelfImprovement::Modes.normalize(options[:mode]))
     end
@@ -167,6 +176,11 @@ module OllamaAgent
                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
     method_option :context_summarize, type: :boolean, default: false,
                                       desc: "Summarize dropped context vs sliding window"
+    method_option :verify, type: :string,
+                           desc: "Comma-separated post-agent checks (default: rspec; env " \
+                                 "OLLAMA_AGENT_IMPROVE_VERIFY). Steps: syntax, rubocop, rspec"
+    method_option :no_ruby_mastery, type: :boolean, default: false,
+                                    desc: "Skip prepending ruby_mastery static analysis (see OLLAMA_AGENT_RUBY_MASTERY)"
     def improve
       ensure_improve_mode_only_automated!
       dispatch_self_review_mode("automated")
@@ -221,14 +235,16 @@ module OllamaAgent
         **skill_agent_options
       )
       attach_console_streamer(agent) if stream_enabled?
-      SelfImprovement::Analyzer.new(agent).run
+      preamble = ruby_mastery_preamble(resolved_root_for_self_review)
+      SelfImprovement::Analyzer.new(agent).run(preamble: preamble)
     end
     # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
 
     def run_mode_interactive
       agent = Agent.new(**interactive_agent_keywords)
       attach_console_streamer(agent) if stream_enabled?
-      SelfImprovement::Analyzer.new(agent).run(SelfImprovement::Analyzer::INTERACTIVE_PROMPT)
+      preamble = ruby_mastery_preamble(resolved_root_for_self_review)
+      SelfImprovement::Analyzer.new(agent).run(SelfImprovement::Analyzer::INTERACTIVE_PROMPT, preamble: preamble)
     end
 
     # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- context kwargs push over limit
@@ -259,6 +275,19 @@ module OllamaAgent
       File.expand_path(base)
     end
 
+    def ruby_mastery_enabled?
+      return false if options[:no_ruby_mastery]
+      return false if ENV.fetch("OLLAMA_AGENT_RUBY_MASTERY", "1") == "0"
+
+      true
+    end
+
+    def ruby_mastery_preamble(root)
+      return nil unless ruby_mastery_enabled?
+
+      SelfImprovement::RubyMasteryContext.markdown_section(root)
+    end
+
     # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- context kwargs push over limit
     def improve_run_options
       {
@@ -270,7 +299,10 @@ module OllamaAgent
         http_timeout: options[:timeout],
         think: options[:think],
         max_tokens: options[:max_tokens],
-        context_summarize: options[:context_summarize]
+        context_summarize: options[:context_summarize],
+        stream: stream_enabled?,
+        verify: options[:verify],
+        ruby_mastery: ruby_mastery_enabled?
       }.merge(skill_agent_options)
     end
     # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
@@ -286,7 +318,17 @@ module OllamaAgent
       puts "ollama_agent: tests passed in sandbox (#{root})"
       copied = result[:copied_to_source]
       report_improve_copied_files(copied, root)
-      puts "ollama_agent: no changed files to copy from sandbox" if options[:apply] && copied.empty?
+      report_improve_merge_outcome(copied, root)
+    end
+
+    def report_improve_merge_outcome(copied, root)
+      if options[:apply]
+        puts "ollama_agent: no changed files to copy from sandbox" if copied.empty?
+        return
+      end
+
+      puts "ollama_agent: sandbox was discarded — your project tree was not updated. " \
+           "Re-run with --apply to merge sandbox changes into #{root} after a green run."
     end
 
     def report_improve_copied_files(copied, root)
@@ -304,6 +346,7 @@ module OllamaAgent
       agent = Agent.new(
         model: options[:model],
         root: resolved_root_for_self_review,
+        read_only: options[:read_only],
         confirm_patches: !options[:yes],
         http_timeout: options[:timeout],
         think: options[:think],
@@ -341,6 +384,7 @@ module OllamaAgent
       agent = Agent.new(
         model: options[:model],
         root: resolved_root_for_self_review,
+        read_only: options[:read_only],
         confirm_patches: !options[:yes],
         http_timeout: options[:timeout],
         think: options[:think],
@@ -371,6 +415,17 @@ module OllamaAgent
 
     def attach_console_streamer(agent)
       Streaming::ConsoleStreamer.new.attach(agent.hooks)
+    end
+
+    def run_single_shot_agent!(agent, query)
+      agent.run(query)
+    rescue Ollama::Error, OllamaAgent::Error => e
+      warn Console.error_line("#{e.class}: #{e.message}")
+      exit 1
+    rescue StandardError => e
+      warn Console.error_line("#{e.class}: #{e.message}")
+      warn e.full_message(order: :top, highlight: false) if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+      exit 1
     end
 
     def start_interactive(agent)

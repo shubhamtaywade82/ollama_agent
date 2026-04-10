@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-require "open3"
-
 module OllamaAgent
-  # Resolves ripgrep / grep executables: explicit ENV paths first, then `command -v` (no shell).
+  # Resolves ripgrep / grep executables: explicit ENV paths first, then PATH scan (no `command` subprocess).
+  # PATH scan avoids Errno::ENOENT when /usr/bin is missing from PATH (some IDE/sandbox launches).
   module SearchBackend
     class << self
       def clear_cache!
@@ -49,26 +48,36 @@ module OllamaAgent
           return nil
         end
 
-        lookup_via_command_v(binary)
+        lookup_in_path(binary)
       end
 
-      # rubocop:disable Metrics/MethodLength -- small subprocess + realpath branch
-      def lookup_via_command_v(binary)
-        stdout, status = Open3.capture2("command", "-v", binary)
-        unless status.success?
-          debug_warn "text search backend #{binary.inspect} not found on PATH"
-          return nil
+      def lookup_in_path(binary)
+        ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).each do |dir|
+          next if dir.empty?
+
+          found = find_executable_in_dir(dir, binary)
+          return found if found
         end
-
-        path = stdout.to_s.strip.split("\n").first
-        return nil if path.nil? || path.empty?
-
-        real_executable(path)
-      rescue Errno::ENOENT, Errno::ELOOP, Errno::EACCES
-        debug_warn "could not resolve #{binary.inspect} (#{$ERROR_INFO.class})"
+        debug_warn "text search backend #{binary.inspect} not found on PATH"
         nil
       end
-      # rubocop:enable Metrics/MethodLength
+
+      def find_executable_in_dir(dir, binary)
+        candidate_names_for(binary).each do |name|
+          candidate = File.join(dir, name)
+          next unless File.file?(candidate) && File.executable?(candidate)
+
+          resolved = real_executable(candidate)
+          return resolved if resolved
+        end
+        nil
+      end
+
+      def candidate_names_for(binary)
+        names = [binary]
+        names << "#{binary}.exe" if Gem.win_platform?
+        names
+      end
 
       def real_executable(path)
         File.realpath(path)
