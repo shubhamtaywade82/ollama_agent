@@ -6,6 +6,8 @@ require "pathname"
 
 require_relative "../agent"
 require_relative "../patch_risk"
+require_relative "ruby_mastery_context"
+require_relative "../streaming/console_streamer"
 
 module OllamaAgent
   module SelfImprovement
@@ -18,55 +20,187 @@ module OllamaAgent
       # Basenames never merged back from the sandbox (test runs create these; they are gitignored).
       MERGE_SKIP_BASENAMES = %w[.rspec_status].freeze
 
+      VERIFY_STEPS = %w[syntax rubocop rspec].freeze
+
       FIX_PROMPT = <<~PROMPT
         You are improving the ollama_agent Ruby gem in this temporary sandbox copy.
+        The user message may begin with "## Static analysis (ruby_mastery)" from tooling; confirm against the sandbox.
         Use list_files, search_code, and read_file to understand the code, then edit_file with valid unified diffs.
         Prefer small, reviewable changes: fixes, tests, docs, and clarity.
+        Scan for TODO/FIXME/HACK comments and prioritize sensible cleanups when they are low-risk.
         Minimal diffs only: fewest lines per edit_file, exact @@ counts—no whole-method or mega-hunks.
         Do not delete Gemfile, Gemfile.lock, the gemspec, or exe/; the improve run restores those from the source
         tree before tests, but deleting them breaks the session.
         Do not add or rely on .rspec_status or other ignored test-artifact files; RSpec may create them during the test step.
+        After this session, the runner verifies the sandbox (configured steps such as ruby -c on changed .rb files,
+        optional RuboCop, then bundle exec rspec spec/)—keep edits syntactically valid and test-friendly.
 
         When finished, summarize what you changed in plain language.
       PROMPT
 
       # rubocop:disable Metrics/ParameterLists -- mirrors CLI; keeps call sites explicit
-      # rubocop:disable Metrics/MethodLength
-      def run(model: nil, root: nil, yes: false, semi: true, apply: false, http_timeout: nil, think: nil, client: nil)
+      # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- single orchestration entrypoint
+      def run(model: nil, root: nil, yes: false, semi: true, apply: false, http_timeout: nil, think: nil, client: nil,
+              skill_paths: nil, skills_enabled: nil, skills_include: nil, skills_exclude: nil,
+              external_skills_enabled: nil,
+              max_tokens: nil, context_summarize: nil,
+              stream: false,
+              verify: nil,
+              ruby_mastery: true)
         source_root = resolve_source_root(root)
         sandbox_root = Dir.mktmpdir("ollama_agent_improve_")
         policy = semi ? PatchRisk.method(:assess).to_proc : nil
+        verify_steps = normalize_verify_steps(verify)
 
         begin
           copy_project_into_sandbox(source_root, sandbox_root)
           run_agent_session(
             sandbox_root,
+            source_root: source_root,
+            ruby_mastery: ruby_mastery,
+            stream: stream,
             client: client,
             model: model,
             confirm_patches: !yes,
             patch_policy: policy,
             http_timeout: http_timeout,
-            think: think
+            think: think,
+            max_tokens: max_tokens,
+            context_summarize: context_summarize,
+            skill_paths: skill_paths,
+            skills_enabled: skills_enabled,
+            skills_include: skills_include,
+            skills_exclude: skills_exclude,
+            external_skills_enabled: external_skills_enabled
           )
           restore_build_essentials_from_source(source_root, sandbox_root)
           missing = missing_gemfile_failure(source_root, sandbox_root)
           return build_run_result(missing, [], source_root) if missing
 
-          test_result = run_test_suite(sandbox_root)
+          test_result = run_test_suite(sandbox_root, source_root, verify_steps)
           copied = copy_back_if_requested(test_result, apply, sandbox_root, source_root)
           build_run_result(test_result, copied, source_root)
         ensure
           FileUtils.remove_entry(sandbox_root) if sandbox_root && Dir.exist?(sandbox_root)
         end
       end
-      # rubocop:enable Metrics/MethodLength
+      # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
       # rubocop:enable Metrics/ParameterLists
 
       private
 
-      def run_agent_session(sandbox_root, **)
-        agent = Agent.new(root: sandbox_root, **)
-        agent.run(FIX_PROMPT)
+      def run_agent_session(sandbox_root, source_root:, ruby_mastery: true, **kwargs)
+        stream = kwargs.delete(:stream) { false }
+        agent = Agent.new(root: sandbox_root, **kwargs)
+        Streaming::ConsoleStreamer.new.attach(agent.hooks) if stream
+        agent.run(improve_user_prompt(source_root, ruby_mastery))
+      end
+
+      def improve_user_prompt(source_root, use_ruby_mastery)
+        return FIX_PROMPT unless use_ruby_mastery
+
+        preamble = RubyMasteryContext.markdown_section(source_root).to_s.strip
+        return FIX_PROMPT if preamble.empty?
+
+        "#{preamble}\n\n#{FIX_PROMPT}"
+      end
+
+      def normalize_verify_steps(verify_param)
+        tokens = split_verify_tokens(resolve_verify_raw(verify_param))
+        warn_unknown_verify_tokens(tokens)
+        ordered = VERIFY_STEPS.select { |step| tokens.include?(step) }
+        return ["rspec"] if ordered.empty?
+
+        ordered
+      end
+
+      def resolve_verify_raw(verify_param)
+        raw = verify_param.to_s.strip
+        return ENV.fetch("OLLAMA_AGENT_IMPROVE_VERIFY", "rspec") if raw.empty?
+
+        raw
+      end
+
+      def split_verify_tokens(raw)
+        raw.split(",").map { |s| s.strip.downcase }.reject(&:empty?)
+      end
+
+      def warn_unknown_verify_tokens(tokens)
+        tokens.each do |t|
+          next if VERIFY_STEPS.include?(t)
+
+          warn "ollama_agent improve: unknown verify step #{t.inspect} (ignored)"
+        end
+      end
+
+      def run_test_suite(sandbox_root, source_root, verify_steps)
+        segments = []
+        verify_steps.each do |step|
+          seg = run_verify_step(step, sandbox_root, source_root)
+          segments << seg[:label_output]
+          return verification_failure(segments) unless seg[:success]
+        end
+        { success: true, output: segments.join("\n\n") }
+      end
+
+      def run_verify_step(step, sandbox_root, source_root)
+        label_result = verify_step_pair(step, sandbox_root, source_root)
+        label, result = label_result
+        return { success: true, label_output: "" } unless label
+
+        { success: result[:success], label_output: "#{label}#{result[:output]}" }
+      end
+
+      def verify_step_pair(step, sandbox_root, source_root)
+        case step
+        when "syntax"
+          ["=== syntax (ruby -c) ===\n", run_changed_ruby_syntax_check(sandbox_root, source_root)]
+        when "rubocop"
+          ["=== rubocop ===\n", run_bundle_tool(sandbox_root, "rubocop")]
+        when "rspec"
+          ["=== rspec ===\n", run_bundle_rspec(sandbox_root)]
+        else
+          [nil, nil]
+        end
+      end
+
+      def verification_failure(segments)
+        { success: false, output: segments.join("\n\n") }
+      end
+
+      def run_changed_ruby_syntax_check(sandbox_root, source_root)
+        outs = []
+        each_changed_ruby_file(sandbox_root, source_root) do |rel|
+          abs = File.join(sandbox_root, rel)
+          out, status = Open3.capture2e("ruby", "-c", abs)
+          outs << out.to_s.strip
+          return { success: false, output: outs.join("\n") } unless status.success?
+        end
+        { success: true, output: outs.empty? ? "(no changed .rb files)" : outs.join("\n") }
+      end
+
+      def each_changed_ruby_file(sandbox_root, source_root)
+        each_relative_file(sandbox_root) do |rel|
+          next unless rel.end_with?(".rb")
+
+          yield rel if file_differs?(File.join(sandbox_root, rel), File.join(source_root, rel))
+        end
+      end
+
+      def run_bundle_rspec(dir)
+        run_bundle_tool(dir, "rspec", "spec/")
+      end
+
+      def run_bundle_tool(dir, tool, *)
+        output, status = bundle_exec(dir, tool, *)
+        return { success: true, output: output } if status.success?
+
+        install_out, install_status = bundle_install(dir)
+        combined = "#{install_out}\n#{output}"
+        return { success: false, output: combined } unless install_status.success?
+
+        output2, status2 = bundle_exec(dir, tool, *)
+        { success: status2.success?, output: "#{combined}\n#{output2}" }
       end
 
       def copy_back_if_requested(test_result, apply, sandbox_root, source_root)
@@ -150,18 +284,6 @@ module OllamaAgent
         Dir.glob(File.join(source, "*.gemspec")).each do |src|
           FileUtils.cp(src, File.join(sandbox, File.basename(src)))
         end
-      end
-
-      def run_test_suite(dir)
-        output, status = bundle_exec(dir, "rspec", "spec/")
-        return { success: true, output: output } if status.success?
-
-        install_out, install_status = bundle_install(dir)
-        combined = "#{install_out}\n#{output}"
-        return { success: false, output: combined } unless install_status.success?
-
-        output2, status2 = bundle_exec(dir, "rspec", "spec/")
-        { success: status2.success?, output: "#{combined}\n#{output2}" }
       end
 
       def bundle_env(dir)

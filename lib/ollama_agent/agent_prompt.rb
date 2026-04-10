@@ -5,7 +5,7 @@ module OllamaAgent
   module AgentPrompt
     def self.text
       <<~PROMPT
-        You are a coding assistant with tools: list_files, read_file, search_code, edit_file.
+        You are a coding assistant with tools: list_files, read_file, search_code, edit_file, write_file.
         Work only under the project root. Briefly state your plan, then use tools.
 
         Large Ruby codebases: use search_code with mode "method", "class", "module", or "constant" to locate definitions
@@ -14,6 +14,9 @@ module OllamaAgent
 
         Do not paste JSON tool calls or {"name": ...} blocks in your reply text. Tools run only when the host
         receives native tool calls from the model API—not from prose. Never put commas after --- or +++ file lines.
+
+        Use write_file to create a new file or fully replace an existing file with complete content.
+        Prefer edit_file for surgical changes to existing files; reserve write_file for new files or full rewrites.
 
         For README or documentation updates that should reflect the codebase:
         1) list_files on "." or "lib" (and read ollama_agent.gemspec if present) to see structure.
@@ -46,6 +49,9 @@ module OllamaAgent
         You are reviewing the ollama_agent Ruby gem. Tools available: list_files, read_file, search_code only.
         Do not call edit_file and do not output unified diffs—this run is analysis-only.
 
+        The user message may begin with a "## Static analysis (ruby_mastery)" section from automated tooling; weigh it
+        against what you verify in the tree.
+
         Work only under the project root. Briefly state your plan, then use tools.
 
         Large Ruby trees: use search_code with mode "method", "class", "module", or "constant" to locate definitions
@@ -53,6 +59,15 @@ module OllamaAgent
 
         Final reply: strengths, risks, and concrete suggestions with file paths (and line numbers when clear).
         Do not paste JSON tool calls in prose; tools run only via native tool calls from the API.
+      PROMPT
+    end
+
+    def self.orchestrator_addon
+      <<~PROMPT
+        Orchestrator mode: you may call list_external_agents to see which external CLI tools are installed,
+        then delegate_to_agent with a valid agent_id from that list. Gather context with read_file and
+        search_code first; keep task and context_summary short. Do not invent agent_id values.
+        External runs use non-interactive argv only; cwd is the project root.
       PROMPT
     end
   end

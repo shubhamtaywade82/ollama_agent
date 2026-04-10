@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
-module OllamaAgent
+# Tool JSON schemas for Ollama /api/chat (base + optional orchestrator tools).
+module OllamaAgent # rubocop:disable Metrics/ModuleLength -- schema tables; splitting would scatter definitions
   # JSON tool definitions passed to Ollama /api/chat.
   TOOLS = [
     {
@@ -73,8 +74,78 @@ module OllamaAgent
           required: %w[path diff]
         }
       }
+    },
+    {
+      type: "function",
+      function: {
+        name: "write_file",
+        description: "Create or overwrite a file under the project root with full UTF-8 content. " \
+                     "Use for new files or complete rewrites. Prefer edit_file for surgical changes.",
+        parameters: {
+          type: "object",
+          properties: {
+            path: { type: "string", description: "File path relative to project root" },
+            content: { type: "string", description: "Full file content to write" }
+          },
+          required: %w[path content]
+        }
+      }
     }
   ].freeze
 
-  READ_ONLY_TOOLS = TOOLS.reject { |t| t.dig(:function, :name) == "edit_file" }.freeze
+  READ_ONLY_TOOLS = TOOLS.reject { |t| %w[edit_file write_file].include?(t.dig(:function, :name)) }.freeze
+
+  ORCHESTRATOR_LIST_TOOL = {
+    type: "function",
+    function: {
+      name: "list_external_agents",
+      description: "List configured external CLI agents (Claude, Gemini, Codex, Cursor, etc.): availability, " \
+                   "path, version, capabilities. Call before delegate_to_agent to choose an agent_id.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: []
+      }
+    }
+  }.freeze
+
+  ORCHESTRATOR_DELEGATE_TOOL = {
+    type: "function",
+    function: {
+      name: "delegate_to_agent",
+      description: "Run a task via an external CLI agent (non-interactive argv only). Use after " \
+                   "list_external_agents; pass a concise task and context_summary; prefer exploring the repo " \
+                   "with read_file/search_code first to save tokens.",
+      parameters: {
+        type: "object",
+        properties: {
+          agent_id: { type: "string", description: "Registry id (e.g. claude_cli, gemini_cli)" },
+          task: { type: "string", description: "What the external agent should do" },
+          context_summary: { type: "string", description: "Short context from your own exploration" },
+          paths: {
+            type: "array",
+            items: { type: "string" },
+            description: "Optional relative paths under project root to mention in the handoff"
+          },
+          timeout_seconds: {
+            type: "integer",
+            description: "Optional timeout (defaults from registry or 600)"
+          }
+        },
+        required: %w[agent_id task]
+      }
+    }
+  }.freeze
+
+  ORCHESTRATOR_TOOLS = [ORCHESTRATOR_LIST_TOOL, ORCHESTRATOR_DELEGATE_TOOL].freeze
+  ORCHESTRATOR_READ_ONLY_TOOLS = [ORCHESTRATOR_LIST_TOOL].freeze
+  ORCHESTRATOR_TOOLS_SCHEMA_VERSION = "1"
+
+  def self.tools_for(read_only:, orchestrator:)
+    base = read_only ? READ_ONLY_TOOLS : TOOLS
+    base += OllamaAgent::Tools::Registry.custom_schemas
+    return base unless orchestrator
+
+    base + (read_only ? ORCHESTRATOR_READ_ONLY_TOOLS : ORCHESTRATOR_TOOLS)
+  end
 end

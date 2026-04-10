@@ -12,7 +12,8 @@ module OllamaAgent
       inner = h["parameters"] || h[:parameters]
       return h unless inner.is_a?(Hash)
 
-      outer = h.except("parameters", :parameters)
+      # Drop nested parameters in one pass whether the key is String or Symbol.
+      outer = h.reject { |k, _| k.to_s == "parameters" }
       merge_parameters_with_outer(inner, outer)
     end
 
@@ -21,7 +22,7 @@ module OllamaAgent
         if inner_val.is_a?(Hash) && outer_val.is_a?(Hash)
           merge_parameters_with_outer(inner_val, outer_val)
         else
-          outer_val
+          inner_val
         end
       end
     end

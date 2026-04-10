@@ -1,4 +1,114 @@
 module OllamaAgent
   VERSION: String
-  # See the writing guide of rbs: https://github.com/ruby/rbs#guides
+
+  class Error < StandardError
+  end
+
+  class ConfigurationError < Error
+  end
+
+  module EnvConfig
+    def self.strict_env?: () -> bool
+    def self.warn_invalid: (String name, untyped raw, untyped fallback) -> void
+    def self.fetch_int: (String name, Integer default, ?strict: bool) -> Integer
+    def self.fetch_float: (String name, Float default, ?strict: bool) -> Float
+  end
+
+  module PathSandbox
+    def self.allowed?: (String root_abs, String root_real, String? user_path) -> bool
+    def self.lexically_under_root_abs?: (String expanded_abs, String root_abs) -> bool
+    def self.candidate_under_root?: (String expanded_abs, String root_real, String root_abs) -> bool
+    def self.under_root_real?: (String path_real, String root_real) -> bool
+    def self.nonexistent_path_allowed_under_root?: (String expanded_abs, String root_real, String root_abs) -> bool
+  end
+
+  module SearchBackend
+    def self.clear_cache!: () -> void
+    def self.rg_executable: () -> String?
+    def self.grep_executable: () -> String?
+  end
+
+  class Agent
+    attr_reader client: untyped
+    attr_reader root: String
+    attr_reader hooks: Streaming::Hooks
+
+    def initialize: (?client: untyped, ?config: AgentConfig?, **untyped) -> void
+    def run: (String query) -> void
+
+    class AgentConfig
+      attr_reader model: String?
+      attr_reader root: String?
+      attr_reader confirm_patches: bool
+      attr_reader read_only: bool
+      attr_reader orchestrator: bool
+      attr_reader stdin: IO
+      attr_reader stdout: IO
+
+      def initialize: (**untyped) -> void
+      def resolved_confirm_delegation: () -> bool
+    end
+  end
+
+  class Runner
+    def self.build: (**untyped) -> Runner
+    def run: (String query) -> void
+    def hooks: () -> Streaming::Hooks
+  end
+
+  module Streaming
+    class Hooks
+      EVENTS: Array[Symbol]
+      MISSING_BLOCK_MESSAGE: String
+
+      def initialize: () -> void
+      def on: (Symbol event) { (untyped payload) -> void } -> void
+      def emit: (Symbol event, untyped payload) -> void
+      def subscribed?: (Symbol event) -> bool
+    end
+  end
+
+  module Resilience
+    class RetryPolicy
+      DEFAULT_MAX_ATTEMPTS: Integer
+      DEFAULT_BASE_DELAY: Float
+      RETRYABLE: Array[singleton(Class)]
+
+      attr_reader max_attempts: Integer
+      attr_reader base_delay: Float
+
+      def initialize: (?max_attempts: Integer, ?base_delay: Float) -> void
+      def retryable_http_error?: (StandardError error) -> bool
+      def backoff: (Integer attempt) -> Float
+    end
+
+    class RetryMiddleware
+      def initialize: (client: untyped, ?max_attempts: Integer, ?hooks: Streaming::Hooks?, ?base_delay: Float) -> void
+      def chat: (**untyped) -> untyped
+    end
+  end
+
+  module ToolRuntime
+    module PlanExtractor
+    end
+
+    class Loop
+      attr_reader max_steps: Integer
+      attr_reader plan_extractor: untyped
+
+      def planner: () -> untyped
+
+      def initialize: (
+        ?plan_extractor: untyped,
+        ?planner: untyped,
+        registry: Registry,
+        executor: Executor,
+        memory: Memory,
+        ?logger: untyped,
+        ?max_steps: Integer
+      ) -> void
+
+      def run: (context: untyped) -> untyped
+    end
+  end
 end

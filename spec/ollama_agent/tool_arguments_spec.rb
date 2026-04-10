@@ -21,5 +21,26 @@ RSpec.describe "OllamaAgent::ToolArguments" do
       expect(merged["meta"]).to eq({ "a" => 1, "b" => 2 })
       expect(merged["path"]).to eq("x")
     end
+
+    it "does not leave a top-level parameters key in the merged hash" do
+      args = { "parameters" => { "path" => "inner.txt" }, "path" => "outer.txt" }
+      merged = agent.send(:coerce_tool_arguments, args)
+      expect(merged).not_to have_key("parameters")
+      expect(merged).not_to have_key(:parameters)
+    end
+
+    it "treats nested parameters as higher precedence than duplicate top-level keys" do
+      args = { "parameters" => { "path" => "inner.txt" }, "path" => "outer.txt" }
+      merged = agent.send(:coerce_tool_arguments, args)
+      expect(merged["path"]).to eq("inner.txt")
+    end
+
+    context "when parameters are keyed with a symbol" do
+      it "merges the nested hash and strips the key" do
+        args = { parameters: { "x" => 1 }, "y" => 2 }
+        merged = agent.send(:coerce_tool_arguments, args)
+        expect(merged).to eq({ "x" => 1, "y" => 2 })
+      end
+    end
   end
 end
