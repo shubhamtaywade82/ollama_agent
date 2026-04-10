@@ -1,5 +1,21 @@
 ## [Unreleased]
 
+## [0.3.0] - 2026-04-06
+
+### Added
+- `ToolRuntime` — JSON plan loop for custom tools (`OllamaJsonPlanner`, registry, executor); see `docs/TOOL_RUNTIME.md`
+- Optional **ruby_mastery** context for `self_review` / `improve` (`OLLAMA_AGENT_RUBY_MASTERY`, `--no-ruby-mastery`)
+- `OllamaAgent::ModelEnv` — shared model name resolution from environment
+- `OllamaAgent::GlobalDotenv` — load repo-root `.env` after `ollama_client` so CLI picks up `OLLAMA_AGENT_*` without extra exports
+- Self-improvement automated mode: `--verify` (`syntax`, `rubocop`, `rspec`), `OLLAMA_AGENT_IMPROVE_VERIFY`, `--stream`, and a success message when `--apply` was not used
+- External agents / argv expansion and related orchestration refinements
+
+### Changed
+- `SearchBackend` finds `rg` / `grep` by scanning `PATH` (avoids relying on a `command` executable on trimmed `PATH`)
+
+### Fixed
+- `SelfImprovement::Improver#run` accepts `max_tokens` and `context_summarize` from the CLI (Ruby 3 keyword compatibility)
+
 ## [0.2.0] - 2026-03-26
 
 ### Added
