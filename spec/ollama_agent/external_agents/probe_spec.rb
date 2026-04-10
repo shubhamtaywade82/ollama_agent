@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "spec_helper"
+require "fileutils"
 require "securerandom"
 
 RSpec.describe OllamaAgent::ExternalAgents::Probe do
@@ -17,6 +18,25 @@ RSpec.describe OllamaAgent::ExternalAgents::Probe do
 
     it "returns nil when binary name is empty" do
       expect(described_class.resolve_executable({ "id" => "x", "binary" => "" })).to be_nil
+    end
+
+    it "falls back to PATH walk when external command helper is missing (ENOENT)" do
+      bindir = nil
+      previous = ENV["PATH"]
+      begin
+        bindir = File.join(Dir.tmpdir, "probe_bin_#{SecureRandom.hex(4)}")
+        FileUtils.mkdir_p(bindir)
+        stub_exe = File.join(bindir, "probe_shim_exe")
+        File.write(stub_exe, "#!/bin/sh\necho ok\n")
+        File.chmod(0o755, stub_exe)
+        allow(Open3).to receive(:capture2).with("command", "-v", "probe_shim_exe").and_raise(Errno::ENOENT)
+        ENV["PATH"] = "#{bindir}#{File::PATH_SEPARATOR}#{ENV['PATH']}"
+        agent = { "id" => "shim", "binary" => "probe_shim_exe" }
+        expect(described_class.resolve_executable(agent)).to eq(stub_exe)
+      ensure
+        ENV["PATH"] = previous
+        FileUtils.rm_rf(bindir) if bindir && File.directory?(bindir)
+      end
     end
   end
 

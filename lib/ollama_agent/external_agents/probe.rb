@@ -21,10 +21,10 @@ module OllamaAgent
           name = agent["binary"].to_s
           return nil if name.empty?
 
-          out, status = Open3.capture2("command", "-v", name)
-          return out.strip if status.success? && !out.to_s.strip.empty?
+          resolved = resolve_via_command_v(name)
+          return resolved if resolved
 
-          nil
+          resolve_via_path_walk(name)
         end
         # rubocop:enable Metrics/AbcSize
 
@@ -112,6 +112,26 @@ module OllamaAgent
         end
 
         private
+
+        # POSIX `command -v` when /usr/bin/command exists; rescues ENOENT when `command` is shell-only.
+        def resolve_via_command_v(name)
+          out, status = Open3.capture2("command", "-v", name)
+          return out.strip if status.success? && !out.to_s.strip.empty?
+
+          nil
+        rescue Errno::ENOENT
+          nil
+        end
+
+        def resolve_via_path_walk(name)
+          ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).each do |dir|
+            next if dir.empty?
+
+            abs = File.join(dir, name)
+            return abs if File.file?(abs) && File.executable?(abs)
+          end
+          nil
+        end
 
         def status_cache
           @status_cache ||= {}
