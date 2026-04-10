@@ -15,6 +15,7 @@ require_relative "resilience/audit_logger"
 require_relative "context/manager"
 require_relative "session/store"
 require_relative "env_config"
+require_relative "model_env"
 require_relative "agent/agent_config"
 require_relative "agent/client_wiring"
 require_relative "agent/prompt_wiring"
@@ -213,7 +214,7 @@ module OllamaAgent
     end
 
     def default_model
-      ENV["OLLAMA_AGENT_MODEL"] || Ollama::Config.new.model
+      ModelEnv.default_chat_model
     end
   end
   # rubocop:enable Metrics/ClassLength
