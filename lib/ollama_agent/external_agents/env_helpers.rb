@@ -12,7 +12,7 @@ module OllamaAgent
           !v.to_s.strip.empty?
         end
 
-        def env_bool(key, default: false)
+        def env_bool?(key, default: false)
           ENV.fetch(key, default ? "1" : "0").to_s == "1"
         end
 

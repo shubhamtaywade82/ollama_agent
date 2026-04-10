@@ -13,6 +13,8 @@ gem "rake", "~> 13.0"
 gem "rspec", "~> 3.0"
 
 gem "rubocop", "~> 1.21"
+# parallel 2.x requires Ruby >= 3.3; CI still tests 3.2.x per gemspec.
+gem "parallel", "< 2"
 gem "rubocop-rake", require: false
 gem "rubocop-rspec", require: false
 

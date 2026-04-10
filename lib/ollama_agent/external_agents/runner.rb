@@ -14,7 +14,6 @@ require_relative "path_validator"
 module OllamaAgent
   module ExternalAgents
     # Runs external CLIs with cwd = project root; argv only (no shell).
-    # rubocop:disable Metrics/ModuleLength
     module Runner
       DEFAULT_MAX_OUTPUT = 100_000
 
@@ -26,7 +25,10 @@ module OllamaAgent
           paths = Array(paths).compact.map(&:to_s)
           PathValidator.validate_within_root!(root, paths)
 
-          max_b = max_output_bytes || EnvHelpers.env_positive_int("OLLAMA_AGENT_DELEGATE_MAX_OUTPUT_BYTES", DEFAULT_MAX_OUTPUT)
+          max_b = max_output_bytes || EnvHelpers.env_positive_int(
+            "OLLAMA_AGENT_DELEGATE_MAX_OUTPUT_BYTES",
+            DEFAULT_MAX_OUTPUT
+          )
 
           handoff = build_handoff(task, context_summary, paths)
           task_path = write_handoff(root, handoff)
@@ -69,7 +71,10 @@ module OllamaAgent
           parts = []
           parts << "Task:\n#{task.to_s.strip}"
           parts << "\nContext:\n#{context_summary.to_s.strip}" unless context_summary.to_s.strip.empty?
-          parts << "\nRelevant paths (under project root):\n#{paths.map { |p| "- #{p}" }.join("\n")}" unless paths.empty?
+          unless paths.empty?
+            path_lines = paths.map { |p| "- #{p}" }.join("\n")
+            parts << "\nRelevant paths (under project root):\n#{path_lines}"
+          end
           parts.join("\n")
         end
 
@@ -109,6 +114,5 @@ module OllamaAgent
         end
       end
     end
-    # rubocop:enable Metrics/ModuleLength
   end
 end

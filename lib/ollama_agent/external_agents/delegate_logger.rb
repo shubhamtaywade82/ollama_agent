@@ -18,12 +18,12 @@ module OllamaAgent
         end
 
         def debug(message)
-          warn("ollama_agent: #{message}") if EnvHelpers.env_bool("OLLAMA_AGENT_DEBUG", default: false)
+          warn("ollama_agent: #{message}") if EnvHelpers.env_bool?("OLLAMA_AGENT_DEBUG", default: false)
         end
 
         def delegate_log_enabled?
-          EnvHelpers.env_bool("OLLAMA_AGENT_DELEGATE_LOG", default: false) ||
-            EnvHelpers.env_bool("OLLAMA_AGENT_DEBUG", default: false)
+          EnvHelpers.env_bool?("OLLAMA_AGENT_DELEGATE_LOG", default: false) ||
+            EnvHelpers.env_bool?("OLLAMA_AGENT_DEBUG", default: false)
         end
       end
     end
