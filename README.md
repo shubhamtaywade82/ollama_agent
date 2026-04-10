@@ -80,9 +80,13 @@ bundle exec ruby exe/ollama_agent self_review --mode analysis
 bundle exec ruby exe/ollama_agent self_review --mode interactive
 
 # Mode 3 — sandbox + tests + optional merge back (same as `improve`)
+# Without --apply, edits stay in a temp dir only; pass --apply to copy changed files into your checkout.
 bundle exec ruby exe/ollama_agent self_review --mode automated
+bundle exec ruby exe/ollama_agent self_review --mode automated --apply
 bundle exec ruby exe/ollama_agent improve --apply
 ```
+
+**`ruby_mastery` (optional):** When the [`ruby_mastery`](https://github.com/shubhamtaywade82/ruby_mastery) gem is installed (this repo lists it in the `Gemfile` for development), **`self_review`** (all modes) and **`improve`** prepend a **markdown static-analysis** section to the user prompt. Add the same gem to your app’s `Gemfile` if you want that behavior outside this checkout. Disable with **`--no-ruby-mastery`** or **`OLLAMA_AGENT_RUBY_MASTERY=0`**. Limit size with **`OLLAMA_AGENT_RUBY_MASTERY_MAX_CHARS`** (default `60000`).
 
 For mode 3, `-y` skips all patch prompts; `--no-semi` prompts for every patch when not using `-y`.
 
@@ -140,8 +144,8 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_AGENT_RUBY_INDEX_MAX_LINES` | Max result lines for `search_code` class/module/method modes (default **200**) |
 | `OLLAMA_AGENT_RUBY_INDEX_MAX_CHARS` | Max characters of index output per search (default **60000**) |
 | `OLLAMA_AGENT_MAX_READ_FILE_BYTES` | Max bytes for a **full** `read_file` (no line range); larger files return an error (default **2097152**, 2 MiB). Line-range reads stream and are not limited by this cap. |
-| `OLLAMA_AGENT_RG_PATH` | Absolute path to `rg` for `search_code` text mode (optional; otherwise resolved via `command -v rg`) |
-| `OLLAMA_AGENT_GREP_PATH` | Absolute path to `grep` fallback (optional; otherwise `command -v grep`) |
+| `OLLAMA_AGENT_RG_PATH` | Absolute path to `rg` for `search_code` text mode (optional; otherwise first `rg` on `PATH`) |
+| `OLLAMA_AGENT_GREP_PATH` | Absolute path to `grep` fallback (optional; otherwise first `grep` on `PATH`) |
 | `OLLAMA_AGENT_INDEX_REBUILD` | The Prism index is rebuilt when this env value **changes** (e.g. unset → `1`); it is **not** rebuilt on every tool call while it stays `1`. |
 | `OLLAMA_AGENT_SKILLS` | `1`/`on`/`0`/`off` — include **bundled** prompt skills (default **on**). Same as `--no-skills` on the CLI when off. |
 | `OLLAMA_AGENT_SKILLS_INCLUDE` | Comma-separated **manifest ids** to load (omit = all bundled). Example: `ruby_style,rubocop,code_review`. |

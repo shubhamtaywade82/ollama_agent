@@ -1,3 +1,13 @@
+GIT
+  remote: https://github.com/shubhamtaywade82/ruby_mastery.git
+  revision: 412eb2b2dbf7cf330ca93803ca41bc9343d66eca
+  specs:
+    ruby_mastery (0.1.0)
+      parser (~> 3.0)
+      terminal-table (~> 3.0)
+      thor (~> 1.0)
+      unparser (~> 0.6)
+
 PATH
   remote: .
   specs:
@@ -104,6 +114,8 @@ GEM
       unicode-display_width (>= 1.5, < 3.0)
       unicode_utils (~> 1.4)
     strings-ansi (0.2.0)
+    terminal-table (3.0.2)
+      unicode-display_width (>= 1.1.1, < 3)
     thor (1.5.0)
     tsort (0.2.0)
     tty-color (0.6.0)
@@ -117,6 +129,10 @@ GEM
     tty-screen (0.8.2)
     unicode-display_width (2.6.0)
     unicode_utils (1.4.0)
+    unparser (0.9.0)
+      diff-lcs (>= 1.6, < 3)
+      parser (>= 3.3.0)
+      prism (>= 1.5.1)
 
 PLATFORMS
   ruby
@@ -131,6 +147,7 @@ DEPENDENCIES
   rubocop (~> 1.21)
   rubocop-rake
   rubocop-rspec
+  ruby_mastery!
 
 CHECKSUMS
   addressable (2.8.9) sha256=cc154fcbe689711808a43601dee7b980238ce54368d23e127421753e46895485
@@ -176,9 +193,11 @@ CHECKSUMS
   rubocop-rake (0.7.1) sha256=3797f2b6810c3e9df7376c26d5f44f3475eda59eb1adc38e6f62ecf027cbae4d
   rubocop-rspec (3.9.0) sha256=8fa70a3619408237d789aeecfb9beef40576acc855173e60939d63332fdb55e2
   ruby-progressbar (1.13.0) sha256=80fc9c47a9b640d6834e0dc7b3c94c9df37f08cb072b7761e4a71e22cff29b33
+  ruby_mastery (0.1.0)
   stringio (3.2.0) sha256=c37cb2e58b4ffbd33fe5cd948c05934af997b36e0b6ca6fdf43afa234cf222e1
   strings (0.2.1) sha256=933293b3c95cf85b81eb44b3cf673e3087661ba739bbadfeadf442083158d6fb
   strings-ansi (0.2.0) sha256=90262d760ea4a94cc2ae8d58205277a343409c288cbe7c29416b1826bd511c88
+  terminal-table (3.0.2) sha256=f951b6af5f3e00203fb290a669e0a85c5dd5b051b3b023392ccfd67ba5abae91
   thor (1.5.0) sha256=e3a9e55fe857e44859ce104a84675ab6e8cd59c650a49106a05f55f136425e73
   tsort (0.2.0) sha256=9650a793f6859a43b6641671278f79cfead60ac714148aabe4e3f0060480089f
   tty-color (0.6.0) sha256=6f9c37ca3a4e2367fb2e6d09722762647d6f455c111f05b59f35730eeb24332a
@@ -186,6 +205,7 @@ CHECKSUMS
   tty-screen (0.8.2) sha256=c090652115beae764336c28802d633f204fb84da93c6a968aa5d8e319e819b50
   unicode-display_width (2.6.0) sha256=12279874bba6d5e4d2728cef814b19197dbb10d7a7837a869bab65da943b7f5a
   unicode_utils (1.4.0) sha256=b922d0cf2313b6b7136ada6645ce7154ffc86418ca07d53b058efe9eb72f2a40
+  unparser (0.9.0) sha256=4331f174a73a23b69250b13d47da3794ed1449711ee0f9ed8947dc020ba76067
 
 BUNDLED WITH
   4.0.6

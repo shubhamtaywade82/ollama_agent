@@ -15,3 +15,6 @@ gem "rspec", "~> 3.0"
 gem "rubocop", "~> 1.21"
 gem "rubocop-rake", require: false
 gem "rubocop-rspec", require: false
+
+# Optional static analysis context for self_review / improve (see README)
+gem "ruby_mastery", github: "shubhamtaywade82/ruby_mastery"
