@@ -126,7 +126,7 @@ GEM
     tty-screen (0.8.2)
     unicode-display_width (2.6.0)
     unicode_utils (1.4.0)
-    unparser (0.9.0)
+    unparser (0.8.2)
       diff-lcs (>= 1.6, < 3)
       parser (>= 3.3.0)
       prism (>= 1.5.1)
@@ -146,6 +146,7 @@ DEPENDENCIES
   rubocop-rake
   rubocop-rspec
   ruby_mastery!
+  unparser (>= 0.6, < 0.9)
 
 CHECKSUMS
   addressable (2.9.0) sha256=7fdf6ac3660f7f4e867a0838be3f6cf722ace541dd97767fa42bc6cfa980c7af
@@ -202,7 +203,7 @@ CHECKSUMS
   tty-screen (0.8.2) sha256=c090652115beae764336c28802d633f204fb84da93c6a968aa5d8e319e819b50
   unicode-display_width (2.6.0) sha256=12279874bba6d5e4d2728cef814b19197dbb10d7a7837a869bab65da943b7f5a
   unicode_utils (1.4.0) sha256=b922d0cf2313b6b7136ada6645ce7154ffc86418ca07d53b058efe9eb72f2a40
-  unparser (0.9.0) sha256=4331f174a73a23b69250b13d47da3794ed1449711ee0f9ed8947dc020ba76067
+  unparser (0.8.2) sha256=654af48a6cfa25baf145563e01f40c60ca7d5c7520ff506912d0bb2f1240fd00
 
 BUNDLED WITH
   4.0.6
