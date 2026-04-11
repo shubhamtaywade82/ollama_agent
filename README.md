@@ -1,6 +1,6 @@
 # ollama_agent
 
-Version: 0.3.0
+Version: 1.0.0
 
 Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollama.com) model. It exposes tools to **list files**, **read files**, **search the tree** (ripgrep or grep), and **apply unified diffs** so the model can make small, reviewable edits.
 
@@ -40,6 +40,16 @@ bundle install
 
 ## Usage
 
+**Default:** run the gem with **no subcommand** to open the **interactive TUI** (same as `ask` with no query):
+
+```bash
+ollama_agent
+# or from this repo:
+bundle exec ruby exe/ollama_agent
+```
+
+Other entry points are **opt-in**: pass a **subcommand** (`self_review`, `sessions`, …) or **`ask` / `orchestrate`** with a **query** for a one-shot task, or flags for a plain line REPL (see below).
+
 From the project you want the agent to modify (set the working directory accordingly):
 
 ```bash
@@ -63,10 +73,11 @@ Long-running models (slow local inference):
 bundle exec ruby exe/ollama_agent ask --timeout 300 "Your task"
 ```
 
-Interactive REPL:
+**Plain line REPL** (no TUI boxes / markdown shell): use **`ask` (or `orchestrate`) with `-i` and without `--tui`**—for example when you omit the query you must opt out of the default TUI this way:
 
 ```bash
 bundle exec ruby exe/ollama_agent ask --interactive
+# same idea: explicit -i, no --tui
 ```
 
 Self-review modes (default project root is the **current working directory** unless you set `--root` or `OLLAMA_AGENT_ROOT`):
@@ -271,7 +282,7 @@ Repository **secrets** (Settings → Secrets and variables → Actions):
 Release steps:
 
 1. Bump `OllamaAgent::VERSION` in `lib/ollama_agent/version.rb` and commit to `main`.
-2. Tag: `git tag v0.3.0` (must match the version string) and `git push origin v0.3.0`.
+2. Tag: `git tag v1.0.0` (must match the version string) and `git push origin v1.0.0`.
 
 ## License
 

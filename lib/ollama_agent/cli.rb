@@ -13,17 +13,20 @@ module OllamaAgent
   # Thor CLI for single-shot and interactive agent sessions.
   # rubocop:disable Metrics/ClassLength -- Thor commands and shared helpers
   class CLI < Thor
+    default_task :ask
+
     def self.exit_on_failure?
       true
     end
 
-    desc "ask [QUERY]", "Run a natural-language task (reads, search, patch)"
+    desc "ask [QUERY]", "Run a task, or interactive TUI when QUERY is omitted (default when no subcommand)"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
-    method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
+    method_option :interactive, type: :boolean, aliases: "-i",
+                                desc: "-i without --tui: line REPL; empty QUERY defaults to TUI"
     method_option :tui, type: :boolean, default: false,
-                         desc: "With --interactive: TTY toolkit UI (box, table, markdown, prompt)"
+                        desc: "TTY UI; on by default for empty QUERY unless line REPL (-i without --tui)"
     method_option :tui_god, type: :boolean, default: false,
-                          desc: "With --tui: auto-select first option in interactive lists (dangerous)"
+                            desc: "With --tui: auto-select first option in interactive lists (dangerous)"
     method_option :read_only, type: :boolean, default: false, aliases: "-R",
                               desc: "Read/search only (no edit_file, write_file, patches, or delegation)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches without confirmation"
@@ -55,31 +58,19 @@ module OllamaAgent
                           desc: "Enable structured trace logging (OLLAMA_AGENT_TRACE=1)"
     def ask(query = nil)
       load_plugins!
+      apply_session_interactive_tui_flags!(query)
       validate_tui_options!
-      if options[:interactive] && options[:tui]
-        start_tui_interactive { |up| build_agent(user_prompt: up, attach_stream: false) }
-        return
-      end
-
-      agent = build_agent
-
-      if options[:interactive]
-        start_interactive(agent)
-      elsif query
-        run_single_shot_agent!(agent, query)
-      else
-        puts Console.error_line("Error: provide a QUERY or use --interactive")
-        exit 1
-      end
+      run_ask!(query)
     end
 
-    desc "orchestrate [QUERY]", "Like ask, with tools to list/delegate to external CLI agents (Claude, Gemini, …)"
+    desc "orchestrate [QUERY]", "Like ask, plus delegate to external CLI agents (Claude, Gemini, …)"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
-    method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
+    method_option :interactive, type: :boolean, aliases: "-i",
+                                desc: "-i without --tui: line REPL; empty QUERY defaults to TUI"
     method_option :tui, type: :boolean, default: false,
-                         desc: "With --interactive: TTY toolkit UI (box, table, markdown, prompt)"
+                        desc: "TTY UI; on by default for empty QUERY unless line REPL (-i without --tui)"
     method_option :tui_god, type: :boolean, default: false,
-                          desc: "With --tui: auto-select first option in interactive lists (dangerous)"
+                            desc: "With --tui: auto-select first option in interactive lists (dangerous)"
     method_option :read_only, type: :boolean, default: false, aliases: "-R",
                               desc: "Read/search only (no edit_file, write_file, patches, or delegation)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches and run delegations without confirmation"
@@ -101,23 +92,10 @@ module OllamaAgent
     method_option :context_summarize, type: :boolean, default: false,
                                       desc: "Summarize dropped context vs sliding window"
     def orchestrate(query = nil)
+      load_plugins!
+      apply_session_interactive_tui_flags!(query)
       validate_tui_options!
-      if options[:interactive] && options[:tui]
-        load_plugins!
-        start_tui_interactive { |up| build_orchestrator_agent(user_prompt: up, attach_stream: false) }
-        return
-      end
-
-      agent = build_orchestrator_agent
-
-      if options[:interactive]
-        start_interactive(agent)
-      elsif query
-        run_single_shot_agent!(agent, query)
-      else
-        puts Console.error_line("Error: provide a QUERY or use --interactive")
-        exit 1
-      end
+      run_orchestrate!(query)
     end
 
     desc "sessions", "List saved sessions for the current project root"
@@ -218,6 +196,53 @@ module OllamaAgent
     end
 
     private
+
+    def run_ask!(query)
+      if session_tui?
+        start_tui_interactive { |up| build_agent(user_prompt: up, attach_stream: false) }
+        return
+      end
+
+      interactive_or_single_shot!(query) { build_agent }
+    end
+
+    def run_orchestrate!(query)
+      if session_tui?
+        start_tui_interactive { |up| build_orchestrator_agent(user_prompt: up, attach_stream: false) }
+        return
+      end
+
+      interactive_or_single_shot!(query) { build_orchestrator_agent }
+    end
+
+    def interactive_or_single_shot!(query)
+      agent = yield
+
+      if @session_interactive
+        start_interactive(agent)
+      elsif query
+        run_single_shot_agent!(agent, query)
+      else
+        puts Console.error_line("Error: provide a QUERY or use --interactive")
+        exit 1
+      end
+    end
+
+    # Thor 1.5+ freezes +options+ after parse; keep effective flags on the instance.
+    def apply_session_interactive_tui_flags!(query)
+      interactive = options[:interactive]
+      tui = options[:tui]
+      if query.to_s.strip.empty? && !(interactive && !tui)
+        interactive = true
+        tui = true
+      end
+      @session_interactive = interactive
+      @session_tui = tui
+    end
+
+    def session_tui?
+      @session_interactive && @session_tui
+    end
 
     def ensure_improve_mode_only_automated!
       m = SelfImprovement::Modes.normalize(options[:mode])
@@ -478,8 +503,8 @@ module OllamaAgent
     end
 
     def validate_tui_options!
-      return unless options[:tui]
-      return if options[:interactive]
+      return unless @session_tui
+      return if @session_interactive
 
       puts Console.error_line("Error: --tui requires --interactive (-i)")
       exit 1

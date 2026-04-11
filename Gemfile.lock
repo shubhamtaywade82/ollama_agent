@@ -11,7 +11,7 @@ GIT
 PATH
   remote: .
   specs:
-    ollama_agent (0.3.0)
+    ollama_agent (1.0.0)
       dotenv (~> 2.8)
       ollama-client (~> 1.1)
       pastel (~> 0.8)
@@ -190,7 +190,7 @@ CHECKSUMS
   language_server-protocol (3.17.0.5) sha256=fd1e39a51a28bf3eec959379985a72e296e9f9acfce46f6a79d31ca8760803cc
   lint_roller (1.1.0) sha256=2c0c845b632a7d172cb849cc90c1bce937a28c5c8ccccb50dfd46a485003cc87
   ollama-client (1.1.0) sha256=c7539388530b240f8db3181c0f6e0a7595deec56f47a791821c304bce0fedd36
-  ollama_agent (0.3.0)
+  ollama_agent (1.0.0)
   parallel (1.28.0) sha256=33e6de1484baf2524792d178b0913fc8eb94c628d6cfe45599ad4458c638c970
   parser (3.3.11.1) sha256=d17ace7aabe3e72c3cc94043714be27cc6f852f104d81aa284c2281aecc65d54
   pastel (0.8.0) sha256=481da9fb7d2f6e6b1a08faf11fa10363172dc40fd47848f096ae21209f805a75
