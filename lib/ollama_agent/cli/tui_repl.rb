@@ -6,7 +6,7 @@ require_relative "repl_shared"
 
 module OllamaAgent
   class CLI
-    # Interactive REPL using TTY toolkit (box, table, markdown, prompt, spinner).
+    # Interactive REPL using TTY toolkit (box, table, markdown, prompt).
     # rubocop:disable Metrics/ClassLength -- session loop + dashboard + agent wiring
     class TuiRepl
       include ReplShared
@@ -70,7 +70,7 @@ module OllamaAgent
         ensure_assistant_hook
         @capture_assistant = true
         @pending_messages  = []
-        run_with_optional_spinner { @agent.run(query) }
+        @agent.run(query)
         flush_assistant_messages
       rescue OllamaAgent::Error => e
         @tui.print_error("Error: #{e.message}")
@@ -81,22 +81,6 @@ module OllamaAgent
         @capture_assistant = false
       end
       # rubocop:enable Metrics/MethodLength
-
-      def run_with_optional_spinner(&block)
-        if agent_might_prompt?
-          block.call
-        else
-          @tui.with_spinner("Agent working", &block)
-        end
-      end
-
-      def agent_might_prompt?
-        return true if @agent.instance_variable_get(:@confirm_patches)
-
-        orch = @agent.instance_variable_get(:@orchestrator)
-        confirm_del = @agent.instance_variable_get(:@confirm_delegation)
-        orch && confirm_del
-      end
 
       def ensure_assistant_hook
         return if @assistant_hook_installed

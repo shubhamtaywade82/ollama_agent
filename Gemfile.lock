@@ -23,7 +23,6 @@ PATH
       tty-prompt (~> 0.23)
       tty-reader (~> 0.9)
       tty-screen (~> 0.8)
-      tty-spinner (~> 0.9)
       tty-table (~> 0.12)
 
 GEM
@@ -146,8 +145,6 @@ GEM
       tty-screen (~> 0.8)
       wisper (~> 2.0)
     tty-screen (0.8.2)
-    tty-spinner (0.9.3)
-      tty-cursor (~> 0.7)
     tty-table (0.12.0)
       pastel (~> 0.8)
       strings (~> 0.2.0)
@@ -235,7 +232,6 @@ CHECKSUMS
   tty-prompt (0.23.1) sha256=fcdbce905238993f27eecfdf67597a636bc839d92192f6a0eef22b8166449ec8
   tty-reader (0.9.0) sha256=c62972c985c0b1566f0e56743b6a7882f979d3dc32ff491ed490a076f899c2b1
   tty-screen (0.8.2) sha256=c090652115beae764336c28802d633f204fb84da93c6a968aa5d8e319e819b50
-  tty-spinner (0.9.3) sha256=0e036f047b4ffb61f2aa45f5a770ec00b4d04130531558a94bfc5b192b570542
   tty-table (0.12.0) sha256=fdc27a4750835c1a16efe19a0b857e3ced3652cc7aceafe6dca94908965b9939
   unicode-display_width (2.6.0) sha256=12279874bba6d5e4d2728cef814b19197dbb10d7a7837a869bab65da943b7f5a
   unicode_utils (1.4.0) sha256=b922d0cf2313b6b7136ada6645ce7154ffc86418ca07d53b058efe9eb72f2a40

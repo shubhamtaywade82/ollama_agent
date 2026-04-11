@@ -6,7 +6,6 @@ require_relative "tui_slash_reader"
 require "tty-box"
 require "tty-markdown"
 require "tty-prompt"
-require "tty-spinner"
 require "tty-table"
 require "tty-logger"
 require "tty-screen"
@@ -40,24 +39,6 @@ module OllamaAgent
       frame = box_frame(" Ollama Agent ", rendered_table)
       @stdout.puts "\n#{frame}\n"
     end
-
-    # rubocop:disable Metrics/MethodLength -- spinner setup + success/error paths
-    def with_spinner(message = "Agent working", format: :dots, &block)
-      spinner = TTY::Spinner.new(
-        "#{@pastel.cyan("[:spinner]")} #{message}...",
-        format: format,
-        clear: true
-      )
-      spinner.auto_spin
-      result = block.call
-      spinner.success(@pastel.green("(done)"))
-      result
-    rescue StandardError => e
-      spinner.error(@pastel.red("(failed)"))
-      log(:error, e.message.to_s)
-      raise
-    end
-    # rubocop:enable Metrics/MethodLength
 
     def render_assistant_message(message)
       thinking = message.respond_to?(:thinking) ? message.thinking : nil
