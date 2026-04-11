@@ -55,12 +55,12 @@ module OllamaAgent
 
       def build_client
         require_relative "../ollama_connection"
-        require_relative "../resilience/retry_middleware"
 
-        OllamaAgent::OllamaConnection.build(
-          host: @host,
+        OllamaAgent::OllamaConnection.retry_wrapped_client(
           timeout: @timeout,
-          max_retries: options.fetch(:max_retries, 3)
+          max_attempts: options.fetch(:max_retries, 3),
+          base_url: @host,
+          hooks: nil
         )
       end
 

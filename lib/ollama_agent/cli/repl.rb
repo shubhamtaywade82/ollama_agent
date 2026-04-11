@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "fileutils"
+
 module OllamaAgent
   class CLI
     # Interactive REPL for the agent.
