@@ -10,9 +10,11 @@ Gem::Specification.new do |spec|
   spec.authors = ["Shubham Taywade"]
   spec.email = ["shubhamtaywade82@gmail.com"]
 
-  spec.summary = "CLI agent that applies small code patches using Ollama tool calling."
-  spec.description = "Use natural language to read files, search the tree, " \
-                     "and apply unified diffs via a local Ollama model."
+  spec.summary = "Universal AI operator runtime and developer shell with multi-provider support."
+  spec.description = "A production-ready AI agent platform: multi-provider (Ollama, OpenAI, Anthropic), " \
+                     "typed tool system with permissions, three-tier memory, structured observability, " \
+                     "loop detection, plugin architecture, interactive REPL, and project indexing. " \
+                     "Works out of the box with local Ollama models; drop in OpenAI or Anthropic keys to upgrade."
   spec.homepage = "https://github.com/shubhamtaywade82/ollama_agent"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2.0"
@@ -37,9 +39,16 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency "dotenv", "~> 2.8"
   spec.add_dependency "ollama-client", "~> 1.1"
+  spec.add_dependency "pastel", "~> 0.8"
   spec.add_dependency "prism", "~> 1.0"
   spec.add_dependency "thor", "~> 1.2"
+  spec.add_dependency "tty-box", "~> 0.7"
+  spec.add_dependency "tty-logger", "~> 0.6"
   spec.add_dependency "tty-markdown", "~> 0.7"
+  spec.add_dependency "tty-prompt", "~> 0.23"
+  spec.add_dependency "tty-reader", "~> 0.9"
+  spec.add_dependency "tty-screen", "~> 0.8"
+  spec.add_dependency "tty-table", "~> 0.12"
 
   # rubocop:disable Gemspec/DevelopmentDependencies
   spec.add_development_dependency "rake", "~> 13.0"

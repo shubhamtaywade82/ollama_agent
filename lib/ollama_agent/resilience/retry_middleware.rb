@@ -35,6 +35,11 @@ module OllamaAgent
       end
       # rubocop:enable Metrics/MethodLength
 
+      # Delegates to the inner Ollama client (+/api/tags+).
+      def list_model_names
+        @client.list_model_names
+      end
+
       private
 
       def http_error_non_retryable?(error)

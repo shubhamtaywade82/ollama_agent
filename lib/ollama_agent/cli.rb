@@ -5,18 +5,28 @@ require "thor"
 require_relative "agent"
 require_relative "external_agents"
 require_relative "prompt_skills"
+require_relative "runtime/permissions"
+require_relative "plugins/registry"
+require_relative "plugins/loader"
 
 module OllamaAgent
   # Thor CLI for single-shot and interactive agent sessions.
   # rubocop:disable Metrics/ClassLength -- Thor commands and shared helpers
   class CLI < Thor
+    default_task :ask
+
     def self.exit_on_failure?
       true
     end
 
-    desc "ask [QUERY]", "Run a natural-language task (reads, search, patch)"
+    desc "ask [QUERY]", "Run a task, or interactive TUI when QUERY is omitted (default when no subcommand)"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
-    method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
+    method_option :interactive, type: :boolean, aliases: "-i",
+                                desc: "-i without --tui: line REPL; empty QUERY defaults to TUI"
+    method_option :tui, type: :boolean, default: false,
+                        desc: "TTY UI; on by default for empty QUERY unless line REPL (-i without --tui)"
+    method_option :tui_god, type: :boolean, default: false,
+                            desc: "With --tui: auto-select first option in interactive lists (dangerous)"
     method_option :read_only, type: :boolean, default: false, aliases: "-R",
                               desc: "Read/search only (no edit_file, write_file, patches, or delegation)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches without confirmation"
@@ -40,22 +50,27 @@ module OllamaAgent
                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
     method_option :context_summarize, type: :boolean, default: false,
                                       desc: "Summarize dropped context vs sliding window"
+    method_option :provider, type: :string,
+                             desc: "Model provider: ollama (default) | openai | anthropic | auto"
+    method_option :permissions, type: :string,
+                                desc: "Permission profile: read_only | standard (default) | developer | full"
+    method_option :trace, type: :boolean, default: false,
+                          desc: "Enable structured trace logging (OLLAMA_AGENT_TRACE=1)"
     def ask(query = nil)
-      agent = build_agent
-
-      if options[:interactive]
-        start_interactive(agent)
-      elsif query
-        run_single_shot_agent!(agent, query)
-      else
-        puts Console.error_line("Error: provide a QUERY or use --interactive")
-        exit 1
-      end
+      load_plugins!
+      apply_session_interactive_tui_flags!(query)
+      validate_tui_options!
+      run_ask!(query)
     end
 
-    desc "orchestrate [QUERY]", "Like ask, with tools to list/delegate to external CLI agents (Claude, Gemini, …)"
+    desc "orchestrate [QUERY]", "Like ask, plus delegate to external CLI agents (Claude, Gemini, …)"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
-    method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
+    method_option :interactive, type: :boolean, aliases: "-i",
+                                desc: "-i without --tui: line REPL; empty QUERY defaults to TUI"
+    method_option :tui, type: :boolean, default: false,
+                        desc: "TTY UI; on by default for empty QUERY unless line REPL (-i without --tui)"
+    method_option :tui_god, type: :boolean, default: false,
+                            desc: "With --tui: auto-select first option in interactive lists (dangerous)"
     method_option :read_only, type: :boolean, default: false, aliases: "-R",
                               desc: "Read/search only (no edit_file, write_file, patches, or delegation)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches and run delegations without confirmation"
@@ -77,16 +92,10 @@ module OllamaAgent
     method_option :context_summarize, type: :boolean, default: false,
                                       desc: "Summarize dropped context vs sliding window"
     def orchestrate(query = nil)
-      agent = build_orchestrator_agent
-
-      if options[:interactive]
-        start_interactive(agent)
-      elsif query
-        run_single_shot_agent!(agent, query)
-      else
-        puts Console.error_line("Error: provide a QUERY or use --interactive")
-        exit 1
-      end
+      load_plugins!
+      apply_session_interactive_tui_flags!(query)
+      validate_tui_options!
+      run_orchestrate!(query)
     end
 
     desc "sessions", "List saved sessions for the current project root"
@@ -187,6 +196,53 @@ module OllamaAgent
     end
 
     private
+
+    def run_ask!(query)
+      if session_tui?
+        start_tui_interactive { |up| build_agent(user_prompt: up, attach_stream: false) }
+        return
+      end
+
+      interactive_or_single_shot!(query) { build_agent }
+    end
+
+    def run_orchestrate!(query)
+      if session_tui?
+        start_tui_interactive { |up| build_orchestrator_agent(user_prompt: up, attach_stream: false) }
+        return
+      end
+
+      interactive_or_single_shot!(query) { build_orchestrator_agent }
+    end
+
+    def interactive_or_single_shot!(query)
+      agent = yield
+
+      if @session_interactive
+        start_interactive(agent)
+      elsif query
+        run_single_shot_agent!(agent, query)
+      else
+        puts Console.error_line("Error: provide a QUERY or use --interactive")
+        exit 1
+      end
+    end
+
+    # Thor 1.5+ freezes +options+ after parse; keep effective flags on the instance.
+    def apply_session_interactive_tui_flags!(query)
+      interactive = options[:interactive]
+      tui = options[:tui]
+      if query.to_s.strip.empty? && !(interactive && !tui)
+        interactive = true
+        tui = true
+      end
+      @session_interactive = interactive
+      @session_tui = tui
+    end
+
+    def session_tui?
+      @session_interactive && @session_tui
+    end
 
     def ensure_improve_mode_only_automated!
       m = SelfImprovement::Modes.normalize(options[:mode])
@@ -341,8 +397,9 @@ module OllamaAgent
     # Build an Agent for the `ask` command.
     # Same root as `self_review` / interactive: cwd when unset (see README).
     # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- session + orchestrator + audit kwargs exceed limits
-    def build_agent
+    def build_agent(user_prompt: nil, attach_stream: true)
       orch  = orchestrator_mode?
+      perms = resolved_permissions
       agent = Agent.new(
         model: options[:model],
         root: resolved_root_for_self_review,
@@ -358,12 +415,24 @@ module OllamaAgent
         resume: options[:resume] || false,
         max_tokens: options[:max_tokens],
         context_summarize: options[:context_summarize],
+        provider_name: options[:provider],
+        permissions: perms,
+        user_prompt: user_prompt,
         **skill_agent_options
       )
-      attach_console_streamer(agent) if stream_enabled?
+      attach_console_streamer(agent) if stream_enabled? && attach_stream
       agent
     end
     # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
+
+    def resolved_permissions
+      profile = options[:permissions]&.to_sym
+      return nil unless profile
+
+      Runtime::Permissions.new(profile: profile)
+    rescue ArgumentError
+      nil
+    end
 
     def resolved_session_id
       return options[:session] if options[:session]
@@ -380,7 +449,7 @@ module OllamaAgent
     end
 
     # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- mirrors build_agent; stream attachment adds one line
-    def build_orchestrator_agent
+    def build_orchestrator_agent(user_prompt: nil, attach_stream: true)
       agent = Agent.new(
         model: options[:model],
         root: resolved_root_for_self_review,
@@ -394,9 +463,10 @@ module OllamaAgent
         max_retries: options[:max_retries],
         max_tokens: options[:max_tokens],
         context_summarize: options[:context_summarize],
+        user_prompt: user_prompt,
         **skill_agent_options
       )
-      attach_console_streamer(agent) if stream_enabled?
+      attach_console_streamer(agent) if stream_enabled? && attach_stream
       agent
     end
     # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
@@ -429,35 +499,45 @@ module OllamaAgent
     end
 
     def start_interactive(agent)
-      puts Console.welcome_banner("Ollama Agent (type 'exit' to quit)")
-      use_readline = interactive_readline_usable?
-
-      loop do
-        input = interactive_readline_line(use_readline)
-        break if input.nil?
-
-        line = input.chomp
-        break if line == "exit"
-
-        agent.run(line)
-      end
+      CLI::Repl.new(agent: agent).start
     end
 
-    def interactive_readline_usable?
-      require "readline"
-      true
-    rescue LoadError
-      false
+    def validate_tui_options!
+      return unless @session_tui
+      return if @session_interactive
+
+      puts Console.error_line("Error: --tui requires --interactive (-i)")
+      exit 1
     end
 
-    def interactive_readline_line(use_readline)
-      if use_readline
-        Readline.readline(Console.prompt_prefix, true)
-      else
-        print Console.prompt_prefix
-        $stdin.gets
-      end
+    def tui_god_mode?
+      options[:tui_god] || ENV.fetch("OLLAMA_AGENT_TUI_GOD_MODE", "0") == "1"
+    end
+
+    def warn_if_tui_stream_conflict
+      return unless stream_enabled?
+
+      warn Console.error_line("ollama_agent: token streaming is disabled when using --tui.")
+    end
+
+    def start_tui_interactive
+      require_relative "cli/tui_repl"
+      warn_if_tui_stream_conflict
+      tui = OllamaAgent::TUI.new(god_mode: tui_god_mode?)
+      up = OllamaAgent::TuiUserPrompt.new(prompt: tui.prompt, stdout: $stdout)
+      agent = yield(up)
+      CLI::TuiRepl.new(agent: agent, tui: tui).start
+    end
+
+    def load_plugins!
+      root = resolved_root_for_self_review
+      Plugins::Loader.new(root: root).load_all(skip_gems: false)
+    rescue StandardError => e
+      warn "ollama_agent: plugin load error: #{e.message}" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
     end
   end
   # rubocop:enable Metrics/ClassLength
+
+  require_relative "cli/repl_shared"
+  require_relative "cli/repl"
 end

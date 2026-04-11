@@ -24,12 +24,46 @@ module OllamaAgent
 
       def append_tool_results(messages, tool_calls)
         tool_calls.each do |tool_call|
-          @hooks.emit(:on_tool_call, { name: tool_call.name, args: tool_call.arguments || {}, turn: current_turn })
-          result = execute_tool(tool_call.name, tool_call.arguments || {})
-          @hooks.emit(:on_tool_result, { name: tool_call.name, result: result.to_s, turn: current_turn })
+          name = tool_call.name
+          args = tool_call.arguments || {}
+
+          @hooks.emit(:on_tool_call, { name: name, args: args, turn: current_turn })
+          @loop_detector&.record!(name, args)
+
+          result = platform_guarded_tool_call(name, args)
+
+          @hooks.emit(:on_tool_result, { name: name, result: result.to_s, turn: current_turn })
+          @memory_manager&.record_tool_call(name, args, result)
           messages << tool_message(tool_call, result)
           save_message_to_session(messages.last)
         end
+      end
+
+      # Run permission / policy guards before delegating to execute_tool.
+      def platform_guarded_tool_call(name, args)
+        ctx = build_tool_context
+
+        # Permission check
+        if @permissions && !@permissions.allowed?(name)
+          return "Permission denied: tool '#{name}' is not allowed under the current permission profile (#{@permissions.profile})."
+        end
+
+        # Policy check
+        if @policies
+          rejection = @policies.evaluate(name, args, ctx)
+          return rejection if rejection
+        end
+
+        execute_tool(name, args)
+      end
+
+      def build_tool_context
+        {
+          root:             @root,
+          read_only:        @read_only,
+          memory_manager:   @memory_manager,
+          shell_call_count: @shell_call_count || 0
+        }
       end
 
       def save_message_to_session(msg)

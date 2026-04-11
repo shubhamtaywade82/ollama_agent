@@ -1,8 +1,26 @@
 ## [Unreleased]
 
+## [1.0.0] - 2026-04-11
+
+First **stable** release under [Semantic Versioning](https://semver.org/): within the **`1.x`** series, the documented public Ruby API and CLI behavior are intended to remain **backwards compatible** except where called out in the changelog.
+
+### Changed
+
+- **CLI default:** `ollama_agent` with no subcommand runs **`ask`** with the **interactive TUI** when no query is given (same as `ollama_agent ask` with no query). Use **`ask -i` without `--tui`** for the plain line REPL, **`ask "…"`** for a one-shot task, or another subcommand (`self_review`, `sessions`, …) for other workflows.
+
+### Breaking changes (from 0.3.x)
+
+- **`tty-spinner` removed** from the gem; **`OllamaAgent::TUI`** no longer exposes `with_spinner`, `dismiss_progress_spinner`, `pause_progress_for_user_prompt`, or `resume_progress_after_user_prompt`. Code that called those methods or relied on the transitive `tty-spinner` dependency must be updated.
+- **`Agent#chat_assistant_message`** uses the streaming HTTP path **only** when something subscribes to **`on_token`** (not merely **`on_thinking`**). Integrations that registered only `on_thinking` expecting streamed chat must also subscribe to `on_token` or use another supported hook.
+
+### Fixed
+
+- TUI slash-command tab completion no longer raises `FrozenError` when editing a completed frozen candidate (e.g. `/help`).
+
 ## [0.3.0] - 2026-04-06
 
 ### Added
+
 - `ToolRuntime` — JSON plan loop for custom tools (`OllamaJsonPlanner`, registry, executor); see `docs/TOOL_RUNTIME.md`
 - Optional **ruby_mastery** context for `self_review` / `improve` (`OLLAMA_AGENT_RUBY_MASTERY`, `--no-ruby-mastery`)
 - `OllamaAgent::ModelEnv` — shared model name resolution from environment
@@ -11,14 +29,17 @@
 - External agents / argv expansion and related orchestration refinements
 
 ### Changed
+
 - `SearchBackend` finds `rg` / `grep` by scanning `PATH` (avoids relying on a `command` executable on trimmed `PATH`)
 
 ### Fixed
+
 - `SelfImprovement::Improver#run` accepts `max_tokens` and `context_summarize` from the CLI (Ruby 3 keyword compatibility)
 
 ## [0.2.0] - 2026-03-26
 
 ### Added
+
 - `write_file` tool — create or overwrite files (complements `edit_file` for surgical diffs)
 - `OllamaAgent::Tools.register` — extensible tool registry for library consumers
 - `Streaming::Hooks` — event bus (`on_token`, `on_tool_call`, `on_tool_result`, `on_complete`, `on_error`, `on_retry`)
@@ -32,10 +53,12 @@
 - `docs/ARCHITECTURE.md`, `docs/TOOLS.md`, `docs/SESSIONS.md`
 
 ### Changed
+
 - `READ_ONLY_TOOLS` now excludes both `edit_file` and `write_file`
 - `Agent` now exposes `#hooks` (`Streaming::Hooks`) and `#session_id`
 
 ### New environment variables
+
 - `OLLAMA_AGENT_STREAM`, `OLLAMA_AGENT_MAX_TOKENS`
 - `OLLAMA_AGENT_MAX_RETRIES`, `OLLAMA_AGENT_RETRY_BASE_DELAY`
 - `OLLAMA_AGENT_AUDIT`, `OLLAMA_AGENT_AUDIT_LOG_PATH`

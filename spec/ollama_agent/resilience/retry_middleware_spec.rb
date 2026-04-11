@@ -94,5 +94,14 @@ RSpec.describe OllamaAgent::Resilience::RetryMiddleware do
       expect(mw.chat(messages: [], tools: [], model: "m")).to eq(response)
     end
   end
+
+  describe "#list_model_names" do
+    it "delegates to the inner client" do
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:list_model_names).and_return(%w[m1])
+      mw = described_class.new(client: client, max_attempts: 1, hooks: hooks, base_delay: 0)
+      expect(mw.list_model_names).to eq(%w[m1])
+    end
+  end
   # rubocop:enable RSpec/VerifiedDoubles
 end

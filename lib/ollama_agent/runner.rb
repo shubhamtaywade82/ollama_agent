@@ -39,6 +39,11 @@ module OllamaAgent
     # @param http_timeout [Integer, nil] HTTP timeout in seconds
     # @param stdin [IO] input for patch/write/delegate confirmations (default +$stdin+)
     # @param stdout [IO] output for confirmation prompts (default +$stdout+)
+    # @param provider [String, nil] provider name: "ollama" | "openai" | "anthropic" | "auto" (v2)
+    # @param permissions [Runtime::Permissions, nil] tool permission profile (v2)
+    # @param budget [Core::Budget, nil] token/step budget (v2)
+    # @param memory [Memory::Manager, nil] memory manager instance (v2)
+    # @param trace [Boolean] enable trace logging to stdout (v2)
     # @return [Runner]
     # rubocop:disable Metrics/ParameterLists -- library facade must expose all Agent options
     def self.build(
@@ -59,7 +64,13 @@ module OllamaAgent
       think:           nil,
       http_timeout:    nil,
       stdin:           $stdin,
-      stdout:          $stdout
+      stdout:          $stdout,
+      # v2 platform options
+      provider:        nil,
+      permissions:     nil,
+      budget:          nil,
+      memory:          nil,
+      trace:           false
     )
       new(
         root: root, model: model, stream: stream,
@@ -69,7 +80,9 @@ module OllamaAgent
         skills_enabled: skills_enabled, skill_paths: skill_paths,
         confirm_patches: confirm_patches, orchestrator: orchestrator,
         think: think, http_timeout: http_timeout,
-        stdin: stdin, stdout: stdout
+        stdin: stdin, stdout: stdout,
+        provider: provider, permissions: permissions,
+        budget: budget, memory: memory, trace: trace
       )
     end
     # rubocop:enable Metrics/ParameterLists
@@ -92,8 +105,11 @@ module OllamaAgent
                    max_tokens:, context_summarize:,
                    max_retries:, audit:, read_only:, skills_enabled:, skill_paths:,
                    confirm_patches:, orchestrator:, think:, http_timeout:,
-                   stdin:, stdout:)
+                   stdin:, stdout:,
+                   provider: nil, permissions: nil, budget: nil, memory: nil, trace: false)
       @session_id = session_id
+
+      trace_logger = trace ? Core::TraceLogger.new(format: :human) : nil
 
       config = Agent::AgentConfig.new(
         root: root,
@@ -112,7 +128,12 @@ module OllamaAgent
         max_tokens: max_tokens,
         context_summarize: context_summarize,
         stdin: stdin,
-        stdout: stdout
+        stdout: stdout,
+        provider_name:  provider,
+        permissions:    permissions,
+        budget:         budget,
+        memory_manager: memory,
+        trace_logger:   trace_logger
       )
       @agent = Agent.new(config: config)
 
