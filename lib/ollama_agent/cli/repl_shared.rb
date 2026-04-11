@@ -13,6 +13,8 @@ module OllamaAgent
         "/remember" => "Store a fact (usage: /remember key = value)",
         "/clear"    => "Clear short-term context for this session",
         "/config"   => "Show current agent configuration",
+        "/model"    => "Show or set chat model (usage: /model [name] | /model list)",
+        "/models"   => "List Ollama cloud catalog (ollama.com/api/tags); /model <name> to switch",
         "/provider" => "Show or switch provider (usage: /provider [name])",
         "/index"    => "Summarise the project repository index",
         "/exit"     => "Exit the REPL"
@@ -41,6 +43,8 @@ module OllamaAgent
         when "/remember" then handle_remember(arg)
         when "/clear"    then handle_clear
         when "/config"   then print_config
+        when "/model"    then handle_model(arg)
+        when "/models"   then print_model_list
         when "/provider" then handle_provider(arg)
         when "/index"    then handle_index
         else
@@ -65,6 +69,7 @@ module OllamaAgent
 
       def print_status
         @stdout.puts "\n\e[1mStatus:\e[0m"
+        @stdout.puts "  Model:   #{@agent.model}"
 
         if (b = repl_budget)
           h = b.to_h
@@ -149,9 +154,41 @@ module OllamaAgent
       def handle_provider(arg)
         if arg
           @stdout.puts "  Provider switching mid-run is not yet supported. Restart with --provider #{arg}"
+          @stdout.puts "  Chat model can be changed anytime: /model <name>"
         else
           @stdout.puts "  Current provider: #{@agent.instance_variable_get(:@provider_name) || "ollama"}"
         end
+      end
+
+      def handle_model(arg)
+        return print_current_model if arg.nil? || arg.strip.empty?
+
+        if arg.strip.casecmp("list").zero?
+          print_model_list
+          return
+        end
+
+        name = @agent.assign_chat_model!(arg)
+        @stdout.puts "  Chat model set to: #{name}"
+      rescue OllamaAgent::Error => e
+        @stdout.puts "  #{e.message}"
+      end
+
+      def print_current_model
+        @stdout.puts "  Current chat model: #{@agent.model}"
+      end
+
+      def print_model_list
+        names = @agent.list_cloud_model_names
+        if names.empty?
+          @stdout.puts "  Could not load the cloud model catalog (network or ollama.com)."
+          @stdout.puts "  Set OLLAMA_API_KEY if your account requires it; or set /model <name> manually."
+          return
+        end
+
+        @stdout.puts "\n\e[1mOllama cloud models (ollama.com/api/tags):\e[0m"
+        names.each { |n| @stdout.puts "  #{n}" }
+        @stdout.puts ""
       end
 
       def handle_index

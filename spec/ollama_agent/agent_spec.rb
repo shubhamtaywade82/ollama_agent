@@ -11,6 +11,49 @@ RSpec.describe OllamaAgent::Agent do
     FileUtils.remove_entry(tmpdir)
   end
 
+  describe "#assign_chat_model!" do
+    it "updates the model used for subsequent chat requests" do
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:chat).and_return(
+        Ollama::Response.new("message" => { "role" => "assistant", "content" => "ok" })
+      )
+      agent = described_class.new(client: client, root: root, confirm_patches: false, model: "alpha")
+      expect(agent.assign_chat_model!("glm-5.1")).to eq("glm-5.1")
+      expect(agent.model).to eq("glm-5.1")
+      agent.run("hi")
+      expect(client).to have_received(:chat).with(hash_including(model: "glm-5.1"))
+    end
+
+    it "rejects a blank model name" do
+      agent = described_class.new(client: instance_double(Ollama::Client, chat: nil), root: root, confirm_patches: false)
+      expect { agent.assign_chat_model!("  ") }.to raise_error(OllamaAgent::Error, /empty/i)
+    end
+  end
+
+  describe "#list_local_model_names" do
+    it "returns [] when the client does not support listing" do
+      agent = described_class.new(client: instance_double(Ollama::Client, chat: nil), root: root, confirm_patches: false)
+      expect(agent.list_local_model_names).to eq([])
+    end
+
+    it "delegates to the wrapped client when available" do
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:chat)
+      allow(client).to receive(:list_model_names).and_return(%w[a b])
+      mw = OllamaAgent::Resilience::RetryMiddleware.new(client: client, max_attempts: 1, hooks: nil, base_delay: 0)
+      agent = described_class.new(client: mw, root: root, confirm_patches: false)
+      expect(agent.list_local_model_names).to eq(%w[a b])
+    end
+  end
+
+  describe "#list_cloud_model_names" do
+    it "delegates to OllamaCloudCatalog" do
+      allow(OllamaAgent::OllamaCloudCatalog).to receive(:list_model_names).and_return(%w[glm-5.1])
+      agent = described_class.new(client: instance_double(Ollama::Client, chat: nil), root: root, confirm_patches: false)
+      expect(agent.list_cloud_model_names).to eq(%w[glm-5.1])
+    end
+  end
+
   describe "constructor" do
     it "accepts provider_name and permissions and applies them to configuration" do
       perms = OllamaAgent::Runtime::Permissions.new(profile: :read_only)

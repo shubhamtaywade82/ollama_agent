@@ -9,7 +9,7 @@ module OllamaAgent
     # Interactive REPL for the agent.
     #
     # Features:
-    #   - Slash commands (/help, /session, /memory, /status, /clear, /config, /provider, /index)
+    #   - Slash commands (/help, /model, /models, /session, /memory, /status, /clear, /config, /provider, /index)
     #   - Readline history with persistent file
     #   - Multi-line input (end with blank line)
     #   - Session resume inside REPL

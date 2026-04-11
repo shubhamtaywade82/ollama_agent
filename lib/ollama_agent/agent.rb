@@ -16,6 +16,7 @@ require_relative "context/manager"
 require_relative "session/store"
 require_relative "env_config"
 require_relative "model_env"
+require_relative "ollama_cloud_catalog"
 require_relative "agent/agent_config"
 require_relative "agent/client_wiring"
 require_relative "agent/prompt_wiring"
@@ -37,7 +38,7 @@ module OllamaAgent
     MAX_TURNS = 64
     DEFAULT_HTTP_TIMEOUT = 120
 
-    attr_reader :client, :root, :hooks
+    attr_reader :client, :root, :hooks, :model
 
     # @param config [AgentConfig, nil] when set, keyword options are ignored (use {Runner} or build {AgentConfig}).
     # rubocop:disable Metrics/ParameterLists
@@ -82,6 +83,38 @@ module OllamaAgent
       Console.reset_thinking_session!
       messages = build_messages_for_run(query)
       execute_agent_turns(messages)
+    end
+
+    # Switch the chat model for subsequent {#run} calls (same session, same client).
+    # Accepts Ollama local tags (e.g. +llama3.2+) or cloud catalog names (e.g. +glm-5.1+).
+    #
+    # @param name [String]
+    # @return [String] the normalized model id
+    # @raise [OllamaAgent::Error] when +name+ is blank
+    def assign_chat_model!(name)
+      n = name.to_s.strip
+      raise Error, "Model name cannot be empty" if n.empty?
+
+      @model = n
+      n
+    end
+
+    # Names from the local Ollama daemon (+/api/tags+ on your +base_url+). Not used by the REPL +/models+ command.
+    #
+    # @return [Array<String>]
+    def list_local_model_names
+      return [] unless @client.respond_to?(:list_model_names)
+
+      @client.list_model_names
+    rescue StandardError
+      []
+    end
+
+    # Cloud catalog from +https://ollama.com/api/tags+ (see {OllamaCloudCatalog}). REPL +/models+ uses this only.
+    #
+    # @return [Array<String>]
+    def list_cloud_model_names
+      OllamaCloudCatalog.list_model_names
     end
 
     private
