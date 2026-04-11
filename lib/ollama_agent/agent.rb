@@ -54,7 +54,7 @@ module OllamaAgent
                    stdin: $stdin, stdout: $stdout,
                    provider: nil, provider_name: nil, budget: nil,
                    permissions: nil, policies: nil,
-                   memory_manager: nil, trace_logger: nil, approval_gate: nil)
+                   memory_manager: nil, trace_logger: nil, approval_gate: nil, user_prompt: nil)
       cfg = config || AgentConfig.new(
         model: model, root: root, confirm_patches: confirm_patches, http_timeout: http_timeout, think: think,
         read_only: read_only, patch_policy: patch_policy,
@@ -65,10 +65,11 @@ module OllamaAgent
         max_tokens: max_tokens, context_summarize: context_summarize, stdin: stdin, stdout: stdout,
         provider: provider, provider_name: provider_name, budget: budget,
         permissions: permissions, policies: policies,
-        memory_manager: memory_manager, trace_logger: trace_logger, approval_gate: approval_gate
+        memory_manager: memory_manager, trace_logger: trace_logger, approval_gate: approval_gate,
+        user_prompt: user_prompt
       )
       apply_agent_config(cfg)
-      @user_prompt = UserPrompt.new(stdin: cfg.stdin, stdout: cfg.stdout)
+      @user_prompt = cfg.user_prompt || UserPrompt.new(stdin: cfg.stdin, stdout: cfg.stdout)
       @context_manager = Context::Manager.new(max_tokens: @max_tokens, context_summarize: @context_summarize)
       @hooks = Streaming::Hooks.new
       attach_audit_logger if resolved_audit_enabled
@@ -245,6 +246,9 @@ module OllamaAgent
     end
 
     def announce_assistant_content(message)
+      @hooks.emit(:on_assistant_message, { message: message })
+      return if @hooks.subscribed?(:on_assistant_message)
+
       Console.puts_assistant_message(message)
     end
 

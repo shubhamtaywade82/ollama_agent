@@ -7,7 +7,7 @@ module OllamaAgent
       attr_reader :model, :root, :confirm_patches, :http_timeout, :think, :read_only, :patch_policy,
                   :skill_paths, :skills_enabled, :skills_include, :skills_exclude, :external_skills_enabled,
                   :orchestrator, :confirm_delegation, :max_retries, :audit, :session_id, :resume,
-                  :max_tokens, :context_summarize, :stdin, :stdout,
+                  :max_tokens, :context_summarize, :stdin, :stdout, :user_prompt,
                   # v2 platform options
                   :provider, :provider_name, :budget, :permissions, :policies,
                   :memory_manager, :trace_logger, :approval_gate
@@ -22,7 +22,7 @@ module OllamaAgent
                      max_retries: nil, audit: nil,
                      session_id: nil, resume: false,
                      max_tokens: nil, context_summarize: nil,
-                     stdin: $stdin, stdout: $stdout,
+                     stdin: $stdin, stdout: $stdout, user_prompt: nil,
                      # v2 platform options (all optional — nil keeps existing behaviour)
                      provider: nil, provider_name: nil, budget: nil,
                      permissions: nil, policies: nil,
@@ -49,6 +49,7 @@ module OllamaAgent
         @context_summarize = context_summarize
         @stdin = stdin
         @stdout = stdout
+        @user_prompt = user_prompt
         # v2 platform options
         @provider       = provider
         @provider_name  = provider_name

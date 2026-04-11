@@ -43,6 +43,23 @@ RSpec.describe OllamaAgent::Agent do
       expect { agent.run("hello") }.not_to raise_error
     end
 
+    it "emits on_assistant_message and skips Console when a handler is subscribed" do
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:chat).and_return(
+        Ollama::Response.new(
+          "message" => { "role" => "assistant", "content" => "Hi." }
+        )
+      )
+      agent = described_class.new(client: client, root: root, confirm_patches: false)
+      payloads = []
+      agent.hooks.on(:on_assistant_message) { |p| payloads << p[:message] }
+      allow(OllamaAgent::Console).to receive(:puts_assistant_message)
+      agent.run("hello")
+      expect(payloads.size).to eq(1)
+      expect(payloads.first.content).to eq("Hi.")
+      expect(OllamaAgent::Console).not_to have_received(:puts_assistant_message)
+    end
+
     it "executes read_file and continues the loop" do
       File.write(File.join(root, "sample.txt"), "hello")
 

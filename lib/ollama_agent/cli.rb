@@ -20,6 +20,10 @@ module OllamaAgent
     desc "ask [QUERY]", "Run a natural-language task (reads, search, patch)"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
     method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
+    method_option :tui, type: :boolean, default: false,
+                         desc: "With --interactive: TTY toolkit UI (box, table, markdown, prompt)"
+    method_option :tui_god, type: :boolean, default: false,
+                          desc: "With --tui: auto-select first option in interactive lists (dangerous)"
     method_option :read_only, type: :boolean, default: false, aliases: "-R",
                               desc: "Read/search only (no edit_file, write_file, patches, or delegation)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches without confirmation"
@@ -51,6 +55,12 @@ module OllamaAgent
                           desc: "Enable structured trace logging (OLLAMA_AGENT_TRACE=1)"
     def ask(query = nil)
       load_plugins!
+      validate_tui_options!
+      if options[:interactive] && options[:tui]
+        start_tui_interactive { |up| build_agent(user_prompt: up, attach_stream: false) }
+        return
+      end
+
       agent = build_agent
 
       if options[:interactive]
@@ -66,6 +76,10 @@ module OllamaAgent
     desc "orchestrate [QUERY]", "Like ask, with tools to list/delegate to external CLI agents (Claude, Gemini, …)"
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
     method_option :interactive, type: :boolean, aliases: "-i", desc: "Interactive REPL"
+    method_option :tui, type: :boolean, default: false,
+                         desc: "With --interactive: TTY toolkit UI (box, table, markdown, prompt)"
+    method_option :tui_god, type: :boolean, default: false,
+                          desc: "With --tui: auto-select first option in interactive lists (dangerous)"
     method_option :read_only, type: :boolean, default: false, aliases: "-R",
                               desc: "Read/search only (no edit_file, write_file, patches, or delegation)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches and run delegations without confirmation"
@@ -87,6 +101,13 @@ module OllamaAgent
     method_option :context_summarize, type: :boolean, default: false,
                                       desc: "Summarize dropped context vs sliding window"
     def orchestrate(query = nil)
+      validate_tui_options!
+      if options[:interactive] && options[:tui]
+        load_plugins!
+        start_tui_interactive { |up| build_orchestrator_agent(user_prompt: up, attach_stream: false) }
+        return
+      end
+
       agent = build_orchestrator_agent
 
       if options[:interactive]
@@ -351,7 +372,7 @@ module OllamaAgent
     # Build an Agent for the `ask` command.
     # Same root as `self_review` / interactive: cwd when unset (see README).
     # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- session + orchestrator + audit kwargs exceed limits
-    def build_agent
+    def build_agent(user_prompt: nil, attach_stream: true)
       orch  = orchestrator_mode?
       perms = resolved_permissions
       agent = Agent.new(
@@ -371,9 +392,10 @@ module OllamaAgent
         context_summarize: options[:context_summarize],
         provider_name: options[:provider],
         permissions: perms,
+        user_prompt: user_prompt,
         **skill_agent_options
       )
-      attach_console_streamer(agent) if stream_enabled?
+      attach_console_streamer(agent) if stream_enabled? && attach_stream
       agent
     end
     # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
@@ -402,7 +424,7 @@ module OllamaAgent
     end
 
     # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- mirrors build_agent; stream attachment adds one line
-    def build_orchestrator_agent
+    def build_orchestrator_agent(user_prompt: nil, attach_stream: true)
       agent = Agent.new(
         model: options[:model],
         root: resolved_root_for_self_review,
@@ -416,9 +438,10 @@ module OllamaAgent
         max_retries: options[:max_retries],
         max_tokens: options[:max_tokens],
         context_summarize: options[:context_summarize],
+        user_prompt: user_prompt,
         **skill_agent_options
       )
-      attach_console_streamer(agent) if stream_enabled?
+      attach_console_streamer(agent) if stream_enabled? && attach_stream
       agent
     end
     # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
@@ -454,6 +477,33 @@ module OllamaAgent
       CLI::Repl.new(agent: agent).start
     end
 
+    def validate_tui_options!
+      return unless options[:tui]
+      return if options[:interactive]
+
+      puts Console.error_line("Error: --tui requires --interactive (-i)")
+      exit 1
+    end
+
+    def tui_god_mode?
+      options[:tui_god] || ENV.fetch("OLLAMA_AGENT_TUI_GOD_MODE", "0") == "1"
+    end
+
+    def warn_if_tui_stream_conflict
+      return unless stream_enabled?
+
+      warn Console.error_line("ollama_agent: token streaming is disabled when using --tui.")
+    end
+
+    def start_tui_interactive
+      require_relative "cli/tui_repl"
+      warn_if_tui_stream_conflict
+      tui = OllamaAgent::TUI.new(god_mode: tui_god_mode?)
+      up = OllamaAgent::TuiUserPrompt.new(prompt: tui.prompt, stdout: $stdout)
+      agent = yield(up)
+      CLI::TuiRepl.new(agent: agent, tui: tui).start
+    end
+
     def load_plugins!
       root = resolved_root_for_self_review
       Plugins::Loader.new(root: root).load_all(skip_gems: false)
@@ -463,5 +513,6 @@ module OllamaAgent
   end
   # rubocop:enable Metrics/ClassLength
 
+  require_relative "cli/repl_shared"
   require_relative "cli/repl"
 end
