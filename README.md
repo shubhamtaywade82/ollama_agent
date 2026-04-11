@@ -1,6 +1,6 @@
 # ollama_agent
 
-Version: 0.1.0
+Version: 0.3.0
 
 Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollama.com) model. It exposes tools to **list files**, **read files**, **search the tree** (ripgrep or grep), and **apply unified diffs** so the model can make small, reviewable edits.
 
@@ -271,7 +271,7 @@ Repository **secrets** (Settings → Secrets and variables → Actions):
 Release steps:
 
 1. Bump `OllamaAgent::VERSION` in `lib/ollama_agent/version.rb` and commit to `main`.
-2. Tag: `git tag v0.1.0` (must match the version string) and `git push origin v0.1.0`.
+2. Tag: `git tag v0.3.0` (must match the version string) and `git push origin v0.3.0`.
 
 ## License
 

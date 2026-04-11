@@ -51,7 +51,10 @@ module OllamaAgent
                    max_retries: nil, audit: nil,
                    session_id: nil, resume: false,
                    max_tokens: nil, context_summarize: nil,
-                   stdin: $stdin, stdout: $stdout)
+                   stdin: $stdin, stdout: $stdout,
+                   provider: nil, provider_name: nil, budget: nil,
+                   permissions: nil, policies: nil,
+                   memory_manager: nil, trace_logger: nil, approval_gate: nil)
       cfg = config || AgentConfig.new(
         model: model, root: root, confirm_patches: confirm_patches, http_timeout: http_timeout, think: think,
         read_only: read_only, patch_policy: patch_policy,
@@ -59,7 +62,10 @@ module OllamaAgent
         skills_exclude: skills_exclude, external_skills_enabled: external_skills_enabled,
         orchestrator: orchestrator, confirm_delegation: confirm_delegation,
         max_retries: max_retries, audit: audit, session_id: session_id, resume: resume,
-        max_tokens: max_tokens, context_summarize: context_summarize, stdin: stdin, stdout: stdout
+        max_tokens: max_tokens, context_summarize: context_summarize, stdin: stdin, stdout: stdout,
+        provider: provider, provider_name: provider_name, budget: budget,
+        permissions: permissions, policies: policies,
+        memory_manager: memory_manager, trace_logger: trace_logger, approval_gate: approval_gate
       )
       apply_agent_config(cfg)
       @user_prompt = UserPrompt.new(stdin: cfg.stdin, stdout: cfg.stdout)

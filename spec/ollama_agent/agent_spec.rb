@@ -11,6 +11,25 @@ RSpec.describe OllamaAgent::Agent do
     FileUtils.remove_entry(tmpdir)
   end
 
+  describe "constructor" do
+    it "accepts provider_name and permissions and applies them to configuration" do
+      perms = OllamaAgent::Runtime::Permissions.new(profile: :read_only)
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:chat).and_return(
+        Ollama::Response.new("message" => { "role" => "assistant", "content" => "ok" })
+      )
+      agent = described_class.new(
+        client: client,
+        root: root,
+        confirm_patches: false,
+        provider_name: "anthropic",
+        permissions: perms
+      )
+      expect(agent.instance_variable_get(:@provider_name)).to eq("anthropic")
+      expect(agent.instance_variable_get(:@permissions)).to eq(perms)
+    end
+  end
+
   describe "#run" do
     it "completes when the model returns no tool calls" do
       client = instance_double(Ollama::Client)

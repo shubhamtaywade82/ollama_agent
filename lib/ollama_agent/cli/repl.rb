@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
 module OllamaAgent
-  module CLI
+  class CLI
     # Interactive REPL for the agent.
     #
     # Features:

@@ -5,7 +5,6 @@ require "thor"
 require_relative "agent"
 require_relative "external_agents"
 require_relative "prompt_skills"
-require_relative "cli/repl"
 require_relative "runtime/permissions"
 require_relative "plugins/registry"
 require_relative "plugins/loader"
@@ -463,4 +462,6 @@ module OllamaAgent
     end
   end
   # rubocop:enable Metrics/ClassLength
+
+  require_relative "cli/repl"
 end
