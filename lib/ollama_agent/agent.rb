@@ -20,6 +20,9 @@ require_relative "agent/agent_config"
 require_relative "agent/client_wiring"
 require_relative "agent/prompt_wiring"
 require_relative "agent/session_wiring"
+require_relative "core/budget"
+require_relative "core/loop_detector"
+require_relative "core/trace_logger"
 
 module OllamaAgent
   # Runs a tool-calling loop against Ollama: read files, search, apply unified diffs.
@@ -100,19 +103,49 @@ module OllamaAgent
       @context_summarize = cfg.context_summarize
       strict = EnvConfig.strict_env?
       @max_turns = EnvConfig.fetch_int("OLLAMA_AGENT_MAX_TURNS", MAX_TURNS, strict: strict)
+      # v2 platform subsystems (all optional; nil keeps legacy behaviour)
+      @budget        = cfg.budget        || Core::Budget.new(max_steps: @max_turns, max_tokens: @max_tokens)
+      @loop_detector = Core::LoopDetector.new
+      @trace_logger  = cfg.trace_logger
+      @memory_manager = cfg.memory_manager
+      @permissions   = cfg.permissions
+      @policies      = cfg.policies
+      @approval_gate = cfg.approval_gate
+      @provider      = cfg.provider
+      @provider_name = cfg.provider_name
     end
     # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
 
     # rubocop:disable Metrics/MethodLength -- turn loop with early break
     def execute_agent_turns(messages)
       @current_turn = 0
+      @budget.reset!
+      @loop_detector.reset!
+      @trace_logger&.start_run(query: messages.last&.fetch(:content, nil))
+
       @max_turns.times do
         @current_turn += 1
-        trimmed = trimmed_messages_for_chat(messages)
-        message = chat_assistant_message(trimmed)
+        @budget.record_step!
+
+        if @budget.exceeded?
+          reason = @budget.exceeded_reason
+          warn "ollama_agent: budget exceeded — #{reason}"
+          @trace_logger&.budget_exceeded(reason: reason)
+          break
+        end
+
+        trimmed    = trimmed_messages_for_chat(messages)
+        message    = chat_assistant_message(trimmed)
         tool_calls = tool_calls_from(message)
         persist_assistant_turn(messages, message)
         break if tool_calls.empty?
+
+        if @loop_detector.loop_detected?
+          summary = @loop_detector.loop_summary
+          warn "ollama_agent: #{summary}"
+          @trace_logger&.loop_detected(summary: summary)
+          break
+        end
 
         append_tool_results(messages, tool_calls)
       end

@@ -10,9 +10,11 @@ Gem::Specification.new do |spec|
   spec.authors = ["Shubham Taywade"]
   spec.email = ["shubhamtaywade82@gmail.com"]
 
-  spec.summary = "CLI agent that applies small code patches using Ollama tool calling."
-  spec.description = "Use natural language to read files, search the tree, " \
-                     "and apply unified diffs via a local Ollama model."
+  spec.summary = "Universal AI operator runtime and developer shell with multi-provider support."
+  spec.description = "A production-ready AI agent platform: multi-provider (Ollama, OpenAI, Anthropic), " \
+                     "typed tool system with permissions, three-tier memory, structured observability, " \
+                     "loop detection, plugin architecture, interactive REPL, and project indexing. " \
+                     "Works out of the box with local Ollama models; drop in OpenAI or Anthropic keys to upgrade."
   spec.homepage = "https://github.com/shubhamtaywade82/ollama_agent"
   spec.license = "MIT"
   spec.required_ruby_version = ">= 3.2.0"

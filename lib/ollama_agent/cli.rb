@@ -5,6 +5,10 @@ require "thor"
 require_relative "agent"
 require_relative "external_agents"
 require_relative "prompt_skills"
+require_relative "cli/repl"
+require_relative "runtime/permissions"
+require_relative "plugins/registry"
+require_relative "plugins/loader"
 
 module OllamaAgent
   # Thor CLI for single-shot and interactive agent sessions.
@@ -40,7 +44,14 @@ module OllamaAgent
                                desc: "Context window budget (OLLAMA_AGENT_MAX_TOKENS)"
     method_option :context_summarize, type: :boolean, default: false,
                                       desc: "Summarize dropped context vs sliding window"
+    method_option :provider, type: :string,
+                             desc: "Model provider: ollama (default) | openai | anthropic | auto"
+    method_option :permissions, type: :string,
+                                desc: "Permission profile: read_only | standard (default) | developer | full"
+    method_option :trace, type: :boolean, default: false,
+                          desc: "Enable structured trace logging (OLLAMA_AGENT_TRACE=1)"
     def ask(query = nil)
+      load_plugins!
       agent = build_agent
 
       if options[:interactive]
@@ -343,6 +354,7 @@ module OllamaAgent
     # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- session + orchestrator + audit kwargs exceed limits
     def build_agent
       orch  = orchestrator_mode?
+      perms = resolved_permissions
       agent = Agent.new(
         model: options[:model],
         root: resolved_root_for_self_review,
@@ -358,12 +370,23 @@ module OllamaAgent
         resume: options[:resume] || false,
         max_tokens: options[:max_tokens],
         context_summarize: options[:context_summarize],
+        provider_name: options[:provider],
+        permissions: perms,
         **skill_agent_options
       )
       attach_console_streamer(agent) if stream_enabled?
       agent
     end
     # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
+
+    def resolved_permissions
+      profile = options[:permissions]&.to_sym
+      return nil unless profile
+
+      Runtime::Permissions.new(profile: profile)
+    rescue ArgumentError
+      nil
+    end
 
     def resolved_session_id
       return options[:session] if options[:session]
@@ -429,34 +452,14 @@ module OllamaAgent
     end
 
     def start_interactive(agent)
-      puts Console.welcome_banner("Ollama Agent (type 'exit' to quit)")
-      use_readline = interactive_readline_usable?
-
-      loop do
-        input = interactive_readline_line(use_readline)
-        break if input.nil?
-
-        line = input.chomp
-        break if line == "exit"
-
-        agent.run(line)
-      end
+      CLI::Repl.new(agent: agent).start
     end
 
-    def interactive_readline_usable?
-      require "readline"
-      true
-    rescue LoadError
-      false
-    end
-
-    def interactive_readline_line(use_readline)
-      if use_readline
-        Readline.readline(Console.prompt_prefix, true)
-      else
-        print Console.prompt_prefix
-        $stdin.gets
-      end
+    def load_plugins!
+      root = resolved_root_for_self_review
+      Plugins::Loader.new(root: root).load_all(skip_gems: false)
+    rescue StandardError => e
+      warn "ollama_agent: plugin load error: #{e.message}" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
     end
   end
   # rubocop:enable Metrics/ClassLength
