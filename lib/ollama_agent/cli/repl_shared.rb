@@ -30,6 +30,18 @@ module OllamaAgent
         @budget || @agent.instance_variable_get(:@budget)
       end
 
+      def slash_completer_candidates
+        base = SLASH_COMMANDS.keys
+        extras = plugin_slash_command_strings
+        (base + extras).uniq.sort
+      end
+
+      def plugin_slash_command_strings
+        OllamaAgent::Plugins::Registry.all_command_handlers.map { |h| h[:slash_command].to_s }
+      rescue StandardError
+        []
+      end
+
       def handle_slash(line)
         parts   = line.split(" ", 2)
         command = parts[0].downcase

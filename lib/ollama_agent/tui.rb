@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "version"
+require_relative "tui_slash_reader"
 
 require "tty-box"
 require "tty-markdown"
@@ -84,6 +85,29 @@ module OllamaAgent
     rescue TTY::Reader::InputInterrupt
       nil
     end
+
+    # Line editor with Tab completion for lines starting with +/+ (uses {TuiSlashReader}).
+    #
+    # @param completion_candidates [Array<String>] e.g. +/help+, +/model+; empty falls back to {TTY::Prompt#ask}.
+    # @return [String, nil]
+    # rubocop:disable Metrics/MethodLength -- prompt ask vs reader branch
+    def ask_user_line(completion_candidates: [])
+      if completion_candidates.nil? || completion_candidates.empty?
+        return @prompt.ask(@pastel.green.bold("❯")) { |q| q.required true }
+      end
+
+      prompt = @pastel.green.bold("❯ ")
+      reader = TuiSlashReader.new(
+        completion_candidates: completion_candidates,
+        input: $stdin,
+        output: @stdout,
+        interrupt: :error
+      )
+      reader.read_line(prompt).to_s
+    rescue TTY::Reader::InputInterrupt
+      nil
+    end
+    # rubocop:enable Metrics/MethodLength
 
     def log(level, message)
       case level

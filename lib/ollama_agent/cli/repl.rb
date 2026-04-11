@@ -15,6 +15,7 @@ module OllamaAgent
     #   - Session resume inside REPL
     #   - Token budget and loop-detector status display
     #   - Graceful Ctrl-C and Ctrl-D handling
+    # rubocop:disable Metrics/ClassLength -- readline wiring + banner + history
     class Repl
       include ReplShared
 
@@ -67,11 +68,19 @@ module OllamaAgent
 
         load_history
         Readline.completion_proc = slash_completer
+        configure_readline_slash_completion
+      end
+
+      # Shows command hints: type `/` then Tab (lists matches) or Tab again to cycle.
+      # With GNU Readline, `autocompletion` can show inline candidates while typing.
+      def configure_readline_slash_completion
+        Readline.completion_append_character = "" if Readline.respond_to?(:completion_append_character=)
+        Readline.autocompletion = true if Readline.respond_to?(:autocompletion=)
       end
 
       def slash_completer
         proc do |input|
-          SLASH_COMMANDS.keys.select { |cmd| cmd.start_with?(input) }
+          slash_completer_candidates.select { |cmd| cmd.start_with?(input.to_s) }
         end
       end
 
@@ -105,6 +114,7 @@ module OllamaAgent
         @stderr.puts e.backtrace.first(5).join("\n") if ENV["OLLAMA_AGENT_DEBUG"] == "1"
       end
 
+      # rubocop:disable Metrics/MethodLength -- ASCII banner lines
       def print_banner
         @stdout.puts "\e[1m\e[34m"
         @stdout.puts "  ██████╗ ██╗     ██╗      █████╗ ███╗   ███╗ █████╗ "
@@ -115,7 +125,13 @@ module OllamaAgent
         @stdout.puts "   ╚═════╝ ╚══════╝╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝"
         @stdout.puts "\e[0m"
         @stdout.puts "  Universal AI operator runtime  •  type \e[33m/help\e[0m for commands"
+        print_slash_completion_hint if readline_available?
         @stdout.puts ""
+      end
+      # rubocop:enable Metrics/MethodLength
+
+      def print_slash_completion_hint
+        @stdout.puts "  \e[33m/\e[0m then \e[33mTab\e[0m — slash-command hints; Tab again to list all matches"
       end
 
       def load_history
@@ -138,5 +154,6 @@ module OllamaAgent
         nil
       end
     end
+    # rubocop:enable Metrics/ClassLength
   end
 end

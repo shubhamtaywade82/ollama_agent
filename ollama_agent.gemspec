@@ -46,6 +46,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "tty-logger", "~> 0.6"
   spec.add_dependency "tty-markdown", "~> 0.7"
   spec.add_dependency "tty-prompt", "~> 0.23"
+  spec.add_dependency "tty-reader", "~> 0.9"
   spec.add_dependency "tty-screen", "~> 0.8"
   spec.add_dependency "tty-spinner", "~> 0.9"
   spec.add_dependency "tty-table", "~> 0.12"

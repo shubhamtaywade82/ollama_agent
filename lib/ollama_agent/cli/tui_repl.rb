@@ -26,7 +26,7 @@ module OllamaAgent
       # rubocop:disable Metrics/MethodLength -- straight-line session loop
       def start
         show_boot_dashboard
-        @tui.log(:info, "Session ready — type /help for slash commands.")
+        @tui.log(:info, "Session ready — type / then Tab to complete slash commands; /help lists all.")
 
         loop do
           line = read_user_line
@@ -51,7 +51,7 @@ module OllamaAgent
       private
 
       def read_user_line
-        @tui.ask_user_input
+        @tui.ask_user_line(completion_candidates: slash_completer_candidates)
       rescue Interrupt
         nil
       end
