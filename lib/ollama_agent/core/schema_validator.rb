@@ -6,7 +6,8 @@ module OllamaAgent
     # Supports: type, required, properties, enum, minimum, maximum, minLength, maxLength.
     # Does NOT require the json-schema gem — all validation is hand-rolled for zero dependencies.
     class SchemaValidator
-      ValidationError = Class.new(StandardError)
+      class ValidationError < StandardError
+      end
 
       # Validate +data+ against +schema+.
       # @param schema [Hash] JSON schema (symbol or string keys)
@@ -39,9 +40,9 @@ module OllamaAgent
         return if expected.nil?
 
         actual = ruby_type(data)
-        unless type_match?(expected, actual, data)
-          @errors << "expected type #{expected}, got #{actual}"
-        end
+        return if type_match?(expected, actual, data)
+
+        @errors << "expected type #{expected}, got #{actual}"
       end
 
       def check_required(schema, data)
@@ -90,9 +91,9 @@ module OllamaAgent
         if min_len && value.length < min_len
           @errors << "#{name}: length #{value.length} is less than minLength #{min_len}"
         end
-        if max_len && value.length > max_len
-          @errors << "#{name}: length #{value.length} exceeds maxLength #{max_len}"
-        end
+        return unless max_len && value.length > max_len
+
+        @errors << "#{name}: length #{value.length} exceeds maxLength #{max_len}"
       end
 
       def check_numeric_range(name, schema, value)
@@ -101,8 +102,8 @@ module OllamaAgent
         minimum = schema["minimum"]
         maximum = schema["maximum"]
 
-        @errors << "#{name}: #{value} is less than minimum #{minimum}"    if minimum && value < minimum
-        @errors << "#{name}: #{value} exceeds maximum #{maximum}"          if maximum && value > maximum
+        @errors << "#{name}: #{value} is less than minimum #{minimum}" if minimum && value < minimum
+        @errors << "#{name}: #{value} exceeds maximum #{maximum}" if maximum && value > maximum
       end
 
       def ruby_type(value)

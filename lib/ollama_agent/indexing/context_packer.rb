@@ -14,7 +14,7 @@ module OllamaAgent
     #   context = packer.pack(query: "fix the authentication module")
     #   # => "# lib/auth/session.rb\n```ruby\n...\n```\n\n# lib/auth/token.rb\n..."
     class ContextPacker
-      DEFAULT_MAX_FILES    = 15
+      DEFAULT_MAX_FILES = 15
       DEFAULT_MAX_FILE_BYTES = 8_192     # 8 KB per file in context
       DEFAULT_MAX_TOTAL_BYTES = 65_536   # 64 KB total context
 
@@ -80,7 +80,7 @@ module OllamaAgent
       end
 
       def build_context(paths)
-        parts      = []
+        parts = []
         total_bytes = 0
 
         paths.each do |abs_path|

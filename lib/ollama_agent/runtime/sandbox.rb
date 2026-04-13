@@ -30,7 +30,7 @@ module OllamaAgent
       # Copy source tree to a temp directory.
       # @return [String] sandbox root path
       def setup!
-        @root      = Dir.mktmpdir(@prefix)
+        @root = Dir.mktmpdir(@prefix)
         copy_tree(@source_root, @root)
         @setup_done = true
         @root

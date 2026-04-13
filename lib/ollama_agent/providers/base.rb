@@ -2,8 +2,14 @@
 
 # Ensure base error classes exist even when providers are required standalone.
 module OllamaAgent
-  Error             = Class.new(StandardError) unless defined?(Error)
-  ConfigurationError = Class.new(Error)         unless defined?(ConfigurationError)
+  unless defined?(Error)
+    class Error < StandardError
+    end
+  end
+  unless defined?(ConfigurationError)
+    class ConfigurationError < Error
+    end
+  end
 end
 
 module OllamaAgent

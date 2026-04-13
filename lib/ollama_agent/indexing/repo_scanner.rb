@@ -9,35 +9,35 @@ module OllamaAgent
     # Used by ContextPacker to select relevant files for the agent context.
     class RepoScanner
       LANGUAGE_EXTENSIONS = {
-        ruby:        %w[.rb .rake .gemspec],
-        javascript:  %w[.js .jsx .mjs .cjs],
-        typescript:  %w[.ts .tsx],
-        python:      %w[.py .pyw],
-        go:          %w[.go],
-        rust:        %w[.rs],
-        java:        %w[.java],
-        kotlin:      %w[.kt .kts],
-        swift:       %w[.swift],
-        cpp:         %w[.cpp .cc .cxx .hpp .hh .h],
-        c:           %w[.c .h],
-        csharp:      %w[.cs],
-        php:         %w[.php],
-        elixir:      %w[.ex .exs],
-        erlang:      %w[.erl .hrl],
-        haskell:     %w[.hs .lhs],
-        scala:       %w[.scala],
-        clojure:     %w[.clj .cljs .cljc],
-        shell:       %w[.sh .bash .zsh .fish],
-        yaml:        %w[.yml .yaml],
-        json:        %w[.json .jsonc],
-        toml:        %w[.toml],
-        markdown:    %w[.md .mdx .markdown],
-        html:        %w[.html .htm .xhtml],
-        css:         %w[.css .scss .sass .less],
-        sql:         %w[.sql],
-        dockerfile:  %w[Dockerfile],
-        terraform:   %w[.tf .tfvars],
-        proto:       %w[.proto]
+        ruby: %w[.rb .rake .gemspec],
+        javascript: %w[.js .jsx .mjs .cjs],
+        typescript: %w[.ts .tsx],
+        python: %w[.py .pyw],
+        go: %w[.go],
+        rust: %w[.rs],
+        java: %w[.java],
+        kotlin: %w[.kt .kts],
+        swift: %w[.swift],
+        cpp: %w[.cpp .cc .cxx .hpp .hh .h],
+        c: %w[.c .h],
+        csharp: %w[.cs],
+        php: %w[.php],
+        elixir: %w[.ex .exs],
+        erlang: %w[.erl .hrl],
+        haskell: %w[.hs .lhs],
+        scala: %w[.scala],
+        clojure: %w[.clj .cljs .cljc],
+        shell: %w[.sh .bash .zsh .fish],
+        yaml: %w[.yml .yaml],
+        json: %w[.json .jsonc],
+        toml: %w[.toml],
+        markdown: %w[.md .mdx .markdown],
+        html: %w[.html .htm .xhtml],
+        css: %w[.css .scss .sass .less],
+        sql: %w[.sql],
+        dockerfile: %w[Dockerfile],
+        terraform: %w[.tf .tfvars],
+        proto: %w[.proto]
       }.freeze
 
       IGNORED_DIRS = %w[
@@ -87,11 +87,11 @@ module OllamaAgent
 
           rel = path.sub("#{@root}/", "")
           results << FileEntry.new(
-            path:          path,
+            path: path,
             relative_path: rel,
-            language:      lang,
-            size:          size,
-            modified_at:   File.mtime(path)
+            language: lang,
+            size: size,
+            modified_at: File.mtime(path)
           )
         rescue StandardError
           next
@@ -106,10 +106,10 @@ module OllamaAgent
         by_lang = files.group_by(&:language)
 
         {
-          total_files:  files.size,
-          total_bytes:  files.sum(&:size),
-          root:         @root,
-          languages:    by_lang.transform_values { |fs| { files: fs.size, bytes: fs.sum(&:size) } }
+          total_files: files.size,
+          total_bytes: files.sum(&:size),
+          root: @root,
+          languages: by_lang.transform_values { |fs| { files: fs.size, bytes: fs.sum(&:size) } }
         }
       end
 

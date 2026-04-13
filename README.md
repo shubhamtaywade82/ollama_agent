@@ -73,6 +73,21 @@ Long-running models (slow local inference):
 bundle exec ruby exe/ollama_agent ask --timeout 300 "Your task"
 ```
 
+### Agent budget (steps, tokens, cost)
+
+Each **model round-trip** that runs during a session counts as one **step** toward `OLLAMA_AGENT_MAX_TURNS` (default **64**), enforced together with token and optional cost limits in `OllamaAgent::Core::Budget`. Exploratory tasks that **list, read, and search** across a **large repository** can burn through steps quickly; if you see `budget exceeded — step limit (64)`, raise the limit—for example:
+
+```bash
+export OLLAMA_AGENT_MAX_TURNS=128
+bundle exec ruby exe/ollama_agent ask "Your wide-ranging task"
+```
+
+Narrower prompts, **`--read-only`**, or a smaller `--root` also reduce step usage. With **`OLLAMA_AGENT_DEBUG=1`**, the agent prints an extra hint when the **maximum tool rounds** for a run are reached.
+
+### `search_code` and regex patterns
+
+In **text** mode, the tool passes your pattern to **ripgrep** (or **grep**). Patterns are **regular expressions**: literal parentheses, brackets, and unbalanced groups can trigger errors (for example `unclosed group`). Escape metacharacters or use **fixed-string** mode when your tool schema exposes it.
+
 **Plain line REPL** (no TUI boxes / markdown shell): use **`ask` (or `orchestrate`) with `-i` and without `--tui`**—for example when you omit the query you must opt out of the default TUI this way:
 
 ```bash

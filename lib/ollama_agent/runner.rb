@@ -129,11 +129,11 @@ module OllamaAgent
         context_summarize: context_summarize,
         stdin: stdin,
         stdout: stdout,
-        provider_name:  provider,
-        permissions:    permissions,
-        budget:         budget,
+        provider_name: provider,
+        permissions: permissions,
+        budget: budget,
         memory_manager: memory,
-        trace_logger:   trace_logger
+        trace_logger: trace_logger
       )
       @agent = Agent.new(config: config)
 

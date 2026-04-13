@@ -38,7 +38,8 @@ module OllamaAgent
     MAX_TURNS = 64
     DEFAULT_HTTP_TIMEOUT = 120
 
-    attr_reader :client, :root, :hooks, :model
+    attr_reader :client, :root, :hooks, :model,
+                :session_id, :read_only, :max_tokens, :orchestrator, :provider_name
 
     # @param config [AgentConfig, nil] when set, keyword options are ignored (use {Runner} or build {AgentConfig}).
     # rubocop:disable Metrics/ParameterLists
@@ -144,7 +145,7 @@ module OllamaAgent
       strict = EnvConfig.strict_env?
       @max_turns = EnvConfig.fetch_int("OLLAMA_AGENT_MAX_TURNS", MAX_TURNS, strict: strict)
       # v2 platform subsystems (all optional; nil keeps legacy behaviour)
-      @budget        = cfg.budget        || Core::Budget.new(max_steps: @max_turns, max_tokens: @max_tokens)
+      @budget        = cfg.budget || Core::Budget.new(max_steps: @max_turns, max_tokens: @max_tokens)
       @loop_detector = Core::LoopDetector.new
       @trace_logger  = cfg.trace_logger
       @memory_manager = cfg.memory_manager
@@ -170,6 +171,10 @@ module OllamaAgent
         if @budget.exceeded?
           reason = @budget.exceeded_reason
           warn "ollama_agent: budget exceeded — #{reason}"
+          if @budget.steps_exceeded?
+            warn "ollama_agent: for large repo-wide tasks, raise OLLAMA_AGENT_MAX_TURNS (now #{@max_turns}); " \
+                 "see README \"Agent budget\"."
+          end
           @trace_logger&.budget_exceeded(reason: reason)
           break
         end
