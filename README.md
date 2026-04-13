@@ -124,6 +124,14 @@ OLLAMA_AGENT_THINK=true bundle exec ruby exe/ollama_agent ask -i
 bundle exec ruby exe/ollama_agent ask -i --think true
 ```
 
+**GPT-OSS** (and similar) expects a **thinking level**, not only `true`/`false`. If you see no **Thinking** block, pass `low`, `medium`, or `high` (or set `OLLAMA_AGENT_THINK` accordingly). Example:
+
+```bash
+bundle exec ruby exe/ollama_agent ask --think medium "Your task"
+```
+
+For live reasoning lines before the answer, add **`--stream`** or **`OLLAMA_AGENT_STREAM=1`**.
+
 The CLI uses **ANSI colors** on a TTY (banner, prompt, patch prompts). **Assistant replies** are rendered as **Markdown** (headings, lists, bold, code fences) via `tty-markdown` when stdout is a TTY and **`NO_COLOR`** is unset. Disable Markdown rendering with **`OLLAMA_AGENT_MARKDOWN=0`**. Disable all colors with **`NO_COLOR`** or **`OLLAMA_AGENT_COLOR=0`**.
 
 When **thinking** is enabled, internal reasoning is shown under a **Thinking** label; the user-facing reply is labeled **Assistant** in green when the model returns both fields. By default (**`OLLAMA_AGENT_THINKING_STYLE=compact`**, Cursor-like), one **Thinking** header is printed per `ask` run and every later reasoning chunk in that run is appended with **blank lines only** (no repeated banner, no rule lines)—including after turns where the model printed tool JSON or other non-empty `content`. Set **`OLLAMA_AGENT_THINKING_STYLE=framed`** for the legacy boxed style (banner + long rulers on every assistant message). Thinking body text is **plain dim** by default. Set **`OLLAMA_AGENT_THINKING_MARKDOWN=1`** to render thinking through Markdown too (muted colors).

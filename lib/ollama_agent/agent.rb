@@ -7,6 +7,7 @@ require_relative "ollama_connection"
 require_relative "tools_schema"
 require_relative "sandboxed_tools"
 require_relative "think_param"
+require_relative "gemma_thought_content_parser"
 require_relative "timeout_param"
 require_relative "tool_content_parser"
 require_relative "streaming/hooks"
@@ -242,6 +243,7 @@ module OllamaAgent
       message = response.message
       raise Error, "Empty assistant message" if message.nil?
 
+      GemmaThoughtContentParser.merge_into_message_data!(message)
       announce_assistant_content(message)
       message
     end
@@ -251,12 +253,13 @@ module OllamaAgent
       message = response.message
       raise Error, "Empty assistant message" if message.nil?
 
+      GemmaThoughtContentParser.merge_into_message_data!(message)
       message
     end
 
     def chat_request_args(messages)
       base_chat_request_args(messages).tap do |args|
-        th = resolve_think
+        th = ThinkParam.effective_for_model(resolve_think, @model)
         args[:think] = th unless th.nil?
       end
     end
