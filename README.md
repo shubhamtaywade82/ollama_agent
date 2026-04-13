@@ -116,27 +116,62 @@ bundle exec ruby exe/ollama_agent improve --apply
 
 For mode 3, `-y` skips all patch prompts; `--no-semi` prompts for every patch when not using `-y`.
 
-With a **thinking-capable** model, enable reasoning output:
+### Reasoning / thinking output
+
+On [thinking-capable models](https://docs.ollama.com/capabilities/thinking), Ollama can return **reasoning** separately from the final answer (`message.thinking` vs `message.content`). The CLI labels them **Thinking** (dim) and **Assistant** (green / Markdown).
+
+#### Enable `think` on the request
+
+The agent sends Ollama’s `think` field only when you set it (CLI or env). If you omit it, the server uses its own defaults—and some models then omit or change reasoning in the response.
+
+| You want | CLI | Environment |
+|----------|-----|-------------|
+| Reasoning on (typical Qwen / DeepSeek-style) | `--think true` | `OLLAMA_AGENT_THINK=true` or `1` |
+| Reasoning off | `--think false` | `OLLAMA_AGENT_THINK=false` or `0` |
+| **GPT-OSS** style levels | `--think low`, `medium`, or `high` | `OLLAMA_AGENT_THINK=medium` (example) |
+
+Examples:
 
 ```bash
 OLLAMA_AGENT_THINK=true bundle exec ruby exe/ollama_agent ask -i
-# or
 bundle exec ruby exe/ollama_agent ask -i --think true
-```
-
-**GPT-OSS** (and similar) expects a **thinking level**, not only `true`/`false`. If you see no **Thinking** block, pass `low`, `medium`, or `high` (or set `OLLAMA_AGENT_THINK` accordingly). Example:
-
-```bash
+# GPT-OSS: prefer a level, not only true/false
 bundle exec ruby exe/ollama_agent ask --think medium "Your task"
 ```
 
-For live reasoning lines before the answer, add **`--stream`** or **`OLLAMA_AGENT_STREAM=1`**.
+#### Streaming vs one-shot (default)
 
-The CLI uses **ANSI colors** on a TTY (banner, prompt, patch prompts). **Assistant replies** are rendered as **Markdown** (headings, lists, bold, code fences) via `tty-markdown` when stdout is a TTY and **`NO_COLOR`** is unset. Disable Markdown rendering with **`OLLAMA_AGENT_MARKDOWN=0`**. Disable all colors with **`NO_COLOR`** or **`OLLAMA_AGENT_COLOR=0`**.
+| Mode | Flags | What you see |
+|------|--------|----------------|
+| **One-shot** (default) | neither `--stream` nor `OLLAMA_AGENT_STREAM=1` | Each model round completes over HTTP; **Thinking** / **Assistant** are printed from the assembled **`message`** (including Gemma-style reasoning tags stripped from `content` when the API omits `thinking`). |
+| **Streaming** | `--stream` or `OLLAMA_AGENT_STREAM=1` | Reasoning streams in **dim** text under one **Thinking** line, then **Assistant** and the reply stream—similar to Cursor. Uses `hooks[:on_thinking]` on the ollama-client chat stream (see `OllamaAgent::OllamaChatThinkingStreamPatch`). |
 
-When **thinking** is enabled, internal reasoning is shown under a **Thinking** label; the user-facing reply is labeled **Assistant** in green when the model returns both fields. By default (**`OLLAMA_AGENT_THINKING_STYLE=compact`**, Cursor-like), one **Thinking** header is printed per `ask` run and every later reasoning chunk in that run is appended with **blank lines only** (no repeated banner, no rule lines)—including after turns where the model printed tool JSON or other non-empty `content`. Set **`OLLAMA_AGENT_THINKING_STYLE=framed`** for the legacy boxed style (banner + long rulers on every assistant message). Thinking body text is **plain dim** by default. Set **`OLLAMA_AGENT_THINKING_MARKDOWN=1`** to render thinking through Markdown too (muted colors).
+```bash
+OLLAMA_AGENT_THINK=medium OLLAMA_AGENT_STREAM=1 bundle exec ruby exe/ollama_agent ask "Your task"
+```
 
-With **`--stream`** / **`OLLAMA_AGENT_STREAM=1`**, reasoning streams in **dim** text under a single **Thinking** line, then **`Assistant`** and the reply stream in normal styling—closer to Cursor than printing everything as one token stream. (This uses a small hook on ollama-client’s chat stream; `hooks[:on_thinking]` is also emitted for custom subscribers.)
+**Note:** Subscribing only to `on_thinking` does **not** enable the streaming chat path; the agent uses streaming when something listens for **`on_token`** (the console streamer registers both). See CHANGELOG **1.0.0** if you embed the library.
+
+#### Display style (TTY)
+
+By default **`OLLAMA_AGENT_THINKING_STYLE=compact`**: one **Thinking** header per `ask` run; later reasoning chunks in the same run are separated by **blank lines** only (including after tool rounds). **`OLLAMA_AGENT_THINKING_STYLE=framed`** repeats the full boxed banner per message. Thinking body is **plain dim** unless **`OLLAMA_AGENT_THINKING_MARKDOWN=1`**.
+
+The CLI uses **ANSI colors** on a TTY (banner, prompt, patch prompts). **Assistant** replies use **Markdown** via `tty-markdown` when stdout is a TTY and **`NO_COLOR`** is unset. Disable Markdown with **`OLLAMA_AGENT_MARKDOWN=0`**; disable colors with **`NO_COLOR`** or **`OLLAMA_AGENT_COLOR=0`**.
+
+#### If you see no **Thinking** block
+
+1. **Set `think` explicitly**—especially for **GPT-OSS** (`low` / `medium` / `high`).
+2. **Confirm the model returns `message.thinking`** (e.g. `curl` / `ollama` CLI against `/api/chat` with the same `think` value). If the API never sends `thinking`, the agent has nothing to show.
+3. **Try streaming** (`--stream` or `OLLAMA_AGENT_STREAM=1`) if you want live reasoning tokens.
+4. **Embedded reasoning in `content`:** Some templates (e.g. Gemma) put tags such as `<|channel>thought` … `<channel|>` or `<redacted_thinking>` … `</redacted_thinking>` inside `content`. The agent strips those into **Thinking** when present (`OllamaAgent::GemmaThoughtContentParser`). If your model uses different delimiters, reasoning may stay inside the main reply until parsers are extended.
+
+#### Ruby API
+
+```ruby
+OllamaAgent::Runner.build(stream: true, think: "medium").run("Your task")
+```
+
+Custom subscribers can attach to **`hooks[:on_thinking]`** and **`hooks[:on_token]`** on the same **`Runner`** instance (see `OllamaAgent::Streaming::Hooks`).
 
 ### Ollama Cloud
 
@@ -149,6 +184,8 @@ With **`--stream`** / **`OLLAMA_AGENT_STREAM=1`**, reasoning streams in **dim** 
 export OLLAMA_BASE_URL="https://ollama.com"
 export OLLAMA_API_KEY="your_key"
 export OLLAMA_AGENT_MODEL="gpt-oss:120b-cloud"   # example; pick a cloud model from `ollama list` / the catalog
+# Reasoning for GPT-OSS: set a level (see "Reasoning / thinking output" above)
+export OLLAMA_AGENT_THINK=medium
 bundle exec ruby exe/ollama_agent ask "Your task"
 ```
 
@@ -170,7 +207,8 @@ bundle exec ruby exe/ollama_agent ask "Your task"
 | `OLLAMA_AGENT_MARKDOWN` | Set to `0` to disable Markdown formatting of assistant replies (plain text only) |
 | `OLLAMA_AGENT_THINKING_STYLE` | `compact` (default) = one **Thinking** label per run, blank lines between later reasoning chunks; `framed` = repeat full banner/rulers each message |
 | `OLLAMA_AGENT_THINKING_MARKDOWN` | Set to `1` to render **thinking** text with Markdown (muted); default is plain dim text |
-| `OLLAMA_AGENT_THINK` | Model **thinking** mode for compatible models: `true` / `false`, or `high` / `medium` / `low` (see ollama-client `think:`). Empty = omit (server default). |
+| `OLLAMA_AGENT_STREAM` | Set to `1` to stream tokens and reasoning to stdout (same as CLI **`--stream`** on `ask` / `self_review` / `improve`). |
+| `OLLAMA_AGENT_THINK` | Model **thinking** mode for compatible models: `true` / `false`, or `high` / `medium` / `low` (see ollama-client `think:`). Empty = omit (server default). **GPT-OSS:** use `low` / `medium` / `high`. |
 | `OLLAMA_AGENT_PATCH_RISK_MAX_DIFF_LINES` | Max changed-line count before a diff is treated as "large" for semi-auto patch risk (default **80**) |
 | `OLLAMA_AGENT_INDEX_REBUILD` | Set to `1` to drop the cached Prism Ruby index before the next symbol search in this process |
 | `OLLAMA_AGENT_RUBY_INDEX_MAX_FILES` | Max `.rb` files to parse per index build (default **5000**) |

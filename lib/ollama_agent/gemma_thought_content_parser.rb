@@ -5,6 +5,8 @@ require_relative "chat_stream_thinking_format"
 module OllamaAgent
   # Incrementally strips Gemma-style reasoning channels from streamed +message.content+
   # when Ollama does not populate +message.thinking+ (common for Gemma 4 cloud vs Qwen/DeepSeek).
+  # +merge_into_message_data!+ also runs {ChatStreamThinkingFormat.normalize_message_thinking!} so Hash/Array
+  # +thinking+ payloads from the API are coerced to a String before display (README: Reasoning / thinking output).
   #
   # Supported openings (earliest match wins):
   # - +<|channel>thought+ optionally followed by a single newline before reasoning text

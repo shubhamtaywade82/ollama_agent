@@ -1,7 +1,9 @@
 # frozen_string_literal: true
 
 module OllamaAgent
-  # Resolves Ollama chat `think:` from CLI override or OLLAMA_AGENT_THINK (ollama-client: true/false/high/medium/low).
+  # Resolves Ollama chat +think:+ from CLI override or +OLLAMA_AGENT_THINK+.
+  # Values: +true+/+false+ (and +1+/+0+, +yes+/+no+, +on+/+off+), or +high+ / +medium+ / +low+ for models such as GPT-OSS.
+  # When unset everywhere, +think+ is omitted from the request (server default). See README section **Reasoning / thinking output**.
   module ThinkParam
     module_function
 
