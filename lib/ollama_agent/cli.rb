@@ -32,7 +32,9 @@ module OllamaAgent
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches without confirmation"
     method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
-    method_option :think, type: :string, desc: "Thinking mode: true|false|high|medium|low (see OLLAMA_AGENT_THINK)"
+    method_option :think, type: :string,
+                          desc: "Thinking (OLLAMA_AGENT_THINK): true|false|high|medium|low; " \
+                                "gpt-oss uses low|medium|high (true→medium, override with OLLAMA_AGENT_GPT_OSS_THINK)"
     method_option :no_skills, type: :boolean, default: false,
                               desc: "Disable bundled prompt skills (same as OLLAMA_AGENT_SKILLS=0)"
     method_option :skill_paths, type: :string,
@@ -76,7 +78,9 @@ module OllamaAgent
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply patches and run delegations without confirmation"
     method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
-    method_option :think, type: :string, desc: "Thinking mode: true|false|high|medium|low (see OLLAMA_AGENT_THINK)"
+    method_option :think, type: :string,
+                          desc: "Thinking (OLLAMA_AGENT_THINK): true|false|high|medium|low; " \
+                                "gpt-oss uses low|medium|high (true→medium, override with OLLAMA_AGENT_GPT_OSS_THINK)"
     method_option :no_skills, type: :boolean, default: false,
                               desc: "Disable bundled prompt skills (same as OLLAMA_AGENT_SKILLS=0)"
     method_option :skill_paths, type: :string,
@@ -137,7 +141,9 @@ module OllamaAgent
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
     method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
-    method_option :think, type: :string, desc: "Thinking mode: true|false|high|medium|low (see OLLAMA_AGENT_THINK)"
+    method_option :think, type: :string,
+                          desc: "Thinking (OLLAMA_AGENT_THINK): true|false|high|medium|low; " \
+                                "gpt-oss uses low|medium|high (true→medium, override with OLLAMA_AGENT_GPT_OSS_THINK)"
     method_option :yes, type: :boolean, aliases: "-y",
                         desc: "interactive/automated: apply patches without confirmation"
     method_option :semi, type: :boolean, default: true,
@@ -169,7 +175,9 @@ module OllamaAgent
     method_option :model, type: :string, desc: "Ollama model (default: OLLAMA_AGENT_MODEL or ollama-client default)"
     method_option :root, type: :string, desc: "Source tree to copy and test (default: OLLAMA_AGENT_ROOT or cwd)"
     method_option :timeout, type: :numeric, aliases: "-t", desc: "HTTP timeout seconds (default 120)"
-    method_option :think, type: :string, desc: "Thinking mode: true|false|high|medium|low (see OLLAMA_AGENT_THINK)"
+    method_option :think, type: :string,
+                          desc: "Thinking (OLLAMA_AGENT_THINK): true|false|high|medium|low; " \
+                                "gpt-oss uses low|medium|high (true→medium, override with OLLAMA_AGENT_GPT_OSS_THINK)"
     method_option :yes, type: :boolean, aliases: "-y", desc: "Apply all patches without confirmation"
     method_option :semi, type: :boolean, default: true,
                          desc: "Without -y: auto-approve obvious patches; prompt for risky (default: true)"

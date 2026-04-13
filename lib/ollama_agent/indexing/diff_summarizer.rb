@@ -45,7 +45,7 @@ module OllamaAgent
             current[:is_rename] = true if current
 
           elsif line.start_with?("--- ") || line.start_with?("+++ ")
-            next  # skip --- +++ headers
+            next # skip --- +++ headers
 
           elsif line.start_with?("@@")
             current[:hunks] += 1 if current
@@ -73,7 +73,7 @@ module OllamaAgent
 
         lines = [header]
         parsed.each do |fd|
-          tag = if fd.is_new      then "[new]"
+          tag = if fd.is_new then "[new]"
                 elsif fd.is_deleted then "[deleted]"
                 elsif fd.is_rename  then "[renamed]"
                 else                     ""
@@ -111,13 +111,13 @@ module OllamaAgent
 
       def build_entry(d)
         FileDiff.new(
-          path:       d[:path],
-          additions:  d[:additions],
-          deletions:  d[:deletions],
-          hunks:      d[:hunks],
-          is_new:     d[:is_new],
+          path: d[:path],
+          additions: d[:additions],
+          deletions: d[:deletions],
+          hunks: d[:hunks],
+          is_new: d[:is_new],
           is_deleted: d[:is_deleted],
-          is_rename:  d[:is_rename]
+          is_rename: d[:is_rename]
         )
       end
     end

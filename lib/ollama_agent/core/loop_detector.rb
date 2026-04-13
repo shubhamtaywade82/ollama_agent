@@ -57,8 +57,8 @@ module OllamaAgent
       def fingerprint(tool_name, args)
         stable = case args
                  when Hash  then args.sort.map { |k, v| "#{k}=#{v}" }.join(",")
-                 when Array then args.map(&:to_s).join(",")
-                 else        args.to_s
+                 when Array then args.join(",")
+                 else args.to_s
                  end
         "#{tool_name}(#{stable[0, 80]})"
       end

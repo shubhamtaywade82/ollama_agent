@@ -72,8 +72,8 @@ module OllamaAgent
   #
   # @example
   #   OllamaAgent.run("Refactor the auth module", root: "/my/project")
-  def self.run(query, root: Dir.pwd, **kwargs)
-    Runner.build(root: root, **kwargs).run(query)
+  def self.run(query, root: Dir.pwd, **)
+    Runner.build(root: root, **).run(query)
   end
 end
 

@@ -20,15 +20,15 @@ module OllamaAgent
 
       # Pricing per 1M tokens (USD)
       PRICING = {
-        "claude-opus-4-5"             => { input: 15.0,  output: 75.0 },
-        "claude-sonnet-4-5"           => { input:  3.0,  output: 15.0 },
-        "claude-3-5-sonnet-20241022"  => { input:  3.0,  output: 15.0 },
-        "claude-3-5-haiku-20241022"   => { input:  0.8,  output:  4.0 },
-        "claude-3-haiku-20240307"     => { input:  0.25, output:  1.25 }
+        "claude-opus-4-5" => { input: 15.0, output: 75.0 },
+        "claude-sonnet-4-5" => { input: 3.0, output: 15.0 },
+        "claude-3-5-sonnet-20241022" => { input: 3.0, output: 15.0 },
+        "claude-3-5-haiku-20241022" => { input: 0.8, output:  4.0 },
+        "claude-3-haiku-20240307" => { input: 0.25, output: 1.25 }
       }.freeze
 
-      def initialize(api_key: nil, beta_headers: nil, timeout: 120, **opts)
-        super(name: "anthropic", **opts)
+      def initialize(api_key: nil, beta_headers: nil, timeout: 120, **)
+        super(name: "anthropic", **)
         @api_key      = api_key      || ENV.fetch("ANTHROPIC_API_KEY", nil)
         @beta_headers = beta_headers || []
         @timeout      = timeout
@@ -72,15 +72,14 @@ module OllamaAgent
 
       def estimate_cost(input_tokens:, output_tokens:, model: DEFAULT_MODEL)
         pricing = PRICING[model] || PRICING[DEFAULT_MODEL]
-        (input_tokens  / 1_000_000.0 * pricing[:input]) +
+        (input_tokens / 1_000_000.0 * pricing[:input]) +
           (output_tokens / 1_000_000.0 * pricing[:output])
       end
 
       private
 
       def split_system(messages, explicit_system)
-        system_msgs = messages.select { |m| (m[:role] || m["role"]) == "system" }
-        user_msgs   = messages.reject { |m| (m[:role] || m["role"]) == "system" }
+        system_msgs, user_msgs = messages.partition { |m| (m[:role] || m["role"]) == "system" }
 
         system_text = explicit_system ||
                       system_msgs.map { |m| m[:content] || m["content"] }.join("\n\n")
@@ -91,11 +90,11 @@ module OllamaAgent
 
       def build_body(messages:, model:, tools:, max_tokens:, temperature:, system:, stream:)
         body = {
-          model:       model,
-          messages:    normalize_messages(messages),
-          max_tokens:  max_tokens,
+          model: model,
+          messages: normalize_messages(messages),
+          max_tokens: max_tokens,
           temperature: temperature,
-          stream:      stream
+          stream: stream
         }
         body[:system] = system if system
         body[:tools]  = convert_tools(tools) if tools && !tools.empty?
@@ -114,7 +113,7 @@ module OllamaAgent
         post_stream("/messages", body) do |event|
           case event["type"]
           when "content_block_delta"
-            delta = event.dig("delta") || {}
+            delta = event["delta"] || {}
             case delta["type"]
             when "text_delta"
               token = delta["text"].to_s
@@ -155,8 +154,8 @@ module OllamaAgent
 
       def normalize_tool_use(block)
         {
-          id:       block["id"],
-          type:     "function",
+          id: block["id"],
+          type: "function",
           function: { name: block["name"], arguments: block["input"] || {} }
         }
       end
@@ -174,15 +173,15 @@ module OllamaAgent
         tools.map do |t|
           fn = t[:function] || t["function"] || t
           {
-            name:         fn[:name] || fn["name"],
-            description:  fn[:description] || fn["description"],
+            name: fn[:name] || fn["name"],
+            description: fn[:description] || fn["description"],
             input_schema: fn[:parameters] || fn["parameters"] || {}
           }
         end
       end
 
       def normalize_messages(messages)
-        messages.map { |m| { role: (m[:role] || m["role"]), content: (m[:content] || m["content"]).to_s } }
+        messages.map { |m| { role: m[:role] || m["role"], content: (m[:content] || m["content"]).to_s } }
       end
 
       def normalize_usage(usage)
@@ -197,7 +196,7 @@ module OllamaAgent
         uri  = URI("#{API_BASE}#{path}")
         req  = build_request(uri, body)
         resp = Net::HTTP.start(uri.host, uri.port, use_ssl: true,
-                               read_timeout: @timeout, open_timeout: 10) { |http| http.request(req) }
+                                                   read_timeout: @timeout, open_timeout: 10) { |http| http.request(req) }
         handle_response(resp)
       end
 
@@ -206,19 +205,28 @@ module OllamaAgent
         req = build_request(uri, body)
 
         Net::HTTP.start(uri.host, uri.port, use_ssl: true,
-                        read_timeout: @timeout, open_timeout: 10) do |http|
+                                            read_timeout: @timeout, open_timeout: 10) do |http|
           http.request(req) do |resp|
             resp.read_body do |chunk|
               chunk.split("\n").each do |line|
                 next unless line.start_with?("data: ")
 
                 data = line.sub("data: ", "").strip
-                parsed = JSON.parse(data) rescue next
+                parsed = parse_sse_json_line(data)
+                next if parsed.nil?
+
                 yield parsed
               end
             end
           end
         end
+      end
+
+      def parse_sse_json_line(data)
+        JSON.parse(data)
+      rescue JSON::ParserError => e
+        warn "ollama_agent: Anthropic SSE JSON skipped: #{e.message}" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+        nil
       end
 
       def build_request(uri, body)

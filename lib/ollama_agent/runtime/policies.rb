@@ -66,9 +66,7 @@ module OllamaAgent
         # Enforce read_only context flag
         add(:read_only_enforcement) do |tool, _args, ctx|
           write_tools = %w[edit_file write_file run_shell git_commit http_post memory_delete]
-          if ctx[:read_only] && write_tools.include?(tool)
-            "#{tool} is not allowed in read-only mode"
-          end
+          "#{tool} is not allowed in read-only mode" if ctx[:read_only] && write_tools.include?(tool)
         end
 
         # Prevent writing outside project root for file tools
@@ -81,17 +79,15 @@ module OllamaAgent
           expanded = File.expand_path(path, ctx[:root])
           root_abs = File.expand_path(ctx[:root])
 
-          unless expanded.start_with?(root_abs)
-            "#{tool}: path must stay within project root (#{root_abs})"
-          end
+          "#{tool}: path must stay within project root (#{root_abs})" unless expanded.start_with?(root_abs)
         end
 
         # Rate-limit shell commands (max 10 per run)
         add(:shell_rate_limit) do |tool, _args, ctx|
           next unless tool == "run_shell"
 
-          counter = (ctx[:shell_call_count] || 0)
-          limit   = (ctx[:shell_call_limit] || 10)
+          counter = ctx[:shell_call_count] || 0
+          limit   = ctx[:shell_call_limit] || 10
           "run_shell: rate limit of #{limit} calls per run exceeded" if counter >= limit
         end
       end

@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Documentation
+
+- **README:** New **Reasoning / thinking output** section—how to set `think` (including **GPT-OSS** `low`/`medium`/`high`), streaming vs one-shot, display env vars, troubleshooting when **Thinking** is missing, Gemma-style tags, and **`Runner.build`** example. **`OLLAMA_AGENT_STREAM`** and GPT-OSS notes added to the environment table; Ollama Cloud example sets **`OLLAMA_AGENT_THINK`**.
+
+### Fixed
+
+- **Thinking display:** Coerce non-string `message.thinking` from the API (e.g. array-shaped chunks) before deciding whether reasoning is present (`GemmaThoughtContentParser.merge_into_message_data!` + `ChatStreamThinkingFormat`). After a **streaming** chat completion, run the same merge so content-embedded reasoning tags still split into **Thinking** / **Assistant**.
+
 ## [1.0.0] - 2026-04-11
 
 First **stable** release under [Semantic Versioning](https://semver.org/): within the **`1.x`** series, the documented public Ruby API and CLI behavior are intended to remain **backwards compatible** except where called out in the changelog.

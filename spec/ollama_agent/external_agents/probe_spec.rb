@@ -22,7 +22,7 @@ RSpec.describe OllamaAgent::ExternalAgents::Probe do
 
     it "falls back to PATH walk when external command helper is missing (ENOENT)" do
       bindir = nil
-      previous = ENV["PATH"]
+      previous = ENV.fetch("PATH", nil)
       begin
         bindir = File.join(Dir.tmpdir, "probe_bin_#{SecureRandom.hex(4)}")
         FileUtils.mkdir_p(bindir)
@@ -30,7 +30,7 @@ RSpec.describe OllamaAgent::ExternalAgents::Probe do
         File.write(stub_exe, "#!/bin/sh\necho ok\n")
         File.chmod(0o755, stub_exe)
         allow(Open3).to receive(:capture2).with("command", "-v", "probe_shim_exe").and_raise(Errno::ENOENT)
-        ENV["PATH"] = "#{bindir}#{File::PATH_SEPARATOR}#{ENV['PATH']}"
+        ENV["PATH"] = "#{bindir}#{File::PATH_SEPARATOR}#{ENV.fetch("PATH", nil)}"
         agent = { "id" => "shim", "binary" => "probe_shim_exe" }
         expect(described_class.resolve_executable(agent)).to eq(stub_exe)
       ensure

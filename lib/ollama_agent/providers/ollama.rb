@@ -10,8 +10,8 @@ module OllamaAgent
       DEFAULT_MODEL   = "llama3.2"
       DEFAULT_TIMEOUT = 120
 
-      def initialize(host: nil, timeout: nil, **opts)
-        super(name: "ollama", **opts)
+      def initialize(host: nil, timeout: nil, **)
+        super(name: "ollama", **)
         @host    = host    || ENV.fetch("OLLAMA_HOST", "http://localhost:11434")
         @timeout = timeout || DEFAULT_TIMEOUT
       end
@@ -67,8 +67,8 @@ module OllamaAgent
       def build_request(messages:, model:, tools:, temperature:, think:)
         req = {
           messages: messages,
-          model:    model,
-          options:  { temperature: temperature }
+          model: model,
+          options: { temperature: temperature }
         }
         req[:tools] = tools if tools && !tools.empty?
         req[:think] = think if think
@@ -80,8 +80,8 @@ module OllamaAgent
         raise OllamaAgent::Error, "Empty response from Ollama" if msg.nil?
 
         message = {
-          role:       msg.role,
-          content:    msg.content,
+          role: msg.role,
+          content: msg.content,
           tool_calls: normalize_tool_calls(msg.tool_calls)
         }
 
@@ -96,8 +96,8 @@ module OllamaAgent
         calls.map do |tc|
           fn = tc.respond_to?(:function) ? tc.function : tc[:function]
           {
-            id:       tc.respond_to?(:id) ? tc.id : tc[:id],
-            type:     "function",
+            id: tc.respond_to?(:id) ? tc.id : tc[:id],
+            type: "function",
             function: { name: fn.name, arguments: fn.arguments }
           }
         end
@@ -107,10 +107,10 @@ module OllamaAgent
         return nil unless raw.respond_to?(:eval_count)
 
         {
-          prompt_tokens:     raw.respond_to?(:prompt_eval_count) ? raw.prompt_eval_count.to_i : 0,
+          prompt_tokens: raw.respond_to?(:prompt_eval_count) ? raw.prompt_eval_count.to_i : 0,
           completion_tokens: raw.eval_count.to_i,
-          total_tokens:      (raw.respond_to?(:prompt_eval_count) ? raw.prompt_eval_count.to_i : 0) +
-                             raw.eval_count.to_i
+          total_tokens: (raw.respond_to?(:prompt_eval_count) ? raw.prompt_eval_count.to_i : 0) +
+            raw.eval_count.to_i
         }
       end
     end
