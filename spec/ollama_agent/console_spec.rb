@@ -160,4 +160,24 @@ RSpec.describe OllamaAgent::Console do
       end
     end
   end
+
+  describe ".tool_call_line" do
+    it "prefixes the tool name with an outbound marker" do
+      ENV["OLLAMA_AGENT_COLOR"] = "0"
+      line = described_class.tool_call_line("read_file", { "path" => "x.rb" })
+      expect(line).to start_with("▶ read_file(path")
+    ensure
+      ENV.delete("OLLAMA_AGENT_COLOR")
+    end
+  end
+
+  describe ".tool_result_line" do
+    it "prefixes the tool name with an inbound marker" do
+      ENV["OLLAMA_AGENT_COLOR"] = "0"
+      line = described_class.tool_result_line("read_file", "ok")
+      expect(line).to start_with("◀ read_file: ok")
+    ensure
+      ENV.delete("OLLAMA_AGENT_COLOR")
+    end
+  end
 end
