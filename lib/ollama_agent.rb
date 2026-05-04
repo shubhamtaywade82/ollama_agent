@@ -54,6 +54,17 @@ require_relative "ollama_agent/tools/git_tools"
 require_relative "ollama_agent/tools/http_tools"
 require_relative "ollama_agent/tools/memory_tools"
 
+# ── deterministic skill system (JSON-contract pipelines) ─────────────────────
+require_relative "ollama_agent/skills/json_extractor"
+require_relative "ollama_agent/skills/llm_client"
+require_relative "ollama_agent/skills/registry"
+require_relative "ollama_agent/skills/base"
+require_relative "ollama_agent/skills/runner"
+require_relative "ollama_agent/skills/architecture_refactorer"
+require_relative "ollama_agent/skills/performance_optimizer"
+require_relative "ollama_agent/skills/debug_engineer"
+require_relative "ollama_agent/skills/feature_builder"
+
 require_relative "ollama_agent/agent"
 require_relative "ollama_agent/runner"
 require_relative "ollama_agent/cli"
