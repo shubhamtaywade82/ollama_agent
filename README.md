@@ -377,6 +377,49 @@ By default skills run against the local Ollama provider (local-first, auditable)
 They go through `OllamaAgent::Providers::Registry`, so any registered provider
 (OpenAI, Anthropic, custom) is usable by passing your own `LlmClient`.
 
+For the full extension story — writing custom skills, schema vocabulary,
+plugin packaging, testing — see [`docs/SKILLS.md`](docs/SKILLS.md).
+
+## Providers
+
+`--provider` (or the equivalent `Runner.build(provider:)` keyword) selects
+which backend handles `chat`. All providers expose the same `Response` shape;
+the agent loop, sessions, and skills work identically across them.
+
+| Provider    | `--provider` value | Required env vars                    | Optional env vars                                    | Default model                  | Streaming |
+| ----------- | ------------------ | ------------------------------------ | ---------------------------------------------------- | ------------------------------ | --------- |
+| Ollama      | `ollama` (default) | —                                    | `OLLAMA_HOST` (default `http://localhost:11434`)     | `llama3.2`                     | yes       |
+| OpenAI      | `openai`           | `OPENAI_API_KEY`                     | `OPENAI_BASE_URL`, `OPENAI_ORG_ID`                   | `gpt-4o-mini`                  | no        |
+| Anthropic   | `anthropic`        | `ANTHROPIC_API_KEY`                  | `ANTHROPIC_BETA_HEADERS` (when needed)               | `claude-3-5-haiku-20241022`    | yes       |
+| Auto        | `auto`             | (uses whatever env is present)       | —                                                    | first available, in order below| varies    |
+
+**`auto` resolution order:** Ollama (always tried first — local & free) → OpenAI
+(if `OPENAI_API_KEY` is set) → Anthropic (if `ANTHROPIC_API_KEY` is set). Falls
+through with the first provider whose `#available?` returns `true`.
+
+The OpenAI provider also works with **OpenAI-compatible APIs** (Azure OpenAI,
+Together AI, Groq, …) by setting `OPENAI_BASE_URL`.
+
+Custom providers register through `OllamaAgent::Providers::Registry.register("my_provider", MyProvider)`
+where `MyProvider < OllamaAgent::Providers::Base`.
+
+## Permissions
+
+`--permissions` (or `Runtime::Permissions.new(profile:)`) gates which tools
+the model is allowed to call. The denylist always wins over the allowlist.
+
+| Profile      | Read & search                                                     | Write & edit              | Git                                                | Shell        | Memory                                                          | HTTP                  |
+| ------------ | ----------------------------------------------------------------- | ------------------------- | -------------------------------------------------- | ------------ | --------------------------------------------------------------- | --------------------- |
+| `read_only`  | `read_file`, `list_files`, `search_code`                          | —                         | `git_status`, `git_log`, `git_diff`                | —            | `memory_recall`, `memory_list`                                  | `http_get`            |
+| `standard`   | `read_file`, `list_files`, `search_code`                          | `edit_file`, `write_file` | `git_status`, `git_log`, `git_diff`                | denied       | `memory_store`, `memory_recall`, `memory_list`, `memory_delete` | `http_get`            |
+| `developer`  | `read_file`, `list_files`, `search_code`                          | `edit_file`, `write_file` | `git_status`, `git_log`, `git_diff`, `git_commit`, `git_branch` | `run_shell`  | `memory_store`, `memory_recall`, `memory_list`, `memory_delete` | `http_get`            |
+| `full`       | every registered tool                                             | every registered tool     | every registered tool                              | every tool   | every tool                                                      | every tool            |
+
+Defaults: when `--permissions` is omitted, no profile is applied and the
+agent runs with the legacy CLI gating (`--read-only` toggles read/write
+tools, orchestrator mode adds delegation tools). Pass `--permissions standard`
+to opt into the new profile system.
+
 ## Troubleshooting
 
 - **Use a tool-capable model** — Set `OLLAMA_AGENT_MODEL` to a model that supports function/tool calling (e.g. a recent coder-tuned variant). If the model only prints `{"name": "read_file", ...}` in plain text, tools never run unless you enable `OLLAMA_AGENT_PARSE_TOOL_JSON=1`.
