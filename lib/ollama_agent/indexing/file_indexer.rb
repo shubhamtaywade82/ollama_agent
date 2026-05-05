@@ -10,7 +10,7 @@ module OllamaAgent
     class FileIndexer
       IndexEntry = Data.define(:relative_path, :language, :symbols, :tokens, :size)
 
-      MAX_FILE_BYTES = 512_000   # 500 KB — skip larger files for indexing
+      MAX_FILE_BYTES = 512_000 # 500 KB — skip larger files for indexing
 
       def initialize(root:, scanner: nil)
         @root    = File.expand_path(root)
@@ -66,14 +66,14 @@ module OllamaAgent
 
         content = File.read(file_entry.path, encoding: "utf-8", invalid: :replace)
         symbols = extract_symbols(content, file_entry.language)
-        tokens  = tokenize(content + " " + file_entry.relative_path)
+        tokens  = tokenize("#{content} #{file_entry.relative_path}")
 
         IndexEntry.new(
           relative_path: file_entry.relative_path,
-          language:      file_entry.language,
-          symbols:       symbols,
-          tokens:        tokens,
-          size:          file_entry.size
+          language: file_entry.language,
+          symbols: symbols,
+          tokens: tokens,
+          size: file_entry.size
         )
       rescue StandardError
         nil
@@ -81,7 +81,7 @@ module OllamaAgent
 
       def extract_symbols(content, language)
         case language
-        when :ruby       then extract_ruby_symbols(content)
+        when :ruby then extract_ruby_symbols(content)
         when :javascript,
              :typescript then extract_js_symbols(content)
         when :python     then extract_python_symbols(content)

@@ -41,7 +41,7 @@ module OllamaAgent
 
       # Human-readable reason for the first exceeded limit, or nil if none.
       def exceeded_reason
-        return "step limit (#{@max_steps})"        if steps_exceeded?
+        return "step limit (#{@max_steps})" if steps_exceeded?
         return "token limit (#{@max_tokens})"       if tokens_exceeded?
         return "cost limit ($#{@max_cost_usd})"     if cost_exceeded?
 
@@ -56,7 +56,7 @@ module OllamaAgent
 
       def to_h
         {
-          steps: @steps,       max_steps: @max_steps,
+          steps: @steps, max_steps: @max_steps,
           tokens_used: @tokens_used, max_tokens: @max_tokens,
           cost_usd: @cost_usd, max_cost_usd: @max_cost_usd
         }

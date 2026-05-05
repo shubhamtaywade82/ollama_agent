@@ -296,12 +296,12 @@ module OllamaAgent
 
     def tool_call_line(name, args)
       keys = args.is_a?(Hash) ? args.keys.first(2).join(", ") : ""
-      cyan("[tool→] #{name}(#{keys})")
+      cyan("▶ #{name}(#{keys})")
     end
 
     def tool_result_line(name, result)
       preview = result.to_s[0, 60].gsub(/\s+/, " ")
-      dim("[tool←] #{name}: #{preview}")
+      dim("◀ #{name}: #{preview}")
     end
   end
   # rubocop:enable Metrics/ModuleLength

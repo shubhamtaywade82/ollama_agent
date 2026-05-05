@@ -9,9 +9,9 @@ RSpec.describe OllamaAgent::Core::SchemaValidator do
     {
       type: "object",
       properties: {
-        name:  { type: "string", minLength: 1 },
-        age:   { type: "integer", minimum: 0, maximum: 150 },
-        role:  { type: "string", enum: %w[admin user guest] }
+        name: { type: "string", minLength: 1 },
+        age: { type: "integer", minimum: 0, maximum: 150 },
+        role: { type: "string", enum: %w[admin user guest] }
       },
       required: %w[name]
     }
@@ -73,7 +73,7 @@ RSpec.describe OllamaAgent::Core::SchemaValidator do
 
   describe "#validate!" do
     it "returns true when valid" do
-      expect(validator.validate!(schema, { "name" => "Alice" })).to eq(true)
+      expect(validator.validate!(schema, { "name" => "Alice" })).to be(true)
     end
 
     it "raises ValidationError when invalid" do

@@ -3,7 +3,7 @@
 module OllamaAgent
   class CLI
     # Slash-command handlers shared by {Repl} and {TuiRepl}.
-    # rubocop:disable Metrics/ModuleLength, Layout/HashAlignment, Metrics/CyclomaticComplexity, Metrics/AbcSize, Metrics/MethodLength, Style/RescueModifier, Style/NumericPredicate -- legacy Repl extraction
+    # rubocop:disable Metrics/ModuleLength, Layout/HashAlignment, Metrics/CyclomaticComplexity, Metrics/AbcSize, Metrics/MethodLength, Style/NumericPredicate -- REPL command dispatch
     module ReplShared
       SLASH_COMMANDS = {
         "/help"     => "Show this help message",
@@ -22,6 +22,30 @@ module OllamaAgent
 
       private
 
+      def repl_debug?
+        ENV["OLLAMA_AGENT_DEBUG"] == "1"
+      end
+
+      def repl_warn_swallowed(context, error)
+        return unless repl_debug?
+
+        warn "ollama_agent: #{context}: #{error.class}: #{error.message}"
+      end
+
+      def safe_plugin_command_handlers
+        OllamaAgent::Plugins::Registry.all_command_handlers
+      rescue StandardError => e
+        repl_warn_swallowed("plugin command handlers", e)
+        []
+      end
+
+      def build_repo_index_packer
+        OllamaAgent::Indexing::ContextPacker.new(root: @agent.root)
+      rescue StandardError => e
+        repl_warn_swallowed("repository index packer", e)
+        nil
+      end
+
       def repl_memory
         @memory || @agent.instance_variable_get(:@memory_manager)
       end
@@ -37,9 +61,7 @@ module OllamaAgent
       end
 
       def plugin_slash_command_strings
-        OllamaAgent::Plugins::Registry.all_command_handlers.map { |h| h[:slash_command].to_s }
-      rescue StandardError
-        []
+        safe_plugin_command_handlers.map { |h| h[:slash_command].to_s }
       end
 
       def handle_slash(line)
@@ -70,7 +92,7 @@ module OllamaAgent
           @stdout.puts "  \e[33m#{cmd.ljust(14)}\e[0m #{desc}"
         end
 
-        plugin_cmds = OllamaAgent::Plugins::Registry.all_command_handlers rescue []
+        plugin_cmds = safe_plugin_command_handlers
         if plugin_cmds.any?
           @stdout.puts "\n\e[1mPlugin commands:\e[0m"
           plugin_cmds.each { |h| @stdout.puts "  \e[35m#{h[:slash_command]}\e[0m" }
@@ -106,7 +128,7 @@ module OllamaAgent
           @stdout.puts "  Switching session is not supported mid-run. " \
                        "Restart with: ollama_agent ask --session #{arg} --resume"
         else
-          id = @agent.instance_variable_get(:@session_id) rescue nil
+          id = @agent.session_id
           @stdout.puts "  Current session: #{id || "(none)"}"
         end
       end
@@ -153,12 +175,18 @@ module OllamaAgent
 
       def print_config
         @stdout.puts "\n\e[1mConfiguration:\e[0m"
-        ivars = %i[@model @root @read_only @max_tokens @session_id @orchestrator]
-        ivars.each do |ivar|
-          val = @agent.instance_variable_get(ivar) rescue nil
+        rows = [
+          [:model, @agent.model],
+          [:root, @agent.root],
+          [:read_only, @agent.read_only],
+          [:max_tokens, @agent.max_tokens],
+          [:session_id, @agent.session_id],
+          [:orchestrator, @agent.orchestrator]
+        ]
+        rows.each do |label, val|
           next if val.nil?
 
-          @stdout.puts "  \e[36m#{ivar.to_s.delete_prefix("@").ljust(16)}\e[0m #{val}"
+          @stdout.puts "  \e[36m#{label.to_s.ljust(16)}\e[0m #{val}"
         end
         @stdout.puts ""
       end
@@ -168,7 +196,7 @@ module OllamaAgent
           @stdout.puts "  Provider switching mid-run is not yet supported. Restart with --provider #{arg}"
           @stdout.puts "  Chat model can be changed anytime: /model <name>"
         else
-          @stdout.puts "  Current provider: #{@agent.instance_variable_get(:@provider_name) || "ollama"}"
+          @stdout.puts "  Current provider: #{@agent.provider_name || "ollama"}"
         end
       end
 
@@ -204,17 +232,16 @@ module OllamaAgent
       end
 
       def handle_index
-        root = @agent.instance_variable_get(:@root) || Dir.pwd
-        packer = OllamaAgent::Indexing::ContextPacker.new(root: root) rescue nil
+        packer = build_repo_index_packer
         if packer
           @stdout.puts packer.repo_summary
         else
-          @stdout.puts "  Index unavailable — require 'ollama_agent/indexing/context_packer' first"
+          @stdout.puts "  Index unavailable (set OLLAMA_AGENT_DEBUG=1 for details on stderr)"
         end
       end
 
       def check_plugin_commands(command, arg)
-        handlers = OllamaAgent::Plugins::Registry.all_command_handlers rescue []
+        handlers = safe_plugin_command_handlers
         match    = handlers.find { |h| h[:slash_command] == command }
 
         if match
@@ -224,6 +251,6 @@ module OllamaAgent
         end
       end
     end
-    # rubocop:enable Metrics/ModuleLength, Layout/HashAlignment, Metrics/CyclomaticComplexity, Metrics/AbcSize, Metrics/MethodLength, Style/RescueModifier, Style/NumericPredicate
+    # rubocop:enable Metrics/ModuleLength, Layout/HashAlignment, Metrics/CyclomaticComplexity, Metrics/AbcSize, Metrics/MethodLength, Style/NumericPredicate
   end
 end

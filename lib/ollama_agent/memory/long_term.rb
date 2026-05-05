@@ -27,7 +27,7 @@ module OllamaAgent
         now  = Time.now.iso8601
 
         data[key.to_s] = {
-          "value"      => value,
+          "value" => value,
           "created_at" => data.dig(key.to_s, "created_at") || now,
           "updated_at" => now
         }
@@ -62,7 +62,11 @@ module OllamaAgent
       # Search for entries whose key or value matches a pattern.
       def search(pattern, namespace: "default")
         data = load_namespace(namespace)
-        re   = Regexp.new(pattern, Regexp::IGNORECASE) rescue nil
+        re   = begin
+          Regexp.new(pattern, Regexp::IGNORECASE)
+        rescue StandardError
+          nil
+        end
         return {} unless re
 
         data.select { |k, v| re.match?(k) || re.match?(v["value"].to_s) }
@@ -79,7 +83,7 @@ module OllamaAgent
 
       def clear_namespace!(namespace)
         path = namespace_path(namespace)
-        File.delete(path) if File.exist?(path)
+        FileUtils.rm_f(path)
       end
 
       private

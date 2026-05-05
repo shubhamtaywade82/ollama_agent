@@ -41,7 +41,10 @@ module OllamaAgent
 
         def tool_requires_approval(flag = nil)
           @tool_requires_approval = flag unless flag.nil?
-          @tool_requires_approval.nil? ? (@tool_risk || :low) == :high || (@tool_risk || :low) == :critical : @tool_requires_approval
+          return @tool_requires_approval unless @tool_requires_approval.nil?
+
+          risk = @tool_risk || :low
+          %i[high critical].include?(risk)
         end
 
         def tool_schema(schema = nil)
@@ -52,11 +55,6 @@ module OllamaAgent
         def tool_output_schema(schema = nil)
           @tool_output_schema = schema if schema
           @tool_output_schema
-        end
-
-        def inherited(subclass)
-          super
-          # subclass inherits nil overrides so defaults still apply
         end
       end
 
@@ -84,9 +82,9 @@ module OllamaAgent
         {
           type: "function",
           function: {
-            name:        @name,
+            name: @name,
             description: @description,
-            parameters:  @input_schema
+            parameters: @input_schema
           }
         }
       end
@@ -94,8 +92,8 @@ module OllamaAgent
       # Anthropic-format tool definition
       def to_anthropic_schema
         {
-          name:         @name,
-          description:  @description,
+          name: @name,
+          description: @description,
           input_schema: @input_schema
         }
       end

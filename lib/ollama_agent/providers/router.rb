@@ -20,12 +20,12 @@ module OllamaAgent
 
       ProviderUnavailableError = Class.new(defined?(OllamaAgent::Error) ? OllamaAgent::Error : StandardError)
 
-      def initialize(providers:, strategy: :first_available, on_fallback: nil, **opts)
-        super(name: "router", **opts)
+      def initialize(providers:, strategy: :first_available, on_fallback: nil, **)
+        super(name: "router", **)
         @providers  = Array(providers)
         @strategy   = STRATEGIES.include?(strategy.to_sym) ? strategy.to_sym : :first_available
-        @on_fallback = on_fallback   # optional: lambda(from, to, reason)
-        @rr_index   = 0
+        @on_fallback = on_fallback # optional: lambda(from, to, reason)
+        @rr_index = 0
       end
 
       def chat(messages:, model:, **kwargs)
@@ -39,9 +39,7 @@ module OllamaAgent
         rescue OllamaAgent::Error, StandardError => e
           last_error = e
           next_provider = candidates[candidates.index(provider).to_i + 1]
-          if next_provider
-            @on_fallback&.call(provider.name, next_provider.name, e.message)
-          end
+          @on_fallback&.call(provider.name, next_provider.name, e.message) if next_provider
           next
         end
 
@@ -68,7 +66,7 @@ module OllamaAgent
         case @strategy
         when :round_robin    then round_robin_order
         when :cheapest       then cheapest_order
-        else                      @providers.dup  # first_available
+        else                      @providers.dup # first_available
         end
       end
 

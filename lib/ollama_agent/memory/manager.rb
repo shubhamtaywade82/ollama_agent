@@ -62,7 +62,6 @@ module OllamaAgent
         case tier.to_sym
         when :long_term then @long_term.fetch(key.to_s, namespace: namespace)
         when :session   then @session.get(key.to_s)
-        else nil
         end
       end
 
@@ -112,7 +111,7 @@ module OllamaAgent
       def summary
         {
           short_term_entries: @short_term.size,
-          session_keys:       @session.keys.size,
+          session_keys: @session.keys.size,
           long_term_namespaces: @long_term.namespaces.size
         }
       end

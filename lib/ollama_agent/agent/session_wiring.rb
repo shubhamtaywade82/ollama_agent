@@ -59,9 +59,9 @@ module OllamaAgent
 
       def build_tool_context
         {
-          root:             @root,
-          read_only:        @read_only,
-          memory_manager:   @memory_manager,
+          root: @root,
+          read_only: @read_only,
+          memory_manager: @memory_manager,
           shell_call_count: @shell_call_count || 0
         }
       end

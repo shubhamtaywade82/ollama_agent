@@ -25,14 +25,16 @@ RSpec.describe OllamaAgent::Agent do
     end
 
     it "rejects a blank model name" do
-      agent = described_class.new(client: instance_double(Ollama::Client, chat: nil), root: root, confirm_patches: false)
+      agent = described_class.new(client: instance_double(Ollama::Client, chat: nil), root: root,
+                                  confirm_patches: false)
       expect { agent.assign_chat_model!("  ") }.to raise_error(OllamaAgent::Error, /empty/i)
     end
   end
 
   describe "#list_local_model_names" do
     it "returns [] when the client does not support listing" do
-      agent = described_class.new(client: instance_double(Ollama::Client, chat: nil), root: root, confirm_patches: false)
+      agent = described_class.new(client: instance_double(Ollama::Client, chat: nil), root: root,
+                                  confirm_patches: false)
       expect(agent.list_local_model_names).to eq([])
     end
 
@@ -49,7 +51,8 @@ RSpec.describe OllamaAgent::Agent do
   describe "#list_cloud_model_names" do
     it "delegates to OllamaCloudCatalog" do
       allow(OllamaAgent::OllamaCloudCatalog).to receive(:list_model_names).and_return(%w[glm-5.1])
-      agent = described_class.new(client: instance_double(Ollama::Client, chat: nil), root: root, confirm_patches: false)
+      agent = described_class.new(client: instance_double(Ollama::Client, chat: nil), root: root,
+                                  confirm_patches: false)
       expect(agent.list_cloud_model_names).to eq(%w[glm-5.1])
     end
   end

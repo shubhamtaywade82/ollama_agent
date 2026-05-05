@@ -15,19 +15,19 @@ module OllamaAgent
     #   provider = OllamaAgent::Providers::OpenAI.new(api_key: ENV["OPENAI_API_KEY"])
     #   response = provider.chat(messages: [...], model: "gpt-4o")
     class OpenAI < Base
-      API_BASE     = "https://api.openai.com/v1"
+      API_BASE = "https://api.openai.com/v1"
       DEFAULT_MODEL = "gpt-4o-mini"
 
       # Pricing per 1K tokens (USD) — update as needed
       PRICING = {
-        "gpt-4o"       => { input: 0.0025,  output: 0.010 },
-        "gpt-4o-mini"  => { input: 0.00015, output: 0.0006 },
-        "gpt-4-turbo"  => { input: 0.010,   output: 0.030 },
-        "gpt-3.5-turbo"=> { input: 0.0005,  output: 0.0015 }
+        "gpt-4o" => { input: 0.0025, output: 0.010 },
+        "gpt-4o-mini" => { input: 0.00015, output: 0.0006 },
+        "gpt-4-turbo" => { input: 0.010,   output: 0.030 },
+        "gpt-3.5-turbo" => { input: 0.0005, output: 0.0015 }
       }.freeze
 
-      def initialize(api_key: nil, base_url: nil, organization: nil, timeout: 60, **opts)
-        super(name: "openai", **opts)
+      def initialize(api_key: nil, base_url: nil, organization: nil, timeout: 60, **)
+        super(name: "openai", **)
         @api_key      = api_key      || ENV.fetch("OPENAI_API_KEY", nil)
         @base_url     = base_url     || ENV.fetch("OPENAI_BASE_URL", API_BASE)
         @organization = organization || ENV.fetch("OPENAI_ORG_ID", nil)
@@ -44,8 +44,8 @@ module OllamaAgent
         raise ConfigurationError, "OpenAI API key not set (OPENAI_API_KEY)" unless @api_key
 
         model ||= DEFAULT_MODEL
-        body   = build_body(messages: messages, model: model, tools: tools,
-                            temperature: temperature, stream: !stream_hooks.nil?)
+        body = build_body(messages: messages, model: model, tools: tools,
+                          temperature: temperature, stream: !stream_hooks.nil?)
 
         if stream_hooks
           stream_chat(body, model, stream_hooks)
@@ -64,7 +64,7 @@ module OllamaAgent
 
       def estimate_cost(input_tokens:, output_tokens:, model: DEFAULT_MODEL)
         pricing = PRICING[model] || PRICING[DEFAULT_MODEL]
-        (input_tokens  / 1000.0 * pricing[:input]) +
+        (input_tokens / 1000.0 * pricing[:input]) +
           (output_tokens / 1000.0 * pricing[:output])
       end
 
@@ -72,10 +72,10 @@ module OllamaAgent
 
       def build_body(messages:, model:, tools:, temperature:, stream: false)
         body = {
-          model:       model,
-          messages:    normalize_messages(messages),
+          model: model,
+          messages: normalize_messages(messages),
           temperature: temperature,
-          stream:      stream
+          stream: stream
         }
         body[:tools] = tools if tools && !tools.empty?
         body
@@ -90,10 +90,10 @@ module OllamaAgent
         usage   = raw["usage"]
 
         Response.new(
-          message:  normalize_message(message),
-          usage:    normalize_usage(usage),
+          message: normalize_message(message),
+          usage: normalize_usage(usage),
           provider: "openai",
-          model:    model
+          model: model
         )
       end
 
@@ -122,16 +122,16 @@ module OllamaAgent
 
       def normalize_message(msg)
         {
-          role:       msg["role"],
-          content:    msg["content"],
+          role: msg["role"],
+          content: msg["content"],
           tool_calls: (msg["tool_calls"] || []).map { |tc| normalize_tool_call_response(tc) }
         }
       end
 
       def normalize_tool_call_response(tc)
         {
-          id:       tc["id"],
-          type:     "function",
+          id: tc["id"],
+          type: "function",
           function: { name: tc.dig("function", "name"), arguments: parse_args(tc.dig("function", "arguments")) }
         }
       end
@@ -148,17 +148,17 @@ module OllamaAgent
         return nil unless usage
 
         {
-          prompt_tokens:     usage["prompt_tokens"].to_i,
+          prompt_tokens: usage["prompt_tokens"].to_i,
           completion_tokens: usage["completion_tokens"].to_i,
-          total_tokens:      usage["total_tokens"].to_i
+          total_tokens: usage["total_tokens"].to_i
         }
       end
 
       def merge_tool_call(calls, delta)
         idx = delta["index"].to_i
         calls[idx] ||= { id: nil, type: "function", function: { name: +"", arguments: +"" } }
-        calls[idx][:id]                  = delta["id"] if delta["id"]
-        calls[idx][:function][:name]     << delta.dig("function", "name").to_s
+        calls[idx][:id] = delta["id"] if delta["id"]
+        calls[idx][:function][:name] << delta.dig("function", "name").to_s
         calls[idx][:function][:arguments] << delta.dig("function", "arguments").to_s
       end
 
@@ -166,7 +166,7 @@ module OllamaAgent
         uri  = URI("#{@base_url}#{path}")
         req  = build_http_request(uri, body)
         resp = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                               read_timeout: @timeout, open_timeout: 10) { |http| http.request(req) }
+                                                   read_timeout: @timeout, open_timeout: 10) { |http| http.request(req) }
         handle_response(resp)
       end
 
@@ -175,7 +175,7 @@ module OllamaAgent
         req = build_http_request(uri, body)
 
         Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                        read_timeout: @timeout, open_timeout: 10) do |http|
+                                            read_timeout: @timeout, open_timeout: 10) do |http|
           http.request(req) do |resp|
             resp.read_body do |chunk|
               chunk.split("\n").each do |line|
@@ -184,12 +184,21 @@ module OllamaAgent
                 data = line.sub("data: ", "").strip
                 next if data == "[DONE]"
 
-                parsed = JSON.parse(data) rescue next
+                parsed = parse_sse_json_line(data)
+                next if parsed.nil?
+
                 yield parsed
               end
             end
           end
         end
+      end
+
+      def parse_sse_json_line(data)
+        JSON.parse(data)
+      rescue JSON::ParserError => e
+        warn "ollama_agent: OpenAI SSE JSON skipped: #{e.message}" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+        nil
       end
 
       def build_http_request(uri, body)

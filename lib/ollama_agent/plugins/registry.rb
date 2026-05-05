@@ -33,7 +33,7 @@ module OllamaAgent
         end
 
         # Delegate class methods to the singleton.
-        def register(name, plugin = nil, &block) = instance.register(name, plugin, &block)
+        def register(name, plugin = nil, &) = instance.register(name, plugin, &)
         def extensions_for(point)                = instance.extensions_for(point)
         def all_tools                            = instance.extensions_for(:tools)
         def all_prompts                          = instance.extensions_for(:prompts)
@@ -84,7 +84,11 @@ module OllamaAgent
       def add_prompt(hash)       = extend(:prompts, hash)
       def add_policy(&block)     = extend(:policies, block)
       def add_provider(provider) = extend(:providers, provider)
-      def add_command(slash_command:, &handler) = extend(:command_handlers, { slash_command: slash_command, handler: handler })
+
+      def add_command(slash_command:,
+                      &handler)
+        extend(:command_handlers, { slash_command: slash_command, handler: handler })
+      end
 
       def extensions_for(point)
         @extensions[point.to_sym].dup

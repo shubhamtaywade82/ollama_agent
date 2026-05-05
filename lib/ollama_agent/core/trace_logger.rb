@@ -89,7 +89,9 @@ module OllamaAgent
         @hooks.on(:on_tool_result) { |p| tool_result(name: p[:name], result: p[:result], turn: p[:turn]) }
         @hooks.on(:on_retry)       { |p| retry_attempt(attempt: p[:attempt], delay_ms: p[:delay_ms], error: p[:error]) }
         @hooks.on(:on_complete)    { |p| end_run(turns: p[:turns]) }
-        @hooks.on(:on_error)       { |p| trace(:agent_error, { error: p[:error].class.name, message: p[:error].message }) }
+        @hooks.on(:on_error)       do |p|
+          trace(:agent_error, { error: p[:error].class.name, message: p[:error].message })
+        end
       end
 
       def build_entry(event, payload)
@@ -116,7 +118,7 @@ module OllamaAgent
 
       def write_human(entry)
         event  = entry[:event].to_s.ljust(20)
-        detail = entry.reject { |k, _| %i[ts run_id event].include?(k) }
+        detail = entry.except(:ts, :run_id, :event)
                       .map { |k, v| "#{k}=#{v.inspect}" }.join(" ")
         warn "[#{entry[:ts]}] #{event} #{detail}" if ENV["OLLAMA_AGENT_TRACE"] == "1"
       end

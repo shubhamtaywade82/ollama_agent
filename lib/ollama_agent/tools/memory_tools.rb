@@ -11,14 +11,14 @@ module OllamaAgent
       tool_risk        :low
       tool_requires_approval false
       tool_schema({
-        type: "object",
-        properties: {
-          key:       { type: "string", description: "Unique key for this fact", minLength: 1 },
-          value:     { type: "string", description: "Value to store" },
-          namespace: { type: "string", description: "Namespace (default: 'default')" }
-        },
-        required: ["key", "value"]
-      })
+                    type: "object",
+                    properties: {
+                      key: { type: "string", description: "Unique key for this fact", minLength: 1 },
+                      value: { type: "string", description: "Value to store" },
+                      namespace: { type: "string", description: "Namespace (default: 'default')" }
+                    },
+                    required: %w[key value]
+                  })
 
       def call(args, context: {})
         memory = context[:memory_manager]
@@ -40,13 +40,13 @@ module OllamaAgent
       tool_risk        :low
       tool_requires_approval false
       tool_schema({
-        type: "object",
-        properties: {
-          key:       { type: "string", description: "Key to look up", minLength: 1 },
-          namespace: { type: "string", description: "Namespace (default: 'default')" }
-        },
-        required: ["key"]
-      })
+                    type: "object",
+                    properties: {
+                      key: { type: "string", description: "Key to look up", minLength: 1 },
+                      namespace: { type: "string", description: "Namespace (default: 'default')" }
+                    },
+                    required: ["key"]
+                  })
 
       def call(args, context: {})
         memory = context[:memory_manager]
@@ -67,12 +67,12 @@ module OllamaAgent
       tool_risk        :low
       tool_requires_approval false
       tool_schema({
-        type: "object",
-        properties: {
-          namespace: { type: "string", description: "Namespace to list (default: 'default')" }
-        },
-        required: []
-      })
+                    type: "object",
+                    properties: {
+                      namespace: { type: "string", description: "Namespace to list (default: 'default')" }
+                    },
+                    required: []
+                  })
 
       def call(args, context: {})
         memory = context[:memory_manager]
@@ -94,13 +94,13 @@ module OllamaAgent
       tool_risk        :medium
       tool_requires_approval false
       tool_schema({
-        type: "object",
-        properties: {
-          key:       { type: "string", description: "Key to delete", minLength: 1 },
-          namespace: { type: "string", description: "Namespace (default: 'default')" }
-        },
-        required: ["key"]
-      })
+                    type: "object",
+                    properties: {
+                      key: { type: "string", description: "Key to delete", minLength: 1 },
+                      namespace: { type: "string", description: "Namespace (default: 'default')" }
+                    },
+                    required: ["key"]
+                  })
 
       def call(args, context: {})
         memory = context[:memory_manager]

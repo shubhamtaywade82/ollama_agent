@@ -25,7 +25,7 @@ RSpec.describe OllamaAgent::Plugins::Registry do
 
   describe "#extend" do
     it "adds a tool extension" do
-      tool = double("tool")
+      tool = Object.new
       registry.extend(:tools, tool)
       expect(registry.extensions_for(:tools)).to include(tool)
     end

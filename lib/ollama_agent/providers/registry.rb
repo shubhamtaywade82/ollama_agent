@@ -16,8 +16,8 @@ module OllamaAgent
     #   OllamaAgent::Providers::Registry.register("my_provider", MyProvider)
     module Registry
       BUILT_IN = {
-        "ollama"    => Ollama,
-        "openai"    => OpenAI,
+        "ollama" => Ollama,
+        "openai" => OpenAI,
         "anthropic" => Anthropic
       }.freeze
 
@@ -35,13 +35,13 @@ module OllamaAgent
         # @param name [String, Symbol]  provider name or "auto"
         # @param opts [Hash]            forwarded to the provider constructor
         # @return [Base] provider instance
-        def resolve(name, **opts)
-          return auto_provider(**opts) if name.to_s == "auto"
+        def resolve(name, **)
+          return auto_provider(**) if name.to_s == "auto"
 
           klass = @custom[name.to_s] || BUILT_IN[name.to_s]
           raise ArgumentError, "Unknown provider: #{name}. Known: #{known_names.join(", ")}" unless klass
 
-          klass.new(**opts)
+          klass.new(**)
         end
 
         # Build a router from a priority list of provider names.
@@ -53,11 +53,11 @@ module OllamaAgent
 
         # Returns a provider that is available right now.
         # Checks Ollama first (free/local), then OpenAI, then Anthropic.
-        def auto_provider(**opts)
+        def auto_provider(**)
           candidates = [
-            BUILT_IN["ollama"].new(**opts),
-            (BUILT_IN["openai"].new(**opts)    if ENV["OPENAI_API_KEY"]),
-            (BUILT_IN["anthropic"].new(**opts) if ENV["ANTHROPIC_API_KEY"])
+            BUILT_IN["ollama"].new(**),
+            (BUILT_IN["openai"].new(**)    if ENV["OPENAI_API_KEY"]),
+            (BUILT_IN["anthropic"].new(**) if ENV["ANTHROPIC_API_KEY"])
           ].compact
 
           Router.new(providers: candidates, strategy: :first_available)
