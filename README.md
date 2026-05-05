@@ -308,6 +308,75 @@ last = OllamaAgent::ToolRuntime::Loop.new(
 # last => e.g. { "status" => "done", "echo" => "bye" }
 ```
 
+## Skills (deterministic JSON-contract pipelines)
+
+Skills are single-purpose generators that bypass the tool-calling agent loop and
+return **strict JSON** validated against a schema. They are meant for pipelines
+that need predictable, parseable output — code review, refactoring suggestions,
+performance audits, debugging triage — without the unpredictability of free-form
+LLM prose.
+
+Built-in skills:
+
+- `architecture_refactor` — restructure code without changing behavior
+- `performance_optimizer` — identify bottlenecks and emit optimized code
+- `debug_engineer` — root-cause a bug and propose a fix
+- `feature_builder` — design and implement a production-ready feature
+
+Each skill:
+
+1. Renders a deterministic prompt (LLM `temperature: 0` by default).
+2. Extracts the first balanced JSON object from the response (tolerates prose
+   and ```` ```json ```` fences).
+3. Validates against the skill's `SCHEMA` and raises `ContractError` on mismatch.
+
+### CLI
+
+```bash
+# list registered skills
+ollama_agent skill list
+
+# run a single skill
+ollama_agent skill run architecture_refactor --code-file lib/orders/manager.rb
+
+# compose a pipeline; later skills receive earlier outputs merged in
+ollama_agent skill pipeline architecture_refactor performance_optimizer \
+  --code-file lib/exit_management.rb
+```
+
+Override the model with `--model`, `OLLAMA_AGENT_SKILL_MODEL`, or
+`OLLAMA_AGENT_MODEL`.
+
+### Ruby
+
+```ruby
+result = OllamaAgent::Skills::ArchitectureRefactorer.new.call(
+  code: File.read("lib/orders/manager.rb")
+)
+# => { folder_structure: [...], architecture_notes: "...", refactored_code: "..." }
+
+OllamaAgent::Skills::Runner.new(
+  [:architecture_refactor, :performance_optimizer]
+).call(code: File.read("lib/exit_management.rb"))
+```
+
+Inject your own LLM client (anything responding to `#generate(prompt) → String`)
+in tests:
+
+```ruby
+class FakeLlm
+  def generate(_prompt)
+    '{"bottlenecks": [], "optimizations": [], "optimized_code": "x"}'
+  end
+end
+
+OllamaAgent::Skills::PerformanceOptimizer.new(llm: FakeLlm.new).call(code: "...")
+```
+
+By default skills run against the local Ollama provider (local-first, auditable).
+They go through `OllamaAgent::Providers::Registry`, so any registered provider
+(OpenAI, Anthropic, custom) is usable by passing your own `LlmClient`.
+
 ## Troubleshooting
 
 - **Use a tool-capable model** — Set `OLLAMA_AGENT_MODEL` to a model that supports function/tool calling (e.g. a recent coder-tuned variant). If the model only prints `{"name": "read_file", ...}` in plain text, tools never run unless you enable `OLLAMA_AGENT_PARSE_TOOL_JSON=1`.
