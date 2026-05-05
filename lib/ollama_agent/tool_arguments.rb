@@ -34,5 +34,14 @@ module OllamaAgent
     def missing_tool_argument(tool, arg_name)
       "Missing required argument #{arg_name.inspect} for #{tool}."
     end
+
+    def coerce_list_max_depth(value)
+      return nil if value.nil? || (value.respond_to?(:empty?) && value.empty?)
+
+      n = Integer(value)
+      n.positive? ? n : nil
+    rescue ArgumentError, TypeError
+      nil
+    end
   end
 end

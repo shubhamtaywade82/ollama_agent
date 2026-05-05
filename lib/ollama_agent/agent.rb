@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "logger"
+
 require_relative "agent_prompt"
 require_relative "prompt_skills"
 require_relative "console"
@@ -18,10 +20,13 @@ require_relative "session/store"
 require_relative "env_config"
 require_relative "model_env"
 require_relative "ollama_cloud_catalog"
+require_relative "agent_root_resolver"
 require_relative "agent/agent_config"
 require_relative "agent/client_wiring"
 require_relative "agent/prompt_wiring"
 require_relative "agent/session_wiring"
+require_relative "agent/chat_coordinator"
+require_relative "agent/turn_loop"
 require_relative "core/budget"
 require_relative "core/loop_detector"
 require_relative "core/trace_logger"
@@ -29,7 +34,7 @@ require_relative "core/trace_logger"
 module OllamaAgent
   # Runs a tool-calling loop against Ollama: read files, search, apply unified diffs.
   # Public entry: {#run}. Other instance methods are internal to the agent loop.
-  # rubocop:disable Metrics/ClassLength -- facade coordinates includes and turn loop
+  # rubocop:disable Metrics/ClassLength -- facade coordinates includes, config, and chat helpers
   class Agent
     include SandboxedTools
     include ClientWiring
@@ -39,7 +44,7 @@ module OllamaAgent
     MAX_TURNS = 64
     DEFAULT_HTTP_TIMEOUT = 120
 
-    attr_reader :client, :root, :hooks, :model,
+    attr_reader :client, :root, :hooks, :model, :logger,
                 :session_id, :read_only, :max_tokens, :orchestrator, :provider_name
 
     # @param config [AgentConfig, nil] when set, keyword options are ignored (use {Runner} or build {AgentConfig}).
@@ -57,7 +62,8 @@ module OllamaAgent
                    stdin: $stdin, stdout: $stdout,
                    provider: nil, provider_name: nil, budget: nil,
                    permissions: nil, policies: nil,
-                   memory_manager: nil, trace_logger: nil, approval_gate: nil, user_prompt: nil)
+                   memory_manager: nil, trace_logger: nil, approval_gate: nil, user_prompt: nil,
+                   logger: nil)
       cfg = config || AgentConfig.new(
         model: model, root: root, confirm_patches: confirm_patches, http_timeout: http_timeout, think: think,
         read_only: read_only, patch_policy: patch_policy,
@@ -69,7 +75,8 @@ module OllamaAgent
         provider: provider, provider_name: provider_name, budget: budget,
         permissions: permissions, policies: policies,
         memory_manager: memory_manager, trace_logger: trace_logger, approval_gate: approval_gate,
-        user_prompt: user_prompt
+        user_prompt: user_prompt,
+        logger: logger
       )
       apply_agent_config(cfg)
       @user_prompt = cfg.user_prompt || UserPrompt.new(stdin: cfg.stdin, stdout: cfg.stdout)
@@ -84,7 +91,7 @@ module OllamaAgent
     def run(query)
       Console.reset_thinking_session!
       messages = build_messages_for_run(query)
-      execute_agent_turns(messages)
+      TurnLoop.new(self).run(messages)
     end
 
     # Switch the chat model for subsequent {#run} calls (same session, same client).
@@ -92,10 +99,10 @@ module OllamaAgent
     #
     # @param name [String]
     # @return [String] the normalized model id
-    # @raise [OllamaAgent::Error] when +name+ is blank
+    # @raise [OllamaAgent::EmptyModelNameError] when +name+ is blank
     def assign_chat_model!(name)
       n = name.to_s.strip
-      raise Error, "Model name cannot be empty" if n.empty?
+      raise EmptyModelNameError, "Model name cannot be empty" if n.empty?
 
       @model = n
       n
@@ -108,7 +115,9 @@ module OllamaAgent
       return [] unless @client.respond_to?(:list_model_names)
 
       @client.list_model_names
-    rescue StandardError
+    rescue StandardError => e
+      logger.warn("list_local_model_names failed (#{e.class}: #{e.message})")
+      logger.debug(e.full_message) if ENV["OLLAMA_AGENT_DEBUG"] == "1"
       []
     end
 
@@ -119,33 +128,80 @@ module OllamaAgent
       OllamaCloudCatalog.list_model_names
     end
 
+    # Subclasses that override chat or tool wiring should keep {#assign_chat_model!} in sync
+    # if they depend on +@model+ matching the HTTP client catalog.
+
     private
 
-    # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- maps AgentConfig to ivars + resolved max turns
+    def chat_coordinator
+      @chat_coordinator ||= ChatCoordinator.new(self)
+    end
+
     def apply_agent_config(cfg)
+      assign_model_and_root!(cfg)
+      assign_runtime_flags!(cfg)
+      assign_skill_options!(cfg)
+      assign_session_and_limits!(cfg)
+      assign_platform_subsystems!(cfg)
+    end
+
+    def assign_model_and_root!(cfg)
       @model = cfg.model || default_model
-      @root = File.expand_path(cfg.root || ENV.fetch("OLLAMA_AGENT_ROOT", Dir.pwd))
+      @root = AgentRootResolver.resolve(cfg.root)
+      @logger = cfg.logger || build_default_logger
+    end
+
+    def build_default_logger
+      Logger.new($stderr, progname: "ollama_agent").tap do |log|
+        log.level = logger_level_from_env
+      end
+    end
+
+    def logger_level_from_env
+      case ENV.fetch("OLLAMA_AGENT_LOG_LEVEL", "").strip.downcase
+      when "debug" then Logger::DEBUG
+      when "info" then Logger::INFO
+      when "warn" then Logger::WARN
+      when "error" then Logger::ERROR
+      else
+        ENV["OLLAMA_AGENT_DEBUG"] == "1" ? Logger::DEBUG : Logger::WARN
+      end
+    end
+
+    # rubocop:disable Metrics/MethodLength -- one-line ivar copies from AgentConfig
+    def assign_runtime_flags!(cfg)
       @confirm_patches = cfg.confirm_patches
       @read_only = cfg.read_only
       @patch_policy = cfg.patch_policy
       @http_timeout_override = cfg.http_timeout
       @think = cfg.think
+      @orchestrator = cfg.orchestrator
+      @confirm_delegation = cfg.resolved_confirm_delegation
+      @max_retries = cfg.max_retries
+      @audit = cfg.audit
+      @provider = cfg.provider
+      @provider_name = cfg.provider_name
+    end
+    # rubocop:enable Metrics/MethodLength
+
+    def assign_skill_options!(cfg)
       @skill_paths = cfg.skill_paths
       @skills_enabled = cfg.skills_enabled
       @skills_include = cfg.skills_include
       @skills_exclude = cfg.skills_exclude
       @external_skills_enabled = cfg.external_skills_enabled
-      @orchestrator = cfg.orchestrator
-      @confirm_delegation = cfg.resolved_confirm_delegation
-      @max_retries = cfg.max_retries
-      @audit = cfg.audit
+    end
+
+    def assign_session_and_limits!(cfg)
       @session_id = cfg.session_id
       @resume = cfg.resume
       @max_tokens = cfg.max_tokens
       @context_summarize = cfg.context_summarize
       strict = EnvConfig.strict_env?
       @max_turns = EnvConfig.fetch_int("OLLAMA_AGENT_MAX_TURNS", MAX_TURNS, strict: strict)
-      # v2 platform subsystems (all optional; nil keeps legacy behaviour)
+    end
+
+    def assign_platform_subsystems!(cfg)
       @budget        = cfg.budget || Core::Budget.new(max_steps: @max_turns, max_tokens: @max_tokens)
       @loop_detector = Core::LoopDetector.new
       @trace_logger  = cfg.trace_logger
@@ -153,52 +209,7 @@ module OllamaAgent
       @permissions   = cfg.permissions
       @policies      = cfg.policies
       @approval_gate = cfg.approval_gate
-      @provider      = cfg.provider
-      @provider_name = cfg.provider_name
     end
-    # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
-
-    # rubocop:disable Metrics/MethodLength -- turn loop with early break
-    def execute_agent_turns(messages)
-      @current_turn = 0
-      @budget.reset!
-      @loop_detector.reset!
-      @trace_logger&.start_run(query: messages.last&.fetch(:content, nil))
-
-      @max_turns.times do
-        @current_turn += 1
-        @budget.record_step!
-
-        if @budget.exceeded?
-          reason = @budget.exceeded_reason
-          warn "ollama_agent: budget exceeded — #{reason}"
-          if @budget.steps_exceeded?
-            warn "ollama_agent: for large repo-wide tasks, raise OLLAMA_AGENT_MAX_TURNS (now #{@max_turns}); " \
-                 "see README \"Agent budget\"."
-          end
-          @trace_logger&.budget_exceeded(reason: reason)
-          break
-        end
-
-        trimmed    = trimmed_messages_for_chat(messages)
-        message    = chat_assistant_message(trimmed)
-        tool_calls = tool_calls_from(message)
-        persist_assistant_turn(messages, message)
-        break if tool_calls.empty?
-
-        if @loop_detector.loop_detected?
-          summary = @loop_detector.loop_summary
-          warn "ollama_agent: #{summary}"
-          @trace_logger&.loop_detected(summary: summary)
-          break
-        end
-
-        append_tool_results(messages, tool_calls)
-      end
-      emit_turn_complete(messages)
-      warn_max_turns_if_needed
-    end
-    # rubocop:enable Metrics/MethodLength
 
     def trimmed_messages_for_chat(messages)
       @context_manager.trim(messages)
@@ -216,7 +227,7 @@ module OllamaAgent
     def warn_max_turns_if_needed
       return unless ENV["OLLAMA_AGENT_DEBUG"] == "1" && @current_turn >= @max_turns
 
-      warn "ollama_agent: maximum tool rounds (#{@max_turns}) reached"
+      logger.warn("maximum tool rounds (#{@max_turns}) reached")
     end
 
     def current_turn
@@ -230,67 +241,8 @@ module OllamaAgent
       ToolContentParser.synthetic_calls(message.content)
     end
 
-    def chat_assistant_message(messages)
-      if @hooks.subscribed?(:on_token)
-        stream_assistant_message(messages)
-      else
-        block_assistant_message(messages)
-      end
-    end
-
-    def block_assistant_message(messages)
-      response = @client.chat(**chat_request_args(messages))
-      message = response.message
-      raise Error, "Empty assistant message" if message.nil?
-
-      GemmaThoughtContentParser.merge_into_message_data!(message)
-      announce_assistant_content(message)
-      message
-    end
-
-    def stream_assistant_message(messages)
-      response = @client.chat(**chat_request_args(messages), hooks: ollama_stream_hooks)
-      message = response.message
-      raise Error, "Empty assistant message" if message.nil?
-
-      GemmaThoughtContentParser.merge_into_message_data!(message)
-      message
-    end
-
     def chat_request_args(messages)
-      base_chat_request_args(messages).tap do |args|
-        th = ThinkParam.effective_for_model(resolve_think, @model)
-        args[:think] = th unless th.nil?
-      end
-    end
-
-    def base_chat_request_args(messages)
-      {
-        messages: messages,
-        tools: OllamaAgent.tools_for(read_only: @read_only, orchestrator: @orchestrator),
-        model: @model,
-        options: { temperature: 0.2 }
-      }
-    end
-
-    def ollama_stream_hooks
-      {
-        on_thinking: ->(fragment) { @hooks.emit(:on_thinking, { token: fragment.to_s, turn: current_turn }) },
-        on_token: lambda do |*args|
-          token = args[0]
-          logprobs = args[1]
-          payload = { token: token, turn: current_turn }
-          payload[:logprobs] = logprobs unless logprobs.nil?
-          @hooks.emit(:on_token, payload)
-        end
-      }
-    end
-
-    def announce_assistant_content(message)
-      @hooks.emit(:on_assistant_message, { message: message })
-      return if @hooks.subscribed?(:on_assistant_message)
-
-      Console.puts_assistant_message(message)
+      chat_coordinator.request_args(messages)
     end
 
     def resolve_think

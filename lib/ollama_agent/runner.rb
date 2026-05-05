@@ -44,8 +44,9 @@ module OllamaAgent
     # @param budget [Core::Budget, nil] token/step budget (v2)
     # @param memory [Memory::Manager, nil] memory manager instance (v2)
     # @param trace [Boolean] enable trace logging to stdout (v2)
+    # @param logger [Logger, nil] stderr logger for agent warnings (default: new +Logger+ on +$stderr+)
     # @return [Runner]
-    # rubocop:disable Metrics/ParameterLists -- library facade must expose all Agent options
+    # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength -- library facade must expose all Agent options
     def self.build(
       root:            Dir.pwd,
       model:           nil,
@@ -70,7 +71,8 @@ module OllamaAgent
       permissions:     nil,
       budget:          nil,
       memory:          nil,
-      trace:           false
+      trace:           false,
+      logger:          nil
     )
       new(
         root: root, model: model, stream: stream,
@@ -82,10 +84,11 @@ module OllamaAgent
         think: think, http_timeout: http_timeout,
         stdin: stdin, stdout: stdout,
         provider: provider, permissions: permissions,
-        budget: budget, memory: memory, trace: trace
+        budget: budget, memory: memory, trace: trace,
+        logger: logger
       )
     end
-    # rubocop:enable Metrics/ParameterLists
+    # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength
 
     # Execute a query. Blocks until the agent loop completes.
     # @param query [String]
@@ -106,7 +109,8 @@ module OllamaAgent
                    max_retries:, audit:, read_only:, skills_enabled:, skill_paths:,
                    confirm_patches:, orchestrator:, think:, http_timeout:,
                    stdin:, stdout:,
-                   provider: nil, permissions: nil, budget: nil, memory: nil, trace: false)
+                   provider: nil, permissions: nil, budget: nil, memory: nil, trace: false,
+                   logger: nil)
       @session_id = session_id
 
       trace_logger = trace ? Core::TraceLogger.new(format: :human) : nil
@@ -133,7 +137,8 @@ module OllamaAgent
         permissions: permissions,
         budget: budget,
         memory_manager: memory,
-        trace_logger: trace_logger
+        trace_logger: trace_logger,
+        logger: logger
       )
       @agent = Agent.new(config: config)
 

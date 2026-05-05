@@ -10,7 +10,7 @@ module OllamaAgent
 
     private
 
-    def list_files(directory, max_entries)
+    def list_files(directory, max_entries, max_depth: nil)
       cap = clamp_list_limit(max_entries)
       dir = directory.to_s.empty? ? "." : directory
       return disallowed_path_message(dir) unless path_allowed?(dir)
@@ -18,7 +18,7 @@ module OllamaAgent
       base = resolve_path(dir)
       return "Not a directory: #{dir}" unless File.directory?(base)
 
-      paths = collect_relative_paths(base, cap)
+      paths = collect_relative_paths(base, cap, max_depth: max_depth)
       return "(no files listed)" if paths.empty?
 
       body = paths.sort.join("\n")
@@ -27,17 +27,29 @@ module OllamaAgent
       "#{body}\n(list truncated at #{cap} entries; pass max_entries or narrow directory)"
     end
 
-    def collect_relative_paths(base, cap)
+    def collect_relative_paths(base, cap, max_depth: nil)
       paths = []
-      Find.find(base) do |path|
-        if git_directory?(path)
-          Find.prune
-        elsif File.file?(path)
-          paths << Pathname(path).relative_path_from(Pathname(base)).to_s
-          break if paths.size >= cap
-        end
+      base_pn = Pathname(base)
+      catch(:list_files_cap) do
+        Find.find(base) { |path| visit_list_path(path, base_pn, paths, cap, max_depth) }
       end
       paths
+    end
+
+    def visit_list_path(path, base_pn, paths, cap, max_depth)
+      if git_directory?(path)
+        Find.prune
+      elsif File.file?(path)
+        rel = Pathname(path).relative_path_from(base_pn)
+        return if exceeds_list_depth?(rel, max_depth)
+
+        paths << rel.to_s
+        throw(:list_files_cap) if paths.size >= cap
+      end
+    end
+
+    def exceeds_list_depth?(relative_path, max_depth)
+      max_depth && relative_path.each_filename.count > max_depth
     end
 
     def git_directory?(path)

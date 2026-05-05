@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "ollama_agent/version"
+require_relative "ollama_agent/errors"
 
 env_before_ollama_client = ENV.to_hash
 require "ollama_client"
@@ -71,10 +72,6 @@ require_relative "ollama_agent/cli"
 
 # Public namespace for the universal AI operator runtime + developer shell.
 module OllamaAgent
-  class Error < StandardError; end
-
-  class ConfigurationError < Error; end
-
   def self.gem_root
     File.expand_path("..", __dir__)
   end

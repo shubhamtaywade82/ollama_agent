@@ -1,6 +1,9 @@
 # frozen_string_literal: true
 
+require "timeout"
+
 require_relative "../search_backend"
+require_relative "../env_config"
 
 module OllamaAgent
   module SandboxedTools
@@ -32,14 +35,34 @@ module OllamaAgent
 
       def search_with_ripgrep(pattern, directory)
         bin = SearchBackend.rg_executable
-        stdout, = Open3.capture2(bin, "-n", "--", pattern, resolve_path(directory))
-        stdout.to_s
+        capture_search_output do
+          Open3.capture2(bin, "-n", "--", pattern, resolve_path(directory))
+        end
       end
 
       def search_with_grep!(pattern, directory)
         bin = SearchBackend.grep_executable
-        stdout, = Open3.capture2(bin, "-rn", "--", pattern, resolve_path(directory))
-        stdout.to_s
+        capture_search_output do
+          Open3.capture2(bin, "-rn", "--", pattern, resolve_path(directory))
+        end
+      end
+
+      def capture_search_output(&)
+        stdout, status = Timeout.timeout(search_timeout_seconds, &)
+        return stdout.to_s if status.success?
+
+        "Error: ollama_agent: search command exited with status #{status.exitstatus}"
+      rescue Timeout::Error
+        msg = "Error: ollama_agent: search timed out after #{search_timeout_seconds}s "
+        "#{msg}(raise OLLAMA_AGENT_SEARCH_TIMEOUT_SEC to allow longer runs)."
+      end
+
+      def search_timeout_seconds
+        EnvConfig.fetch_int(
+          "OLLAMA_AGENT_SEARCH_TIMEOUT_SEC",
+          120,
+          strict: EnvConfig.strict_env?
+        )
       end
 
       def search_code_no_backends_message

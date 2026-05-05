@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "open3"
+require "shellwords"
 require_relative "base"
 
 module OllamaAgent
@@ -156,7 +157,10 @@ module OllamaAgent
         exit_code  = nil
 
         begin
-          Open3.popen3(cmd, chdir: cwd) do |_stdin, stdout, stderr, wait_thread|
+          argv = Shellwords.shellsplit(cmd)
+          return "Error: command parsed to no arguments" if argv.empty?
+
+          Open3.popen3(*argv, chdir: cwd) do |_stdin, stdout, stderr, wait_thread|
             timed_out = stream_pump_timed_out?(stdout, stderr, stdout_buf, stderr_buf, timeout)
             if timed_out
               kill_process_safely(wait_thread.pid)
@@ -167,6 +171,8 @@ module OllamaAgent
             drain_remaining!(stderr, stderr_buf)
             exit_code = wait_thread.value.exitstatus
           end
+        rescue ArgumentError => e
+          return "Error: could not parse command argv: #{e.message}"
         rescue Errno::ENOENT => e
           return "Error: #{e.message}"
         end

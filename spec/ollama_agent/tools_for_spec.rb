@@ -3,6 +3,8 @@
 require "spec_helper"
 
 RSpec.describe OllamaAgent, ".tools_for" do
+  before { OllamaAgent::Tools::BuiltInSchemas.reset_registrations! }
+
   it "includes orchestrator tools when orchestrator is true" do
     t = described_class.tools_for(read_only: false, orchestrator: true)
     names = t.map { |x| x.dig(:function, :name) }

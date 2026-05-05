@@ -57,7 +57,8 @@ module OllamaAgent
 
     def execute_list_files(args)
       directory = tool_arg(args, "directory") || "."
-      list_files(directory, tool_arg(args, "max_entries"))
+      max_depth = coerce_list_max_depth(tool_arg(args, "max_depth"))
+      list_files(directory, tool_arg(args, "max_entries"), max_depth: max_depth)
     end
 
     def execute_edit_file_tool(args)
@@ -111,7 +112,7 @@ module OllamaAgent
     end
 
     def log_tool_message(message)
-      warn "ollama_agent: #{message}" if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+      logger.debug("ollama_agent: #{message}") if ENV["OLLAMA_AGENT_DEBUG"] == "1"
 
       message
     end

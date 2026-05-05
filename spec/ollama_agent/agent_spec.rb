@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "logger"
 require "open3"
 require "spec_helper"
 
@@ -29,6 +30,12 @@ RSpec.describe OllamaAgent::Agent do
                                   confirm_patches: false)
       expect { agent.assign_chat_model!("  ") }.to raise_error(OllamaAgent::Error, /empty/i)
     end
+
+    it "raises EmptyModelNameError for a blank model name" do
+      agent = described_class.new(client: instance_double(Ollama::Client, chat: nil), root: root,
+                                  confirm_patches: false)
+      expect { agent.assign_chat_model!("") }.to raise_error(OllamaAgent::EmptyModelNameError)
+    end
   end
 
   describe "#list_local_model_names" do
@@ -45,6 +52,16 @@ RSpec.describe OllamaAgent::Agent do
       mw = OllamaAgent::Resilience::RetryMiddleware.new(client: client, max_attempts: 1, hooks: nil, base_delay: 0)
       agent = described_class.new(client: mw, root: root, confirm_patches: false)
       expect(agent.list_local_model_names).to eq(%w[a b])
+    end
+
+    it "returns [] and logs when list_model_names raises" do
+      logger = instance_double(Logger, warn: nil, debug: nil)
+      client = instance_double(Ollama::Client)
+      allow(client).to receive(:chat)
+      allow(client).to receive(:list_model_names).and_raise(StandardError, "boom")
+      agent = described_class.new(client: client, root: root, confirm_patches: false, logger: logger)
+      expect(agent.list_local_model_names).to eq([])
+      expect(logger).to have_received(:warn).with(/list_local_model_names failed/)
     end
   end
 

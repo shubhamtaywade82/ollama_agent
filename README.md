@@ -4,6 +4,19 @@ Version: 1.0.0
 
 Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollama.com) model. It exposes tools to **list files**, **read files**, **search the tree** (ripgrep or grep), and **apply unified diffs** so the model can make small, reviewable edits.
 
+## Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Security and sandbox](#security-and-sandbox)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Skills](#skills-deterministic-json-contract-pipelines)
+- [Troubleshooting](#troubleshooting)
+- [How it works](#how-it-works)
+- [Development](#development)
+- [License](#license)
+
 ## Features
 
 - Tool `list_files` – list project files.
@@ -29,6 +42,13 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
 
 - **`patch`** — required for `edit_file` (GNU `patch` on `PATH`). On Windows, use Git Bash, WSL, GnuWin32, or another environment that provides `patch`.
 - **`rg` (ripgrep) or `grep`** — text mode for `search_code` needs at least one of these on `PATH` (ripgrep is preferred when present).
+
+## Security and sandbox
+
+- **Project root** — File tools and search are constrained to the configured workspace (`--root` / `OLLAMA_AGENT_ROOT`). Treat that directory as the trust boundary: only aim the agent at trees you are willing to modify.
+- **`run_shell` (optional tool)** — Commands are parsed into an argument vector (no shell) and must match an allowlist; a denylist blocks obviously dangerous patterns. You can still shoot yourself in the foot with an allowed prefix (for example `git` with destructive subcommands), so keep profiles and permissions tight in automated setups.
+- **Timeouts** — Text search honors `OLLAMA_AGENT_SEARCH_TIMEOUT_SEC` (default 120). Shell execution has its own per-invocation timeout.
+- **Logging** — Budget, loop-detection, and `list_local_model_names` failures go through Ruby’s `Logger` (stderr by default). Set `OLLAMA_AGENT_LOG_LEVEL=debug` or `OLLAMA_AGENT_DEBUG=1` for more detail.
 
 ## Installation
 
@@ -396,6 +416,8 @@ They go through `OllamaAgent::Providers::Registry`, so any registered provider
 bundle exec rspec
 bundle exec rubocop
 ```
+
+Ongoing refactors (contributors): the **`Agent`** class is a thin façade over **`TurnLoop`**, **`ChatCoordinator`**, session/client wiring, and **`Tools::BuiltInSchemas`** so new behavior should land in those collaborators instead of growing monolithic methods. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### CI and RubyGems release
 
