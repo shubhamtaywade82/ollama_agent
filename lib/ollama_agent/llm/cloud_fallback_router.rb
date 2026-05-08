@@ -18,6 +18,7 @@ module OllamaAgent
       def initialize(
         anthropic_client:,
         reentry_packet_builder:,
+        cost_ledger: nil,
         max_escalation_depth: 1,
         cost_cap_usd: 5.00,
         time_cap_seconds: 600,
@@ -25,6 +26,7 @@ module OllamaAgent
       )
         @client = anthropic_client
         @reentry_packet_builder = reentry_packet_builder
+        @cost_ledger = cost_ledger
         @max_escalation_depth = Integer(max_escalation_depth)
         @cost_cap_usd = cost_cap_usd.to_f
         @time_cap_seconds = Integer(time_cap_seconds)
@@ -33,14 +35,22 @@ module OllamaAgent
       # rubocop:enable Metrics/ParameterLists
 
       # @return [Hash] +:result+, +:depth+, +:cost_usd+, +:halted_reason+
-      def escalate(packet:, depth:, accumulated_cost_usd:, started_at:)
-        halted = breaker_halt(depth, accumulated_cost_usd.to_f, started_at)
+      def escalate(packet:, depth:, accumulated_cost_usd:, started_at:, manifest_id: nil)
+        mid = (manifest_id || packet.workspace_fingerprint).to_s
+        prior_cost = resolved_prior_cost(mid, accumulated_cost_usd.to_f)
+        halted = breaker_halt(depth, prior_cost, started_at)
         return halted if halted
 
-        invoke_anthropic(packet, Integer(depth), accumulated_cost_usd.to_f)
+        invoke_anthropic(packet, Integer(depth), prior_cost, mid)
       end
 
       private
+
+      def resolved_prior_cost(manifest_id, accumulated_cost_usd)
+        return accumulated_cost_usd unless @cost_ledger
+
+        @cost_ledger.total_for_manifest(manifest_id: manifest_id)
+      end
 
       def breaker_halt(depth, cost, started_at)
         return breaker(:depth_limit_exceeded, "max_escalation_depth", depth, cost) if depth >= @max_escalation_depth
@@ -50,16 +60,34 @@ module OllamaAgent
         nil
       end
 
-      def invoke_anthropic(packet, depth, cost)
-        messages = [{ "role" => "user", "content" => packet.to_h.to_json }]
-        response = @client.chat(messages: messages)
+      def invoke_anthropic(packet, depth, prior_cost, manifest_id)
+        response = @client.chat(messages: anthropic_messages(packet))
         delta = usage_cost_usd(response[:usage])
-        {
-          result: response[:content],
-          depth: depth + 1,
-          cost_usd: cost + delta,
-          halted_reason: nil
-        }
+        record_cost_if_needed!(manifest_id: manifest_id, response: response, cost_usd: delta)
+        escalation_result(response, depth, prior_cost, delta, manifest_id)
+      end
+
+      def anthropic_messages(packet)
+        [{ "role" => "user", "content" => packet.to_h.to_json }]
+      end
+
+      def escalation_result(response, depth, prior_cost, delta, manifest_id)
+        total = @cost_ledger ? @cost_ledger.total_for_manifest(manifest_id: manifest_id) : prior_cost + delta
+        { result: response[:content], depth: depth + 1, cost_usd: total, halted_reason: nil }
+      end
+
+      def record_cost_if_needed!(manifest_id:, response:, cost_usd:)
+        return unless @cost_ledger
+
+        u = response[:usage] || {}
+        @cost_ledger.record(
+          manifest_id: manifest_id,
+          model: @client.model,
+          input_tokens: (u[:input_tokens] || u["input_tokens"]).to_i,
+          output_tokens: (u[:output_tokens] || u["output_tokens"]).to_i,
+          cost_usd: cost_usd,
+          current_epoch: @clock.call.to_i
+        )
       end
 
       def timed_out?(started_at)

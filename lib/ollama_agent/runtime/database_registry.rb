@@ -3,47 +3,12 @@
 require "sqlite3"
 require "fileutils"
 
+require_relative "schema_migrator"
+
 module OllamaAgent
   module Runtime
-    # Opens kernel SQLite databases under +root_dir+/.ollama_agent/kernel/ and applies idempotent schema.
+    # Opens kernel SQLite databases under +root_dir+/.ollama_agent/kernel/ and applies idempotent migrations.
     class DatabaseRegistry
-      SCHEMA_LINE = /^-- ### (\S+)\s*$/
-
-      class << self
-        # @return [Array(String, String)] SQL bodies for event_store.db and runtime.db
-        def schema_sections
-          @schema_sections ||= load_schema_sections
-        end
-
-        private
-
-        def load_schema_sections
-          path = File.join(OllamaAgent.gem_root, "db", "ollama_agent", "schema.sql")
-          split_schema(File.read(path))
-        end
-
-        # rubocop:disable Metrics/MethodLength -- line-oriented section parser
-        def split_schema(contents)
-          sections = {}
-          current = nil
-          buffer = +""
-
-          contents.each_line do |line|
-            if (m = line.match(SCHEMA_LINE))
-              sections[current] = buffer.strip if current
-              buffer = +""
-              current = m[1]
-            else
-              buffer << line
-            end
-          end
-          sections[current] = buffer.strip if current
-
-          [sections.fetch("event_store.db"), sections.fetch("runtime.db")]
-        end
-        # rubocop:enable Metrics/MethodLength
-      end
-
       # @param root_dir [String] workspace root
       def initialize(root_dir:)
         @root_dir = root_dir
@@ -51,6 +16,7 @@ module OllamaAgent
         @open_mutex = Mutex.new
         @event_store = nil
         @runtime = nil
+        @migrations_ran = false
       end
 
       # @return [SQLite3::Database] event store connection (WAL, synchronous FULL)
@@ -73,22 +39,35 @@ module OllamaAgent
 
       def connect_event_store
         FileUtils.mkdir_p(@kernel_dir)
-        sql, = self.class.schema_sections
-        open_db(File.join(@kernel_dir, "event_store.db"), sql)
+        run_kernel_migrations!
+        open_connection(File.join(@kernel_dir, "event_store.db"), :event_store)
       end
 
       def connect_runtime
         FileUtils.mkdir_p(@kernel_dir)
-        _, sql = self.class.schema_sections
-        open_db(File.join(@kernel_dir, "runtime.db"), sql)
+        run_kernel_migrations!
+        open_connection(File.join(@kernel_dir, "runtime.db"), :runtime)
       end
 
-      def open_db(path, schema_sql)
+      def run_kernel_migrations!
+        return if @migrations_ran
+
+        SchemaMigrator.new(db_registry: self).migrate!
+        @migrations_ran = true
+      end
+
+      def open_connection(path, role)
         db = SQLite3::Database.new(path)
         db.results_as_hash = true
         db.busy_timeout = 60_000
-        db.execute_batch(schema_sql)
+        apply_pragmas!(db, role)
         db
+      end
+
+      def apply_pragmas!(db, role)
+        db.execute("PRAGMA journal_mode=WAL")
+        sync = role == :event_store ? "FULL" : "NORMAL"
+        db.execute("PRAGMA synchronous=#{sync}")
       end
     end
   end

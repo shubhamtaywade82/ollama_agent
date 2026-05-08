@@ -9,8 +9,12 @@ module OllamaAgent
   module Runtime
     # Content-addressed blobs under +kernel_dir+/blobs/+aa+/+rest+.
     class BlobStore
+      # @return [String] absolute path to the blobs directory (+kernel_dir+/blobs)
+      attr_reader :blobs_root
+
       def initialize(kernel_dir:)
         @root = File.join(File.expand_path(kernel_dir), "blobs")
+        @blobs_root = @root
       end
 
       # @param content [String]
