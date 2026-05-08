@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
-require "digest"
 require "securerandom"
 
-require_relative "cas_guard"
+require_relative "intent_translator"
 require_relative "kernel_feature"
 require_relative "kernel_pipeline"
 
@@ -16,7 +15,8 @@ module OllamaAgent
       class << self
         # Tools routed through {KernelPipeline} (others stay on legacy guarded dispatch).
         def pipeline_tool_names
-          parse_env_list("OLLAMA_AGENT_KERNEL_PIPELINE_TOOLS", "write_file")
+          default = "write_file,edit_file,apply_patch,delete_file,rename_file,move_file"
+          parse_env_list("OLLAMA_AGENT_KERNEL_PIPELINE_TOOLS", default)
         end
 
         def parse_env_list(key, default)
@@ -83,51 +83,108 @@ module OllamaAgent
 
       def dispatch_tool(name, args)
         if self.class.pipeline_tool_names.include?(name.to_s)
-          run_kernel_write_file(args)
+          run_kernel_pipeline_tool(name, args)
         else
           @agent.send(:platform_guarded_tool_call, name, args)
         end
       end
 
-      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity, Metrics/AbcSize
-      def run_kernel_write_file(args)
-        path = args["path"] || args[:path]
-        content = args["content"] || args[:content]
-        return @agent.send(:missing_tool_argument, "write_file", "path") if @agent.send(:blank_tool_value?, path)
-        return @agent.send(:missing_tool_argument, "write_file", "content") if content.nil?
+      def run_kernel_pipeline_tool(name, args)
+        intent = IntentTranslator.new(workspace_root: @agent.root).translate(
+          tool_call: { "name" => name, "arguments" => args }
+        )
+        finish_kernel_pipeline_tool(name, args, intent)
+      rescue ArgumentError => e
+        "Kernel tool error: #{e.message}"
+      end
 
-        return @agent.send(:disallowed_path_message, path) unless @agent.send(:path_allowed?, path)
-        return "write_file is disabled in read-only mode." if @agent.read_only
-
-        if @agent.instance_variable_get(:@confirm_patches) &&
-           !@agent.send(:user_prompt).confirm_write_file(path, content.to_s[0, 2000])
-          return "Cancelled by user"
+      def finish_kernel_pipeline_tool(name, args, intent)
+        if (rej = reject_pipeline_paths(name, intent))
+          return rej
         end
+        return "#{name} is disabled in read-only mode." if @agent.read_only
+
+        return "Cancelled by user" unless user_confirmed_mutation?(name, args, intent)
 
         manifest_id = SecureRandom.uuid
-        intent = {
-          kind: "atomic_write",
-          path: path.to_s,
-          content: content.to_s,
-          expected_pre_hash: expected_pre_hash_for(path),
-          post_conditions: [],
-          scopes: []
-        }
         outcome = pipeline.execute(intent: intent, manifest_id: manifest_id, mode: "normal")
         format_pipeline_outcome(outcome)
       end
-      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity, Metrics/AbcSize
 
-      def expected_pre_hash_for(path)
-        abs = @agent.send(:resolve_path, path)
-        return CASGuard::NEW_FILE_SENTINEL unless File.file?(abs)
+      def reject_pipeline_paths(name, intent)
+        pipeline_paths_for_tool(name, intent).each do |path|
+          return @agent.send(:missing_tool_argument, name, "path") if @agent.send(:blank_tool_value?, path)
+          return @agent.send(:disallowed_path_message, path) unless @agent.send(:path_allowed?, path)
+        end
+        nil
+      end
 
-        Digest::SHA256.hexdigest(File.binread(abs).b)
+      def pipeline_paths_for_tool(name, intent)
+        case name.to_s
+        when "rename_file", "move_file"
+          [intent[:from_path].to_s, intent[:to_path].to_s]
+        else
+          [intent[:path].to_s]
+        end
+      end
+
+      def user_confirmed_mutation?(name, args, intent)
+        return true unless @agent.instance_variable_get(:@confirm_patches)
+
+        prompt = @agent.send(:user_prompt)
+        path = pipeline_paths_for_tool(name, intent).first.to_s
+        confirm_for_pipeline_tool(name, args, intent, path, prompt)
+      end
+
+      def confirm_for_pipeline_tool(name, args, intent, path, prompt)
+        case name.to_s
+        when "write_file" then confirm_write_file_tool(args, path, prompt)
+        when "edit_file" then confirm_edit_file_tool(args, path, intent, prompt)
+        when "apply_patch" then confirm_apply_patch_tool(args, path, prompt)
+        when "delete_file" then confirm_delete_file_tool(path, prompt)
+        when "rename_file", "move_file" then confirm_rename_file_tool(intent, prompt)
+        else true
+        end
+      end
+
+      def confirm_delete_file_tool(path, prompt)
+        prompt.confirm_write_file(path, "DELETE #{path}")
+      end
+
+      def confirm_rename_file_tool(intent, prompt)
+        from = intent[:from_path].to_s
+        to = intent[:to_path].to_s
+        prompt.confirm_write_file(from, "RENAME #{from} -> #{to}")
+      end
+
+      def confirm_write_file_tool(args, path, prompt)
+        args = args.to_h
+        content = args["content"] || args[:content]
+        prompt.confirm_write_file(path, content.to_s[0, 2000])
+      end
+
+      def confirm_edit_file_tool(args, path, intent, prompt)
+        args = args.to_h
+        diff = args["diff"] || args[:diff]
+        return prompt.confirm_patch(path, diff.to_s) if diff
+
+        preview = intent[:edits].map { |e| "#{e[:search]} => #{e[:replace]}" }.join("\n")
+        prompt.confirm_write_file(path, preview[0, 2000])
+      end
+
+      def confirm_apply_patch_tool(args, path, prompt)
+        args = args.to_h
+        patch = args["patch"] || args[:patch]
+        diff = args["diff"] || args[:diff]
+        prompt.confirm_patch(path, (patch || diff).to_s)
       end
 
       def format_pipeline_outcome(out)
-        if out[:result] == :ok
+        case out[:result]
+        when :ok
           "Written via kernel (manifest_id=#{out[:manifest_id]}, state=#{out[:state]})"
+        when :precondition_failed, :unknown_intent_kind
+          "Kernel write failed: #{out[:error]}"
         else
           msg = out[:error] || "state=#{out[:state]}"
           "Kernel write failed: #{msg}"

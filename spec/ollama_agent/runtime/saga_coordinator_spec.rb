@@ -94,6 +94,7 @@ RSpec.describe OllamaAgent::Runtime::SagaCoordinator do
         expect(snapshot[:state]).to eq("committed")
         expect(snapshot[:terminal]).to be(true)
         expect(db.get_first_value("SELECT COUNT(*) FROM saga_transitions WHERE manifest_id = ?", ["m1"]).to_i).to eq(6)
+        expect(db.get_first_value("SELECT COUNT(*) FROM intent_reservations").to_i).to eq(0)
       end
     end
 

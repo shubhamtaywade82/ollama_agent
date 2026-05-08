@@ -6,6 +6,8 @@ module OllamaAgent
   module Runtime
     # Append-only event log in +event_store.db+.
     class EventStore
+      MUTATION_KIND = "mutation"
+
       # @param db [SQLite3::Database]
       def initialize(db)
         @db = db
@@ -34,6 +36,18 @@ module OllamaAgent
           "SELECT id, manifest_id, logical_stamp, kind, payload, intent_hash, created_at " \
           "FROM events WHERE manifest_id = ? ORDER BY id ASC",
           [manifest_id],
+          &block
+        )
+      end
+
+      # All mutation events in global +id+ order (workspace-level WAL replay).
+      def each_mutation_globally(&block)
+        return to_enum(:each_mutation_globally) unless block
+
+        @db.execute(
+          "SELECT id, manifest_id, logical_stamp, kind, payload, intent_hash, created_at " \
+          "FROM events WHERE kind = ? ORDER BY id ASC",
+          [MUTATION_KIND],
           &block
         )
       end

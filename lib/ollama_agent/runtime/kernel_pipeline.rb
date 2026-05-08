@@ -3,13 +3,18 @@
 require "digest"
 require "json"
 
+require_relative "../security/resource_guard"
+require_relative "cas_guard"
 require_relative "logical_clock"
+require_relative "unified_diff_apply"
 
 module OllamaAgent
   module Runtime
     # End-to-end kernel route: saga, locks, atomic write, verify, integration queue, commit/compensate.
     # rubocop:disable Metrics/ClassLength -- FSM orchestration; assembly holds wiring
     class KernelPipeline
+      SUPPORTED_KINDS = %w[atomic_write edit_file apply_patch delete_file rename_file].freeze
+
       def self.build_for_workspace(...)
         KernelPipelineAssembly.build_for_workspace(...)
       end
@@ -39,12 +44,41 @@ module OllamaAgent
       end
       # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength
 
-      # @return [Hash] +:result+ (:ok / :error), +:state+ (terminal saga state), +:manifest_id+
-      # rubocop:disable Metrics/MethodLength -- linear orchestration entry
+      # @return [Hash] +:result+, +:state+, +:manifest_id+, optional +:error+
       def execute(intent:, manifest_id:, mode: "normal")
         intent = normalize_intent(intent)
-        return terminal_payload(manifest_id, :error, "intent kind must be atomic_write") unless atomic_write?(intent)
+        kind = intent[:kind].to_s
+        return unknown_kind_reply(manifest_id, kind) unless SUPPORTED_KINDS.include?(kind)
 
+        ge = guard_delete_rename_paths_if_applicable(intent, kind)
+        return { result: :precondition_failed, state: nil, manifest_id: manifest_id, error: ge } if ge
+
+        run_after_path_guard(kind, intent, manifest_id, mode)
+      end
+
+      private
+
+      # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength, Metrics/AbcSize -- private saga steps
+      attr_reader :saga_coordinator, :lock_manager, :atomic_mutator, :post_condition_verifier,
+                  :compensation_engine, :integration_queue, :blob_store, :compensation_manifest,
+                  :clock_epoch_provider, :workspace_root
+
+      def unknown_kind_reply(manifest_id, kind)
+        {
+          result: :unknown_intent_kind,
+          state: nil,
+          manifest_id: manifest_id,
+          error: "unknown intent kind: #{kind}"
+        }
+      end
+
+      def guard_delete_rename_paths_if_applicable(intent, kind)
+        return nil unless %w[delete_file rename_file].include?(kind)
+
+        guard_delete_rename_paths(intent, kind)
+      end
+
+      def run_after_path_guard(kind, intent, manifest_id, mode)
         stamp = LogicalClock.new(epoch: @clock_epoch_provider.call.to_i)
         scopes = normalize_scopes(intent)
         intent_hash = compute_intent_hash(intent, scopes)
@@ -55,42 +89,170 @@ module OllamaAgent
         lock_outcome = acquire_locks!(manifest_id, scopes)
         return lock_outcome if lock_outcome[:result] == :error
 
-        advance_or_fail(:locked, "locked", manifest_id, lock_outcome[:leases], intent, intent_hash, stamp, mode)
+        dispatch_intent_kind(kind, manifest_id, lock_outcome, intent, intent_hash, stamp, mode, kind)
       end
-      # rubocop:enable Metrics/MethodLength
 
-      private
+      def dispatch_intent_kind(kind, manifest_id, lock_outcome, intent, intent_hash, stamp, mode, enqueue_kind)
+        case kind
+        when "atomic_write", "edit_file", "apply_patch"
+          materialized = materialize_intent(intent)
+          unless materialized[:ok]
+            return abort_precondition_failed(manifest_id, lock_outcome[:leases], materialized[:error])
+          end
 
-      # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength, Metrics/AbcSize -- private saga steps
-      attr_reader :saga_coordinator, :lock_manager, :atomic_mutator, :post_condition_verifier,
-                  :compensation_engine, :integration_queue, :blob_store, :compensation_manifest,
-                  :clock_epoch_provider, :workspace_root
+          advance_or_fail(:locked, "locked", manifest_id, lock_outcome[:leases], materialized[:intent], intent_hash,
+                          stamp, mode, enqueue_kind: enqueue_kind)
+        when "delete_file"
+          advance_delete_file(manifest_id, lock_outcome[:leases], intent, intent_hash, stamp, mode,
+                              enqueue_kind: enqueue_kind)
+        when "rename_file"
+          advance_rename_file(manifest_id, lock_outcome[:leases], intent, intent_hash, stamp, mode,
+                              enqueue_kind: enqueue_kind)
+        end
+      end
 
-      def atomic_write?(intent)
-        intent[:kind].to_s == "atomic_write"
+      def guard_delete_rename_paths(intent, kind)
+        guard = Security::ResourceGuard.new(root: @workspace_root)
+        paths =
+          case kind
+          when "delete_file"
+            [File.expand_path(intent[:path].to_s, @workspace_root)]
+          when "rename_file"
+            [
+              File.expand_path(intent[:from_path].to_s, @workspace_root),
+              File.expand_path(intent[:to_path].to_s, @workspace_root)
+            ]
+          else
+            []
+          end
+        paths.each { |p| return "path not allowed" unless guard.allow?(p) }
+        nil
       end
 
       def normalize_intent(intent)
         h = intent.transform_keys(&:to_sym)
         h[:post_conditions] = Array(h[:post_conditions])
-        h[:scopes] = Array(h[:scopes]) if h[:scopes]
+        h[:scopes] = Array(h[:scopes])
+        h[:edits] = h[:edits].map { |e| e.transform_keys(&:to_sym) } if h[:edits]
         h
       end
 
       def compute_intent_hash(intent, scopes_for_saga)
-        body = {
-          "kind" => intent[:kind].to_s,
-          "path" => intent[:path].to_s,
-          "scopes" => scopes_for_saga.map(&:to_s)
-        }
+        kind = intent[:kind].to_s
+        scoped = { "scopes" => scopes_for_saga.map(&:to_s) }
+        body = case kind
+               when "atomic_write"
+                 scoped.merge(
+                   "kind" => "atomic_write",
+                   "path" => intent[:path].to_s,
+                   "content_sha" => Digest::SHA256.hexdigest(intent[:content].to_s.b)
+                 )
+               when "edit_file"
+                 scoped.merge(
+                   "kind" => "edit_file",
+                   "path" => intent[:path].to_s,
+                   "edits_digest" => Digest::SHA256.hexdigest(JSON.generate(normalize_edits(intent[:edits])))
+                 )
+               when "apply_patch"
+                 scoped.merge(
+                   "kind" => "apply_patch",
+                   "path" => intent[:path].to_s,
+                   "patch_sha" => Digest::SHA256.hexdigest(intent[:patch].to_s.b)
+                 )
+               when "delete_file"
+                 scoped.merge("kind" => "delete_file", "path" => intent[:path].to_s)
+               when "rename_file"
+                 scoped.merge(
+                   "kind" => "rename_file",
+                   "from" => intent[:from_path].to_s,
+                   "to" => intent[:to_path].to_s
+                 )
+               else
+                 scoped.merge("kind" => kind)
+               end
         Digest::SHA256.hexdigest(JSON.generate(body))
       end
 
+      def normalize_edits(edits)
+        Array(edits).map { |e| { "search" => e[:search].to_s, "replace" => e[:replace].to_s } }
+      end
+
       def normalize_scopes(intent)
+        intent[:kind].to_s == "rename_file" ? normalize_rename_scopes(intent) : normalize_path_scopes(intent)
+      end
+
+      def normalize_rename_scopes(intent)
+        f = File.expand_path(intent[:from_path].to_s, @workspace_root)
+        t = File.expand_path(intent[:to_path].to_s, @workspace_root)
+        list = intent[:scopes]
+        scopes =
+          if list.nil? || list.empty?
+            [f, t]
+          else
+            list.map { |s| File.expand_path(s.to_s, @workspace_root) }
+          end
+        scopes.uniq.sort
+      end
+
+      def normalize_path_scopes(intent)
         abs_target = File.expand_path(intent[:path].to_s, @workspace_root)
         list = intent[:scopes]
         scopes = list.nil? || list.empty? ? [abs_target] : list.map { |s| File.expand_path(s.to_s, @workspace_root) }
         scopes.uniq.sort
+      end
+
+      def materialize_intent(intent)
+        kind = intent[:kind].to_s
+        path = File.expand_path(intent[:path].to_s, @workspace_root)
+        guard = Security::ResourceGuard.new(root: @workspace_root)
+        return { ok: false, error: "path not allowed" } unless guard.allow?(path)
+
+        case kind
+        when "atomic_write"
+          { ok: true, intent: intent }
+        when "edit_file"
+          materialize_edit_file(intent, path)
+        when "apply_patch"
+          materialize_apply_patch(intent, path)
+        else
+          { ok: false, error: "unsupported kind" }
+        end
+      end
+
+      def materialize_edit_file(intent, path)
+        return { ok: false, error: "file must exist for edit_file" } unless File.file?(path)
+
+        bytes = File.binread(path)
+        actual = Digest::SHA256.hexdigest(bytes.b)
+        return { ok: false, error: "expected_pre_hash mismatch" } unless actual == intent[:expected_pre_hash].to_s
+
+        body = bytes.b.dup
+        Array(intent[:edits]).each do |ed|
+          search = ed[:search].to_s.b
+          repl = ed[:replace].to_s.b
+          idx = body.index(search)
+          return { ok: false, error: "search not found" } unless idx
+
+          tail = body.bytesize > idx + search.bytesize ? body[(idx + search.bytesize)..] : +""
+          body = body[0, idx] + repl + tail
+        end
+
+        atomic = intent.merge(kind: "atomic_write", content: body, expected_pre_hash: actual)
+        { ok: true, intent: atomic }
+      end
+
+      def materialize_apply_patch(intent, path)
+        return { ok: false, error: "file must exist for apply_patch" } unless File.file?(path)
+
+        bytes = File.binread(path)
+        actual = Digest::SHA256.hexdigest(bytes.b)
+        return { ok: false, error: "expected_pre_hash mismatch" } unless actual == intent[:expected_pre_hash].to_s
+
+        status, out = UnifiedDiffApply.apply(bytes.b, intent[:patch].to_s)
+        return { ok: false, error: out.to_s } if status != :ok
+
+        atomic = intent.merge(kind: "atomic_write", content: out.b, expected_pre_hash: actual)
+        { ok: true, intent: atomic }
       end
 
       def acquire_locks!(manifest_id, scopes)
@@ -110,14 +272,87 @@ module OllamaAgent
         { leases: leases, result: :ok }
       end
 
-      def advance_or_fail(state, reason, manifest_id, lease_handles, intent, intent_hash, stamp, mode)
+      def advance_or_fail(state, reason, manifest_id, lease_handles, intent, intent_hash, stamp, mode, enqueue_kind:)
         ok = saga_coordinator.advance(manifest_id: manifest_id, to_state: state, reason: reason)
         return abort_compensated(manifest_id, lease_handles, "advance #{state} #{ok}") unless ok == :ok
 
-        mutate_verify_and_commit(manifest_id, lease_handles, intent, intent_hash, stamp, mode)
+        mutate_verify_and_commit(manifest_id, lease_handles, intent, intent_hash, stamp, mode,
+                                 enqueue_kind: enqueue_kind)
       end
 
-      def mutate_verify_and_commit(manifest_id, lease_handles, intent, intent_hash, stamp, mode)
+      def advance_delete_file(manifest_id, lease_handles, intent, intent_hash, stamp, mode, enqueue_kind:)
+        ok = saga_coordinator.advance(manifest_id: manifest_id, to_state: :locked, reason: "locked")
+        return abort_compensated(manifest_id, lease_handles, "advance locked #{ok}") unless ok == :ok
+
+        absolute = File.expand_path(intent[:path].to_s, @workspace_root)
+        pre = abort_if_disk_prehash_mismatch!(manifest_id, lease_handles, intent[:expected_pre_hash], absolute)
+        return pre if pre
+
+        lease = lease_handles.find { |h| h[:scope] == absolute } || lease_handles.last
+        record_pre_state!(manifest_id, absolute, lease[:fencing_token], stamp, compensation_op: "delete")
+
+        del_out = atomic_mutator.delete_file(
+          path: intent[:path].to_s,
+          mode: mode.to_s,
+          fencing_token: lease[:fencing_token],
+          expected_pre_hash: intent[:expected_pre_hash],
+          intent_hash: intent_hash,
+          manifest_id: manifest_id,
+          logical_stamp: stamp.next_stamp,
+          owner_required: intent[:owner_required],
+          supervisor_lease: intent[:supervisor_lease] || false
+        )
+        return abort_compensated(manifest_id, lease_handles, "mutator #{del_out}") if del_out != :deleted
+
+        verify_commit_tail(manifest_id, lease_handles, stamp, intent, enqueue_kind: enqueue_kind)
+      end
+
+      def advance_rename_file(manifest_id, lease_handles, intent, intent_hash, stamp, mode, enqueue_kind:)
+        ok = saga_coordinator.advance(manifest_id: manifest_id, to_state: :locked, reason: "locked")
+        return abort_compensated(manifest_id, lease_handles, "advance locked #{ok}") unless ok == :ok
+
+        from_abs = File.expand_path(intent[:from_path].to_s, @workspace_root)
+        to_abs = File.expand_path(intent[:to_path].to_s, @workspace_root)
+        pre = abort_if_disk_prehash_mismatch!(manifest_id, lease_handles, intent[:expected_pre_hash], from_abs)
+        return pre if pre
+
+        lease_from = lease_handles.find { |h| h[:scope] == from_abs }
+        lease_to = lease_handles.find { |h| h[:scope] == to_abs }
+        record_rename_compensations!(manifest_id, from_abs, to_abs, lease_from, lease_to, stamp)
+
+        ren_out = atomic_mutator.rename_file(
+          from_path: intent[:from_path].to_s,
+          to_path: intent[:to_path].to_s,
+          mode: mode.to_s,
+          fencing_token_from: lease_from[:fencing_token],
+          fencing_token_to: lease_to[:fencing_token],
+          expected_pre_hash_from: intent[:expected_pre_hash],
+          intent_hash: intent_hash,
+          manifest_id: manifest_id,
+          logical_stamp: stamp.next_stamp,
+          owner_required: intent[:owner_required],
+          supervisor_lease: intent[:supervisor_lease] || false
+        )
+        return abort_compensated(manifest_id, lease_handles, "mutator #{ren_out}") if ren_out != :renamed
+
+        verify_commit_tail(manifest_id, lease_handles, stamp, intent, enqueue_kind: enqueue_kind)
+      end
+
+      def record_rename_compensations!(manifest_id, from_abs, to_abs, lease_from, lease_to, stamp)
+        ls1 = stamp.next_stamp
+        sha = blob_store.put(File.binread(from_abs))
+        record_compensation(manifest_id, from_abs, sha, 1, lease_from[:fencing_token], ls1, operation: "restore")
+
+        ls2 = stamp.next_stamp
+        if File.file?(to_abs)
+          sha_to = blob_store.put(File.binread(to_abs))
+          record_compensation(manifest_id, to_abs, sha_to, 1, lease_to[:fencing_token], ls2, operation: "restore")
+        else
+          record_compensation(manifest_id, to_abs, "", 0, lease_to[:fencing_token], ls2, operation: "unlink")
+        end
+      end
+
+      def mutate_verify_and_commit(manifest_id, lease_handles, intent, intent_hash, stamp, mode, enqueue_kind:)
         absolute = File.expand_path(intent[:path].to_s, @workspace_root)
         lease = lease_handles.find { |h| h[:scope] == absolute } || lease_handles.last
         record_pre_state!(manifest_id, absolute, lease[:fencing_token], stamp)
@@ -127,6 +362,10 @@ module OllamaAgent
           return abort_compensated(manifest_id, lease_handles, "mutator #{write_outcome}")
         end
 
+        verify_commit_tail(manifest_id, lease_handles, stamp, intent, enqueue_kind: enqueue_kind)
+      end
+
+      def verify_commit_tail(manifest_id, lease_handles, stamp, intent, enqueue_kind:)
         ok = saga_coordinator.advance(manifest_id: manifest_id, to_state: :mutations_applied,
                                       reason: "mutations_applied")
         return abort_compensated(manifest_id, lease_handles, "advance mutations_applied #{ok}") unless ok == :ok
@@ -138,24 +377,25 @@ module OllamaAgent
         )
         return abort_compensated(manifest_id, lease_handles, "post_condition failed") unless verify_outcome[:passed]
 
-        commit_success_path(manifest_id, lease_handles, stamp)
+        commit_success_path(manifest_id, lease_handles, stamp, enqueue_kind: enqueue_kind)
       end
 
-      def record_pre_state!(manifest_id, absolute, fencing_token, stamp)
+      def record_pre_state!(manifest_id, absolute, fencing_token, stamp, compensation_op: "atomic_write")
         logical_stamp = stamp.next_stamp
         if File.file?(absolute)
           sha = blob_store.put(File.binread(absolute))
-          record_compensation(manifest_id, absolute, sha, 1, fencing_token, logical_stamp)
+          record_compensation(manifest_id, absolute, sha, 1, fencing_token, logical_stamp, operation: compensation_op)
         else
-          record_compensation(manifest_id, absolute, "", 0, fencing_token, logical_stamp)
+          record_compensation(manifest_id, absolute, "", 0, fencing_token, logical_stamp, operation: compensation_op)
         end
       end
 
-      def record_compensation(manifest_id, path, sha, pre_existed, fencing_token, logical_stamp)
+      def record_compensation(manifest_id, path, sha, pre_existed, fencing_token, logical_stamp,
+                              operation: "atomic_write")
         compensation_manifest.record(
           manifest_id: manifest_id,
           path: path,
-          op: "atomic_write",
+          op: operation,
           pre_blob_sha: sha,
           pre_existed: pre_existed,
           fencing_token: fencing_token,
@@ -178,7 +418,7 @@ module OllamaAgent
         )
       end
 
-      def commit_success_path(manifest_id, leases, stamp)
+      def commit_success_path(manifest_id, leases, stamp, enqueue_kind:)
         v = saga_coordinator.advance(manifest_id: manifest_id, to_state: :verified, reason: "verified")
         return abort_compensated(manifest_id, leases, "advance verified #{v}") unless v == :ok
 
@@ -188,7 +428,7 @@ module OllamaAgent
 
         integration_queue.enqueue(
           manifest_id: manifest_id,
-          payload: JSON.generate("kind" => "atomic_write"),
+          payload: JSON.generate("kind" => enqueue_kind),
           created_at: stamp.next_stamp
         )
 
@@ -200,6 +440,13 @@ module OllamaAgent
         { result: :ok, state: snap[:state], manifest_id: manifest_id }
       end
       # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength, Metrics/AbcSize
+
+      def abort_precondition_failed(manifest_id, leases, error)
+        release_locks(leases)
+        saga_coordinator.compensate(manifest_id: manifest_id, reason: error.to_s)
+        snap = saga_coordinator.state_of(manifest_id: manifest_id)
+        { result: :precondition_failed, state: snap[:state], manifest_id: manifest_id, error: error.to_s }
+      end
 
       def abort_compensated(manifest_id, leases, reason)
         release_locks(leases)
@@ -223,6 +470,18 @@ module OllamaAgent
         leases.reverse_each do |h|
           lock_manager.release(scope: h[:scope], holder: h[:holder], lease_token: h[:lease_token])
         end
+      end
+
+      def disk_content_pre_hash(absolute)
+        return CASGuard::NEW_FILE_SENTINEL unless File.file?(absolute)
+
+        Digest::SHA256.hexdigest(File.binread(absolute).b)
+      end
+
+      def abort_if_disk_prehash_mismatch!(manifest_id, leases, expected, absolute)
+        return nil if disk_content_pre_hash(absolute) == expected.to_s
+
+        abort_precondition_failed(manifest_id, leases, "expected_pre_hash mismatch")
       end
     end
     # rubocop:enable Metrics/ClassLength

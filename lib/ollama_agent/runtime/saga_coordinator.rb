@@ -130,6 +130,12 @@ module OllamaAgent
       def finalize_advance(row, manifest_id, to_state, reason, epoch)
         from = row["state"]
         apply_state_change!(row, to_state, epoch)
+        release_intent_reservation_if_committed(row, manifest_id, to_state)
+        log_advance_transition!(manifest_id, from, to_state, reason, epoch)
+        :ok
+      end
+
+      def log_advance_transition!(manifest_id, from, to_state, reason, epoch)
         append_transition!(
           manifest_id: manifest_id,
           from_state: from,
@@ -137,7 +143,12 @@ module OllamaAgent
           reason: reason,
           epoch: epoch
         )
-        :ok
+      end
+
+      def release_intent_reservation_if_committed(row, manifest_id, to_state)
+        return unless to_state.to_s == "committed"
+
+        @intent_reservation.release_joining(intent_hash: row["intent_hash"], manifest_id: manifest_id)
       end
 
       def resolve_compensate(manifest_id, reason, epoch)

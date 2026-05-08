@@ -32,12 +32,15 @@ module OllamaAgent
         registry = DatabaseRegistry.new(root_dir: root)
         db = registry.runtime
         fence = FencingAllocator.new(db)
+        kernel_dir = File.join(root, ".ollama_agent", "kernel")
+        blob_store = BlobStore.new(kernel_dir: kernel_dir)
         wal = WAL.new(EventStore.new(registry.event_store))
         atomic_mutator = AtomicMutator.new(
           workspace_root: root,
           ownership_index: index,
           fencing_allocator: fence,
-          wal: wal
+          wal: wal,
+          blob_store: blob_store
         )
         intent_reservation = IntentReservation.new(db)
         lock_manager = LockManager.new(db: db, fencing_allocator: fence, clock_epoch: 0)
@@ -49,8 +52,6 @@ module OllamaAgent
           wal: wal,
           clock_epoch_provider: clock
         )
-        kernel_dir = File.join(root, ".ollama_agent", "kernel")
-        blob_store = BlobStore.new(kernel_dir: kernel_dir)
         compensation_manifest = CompensationManifest.new(db)
         compensation_engine = CompensationEngine.new(
           blob_store: blob_store,

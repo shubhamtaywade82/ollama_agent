@@ -4,6 +4,7 @@ require "fileutils"
 
 require "spec_helper"
 
+# rubocop:disable RSpec/MultipleMemoizedHelpers -- agent tmp workspace + doubles
 RSpec.describe OllamaAgent::Runtime::KernelBridge do
   def minimal_owners_yaml
     <<~YAML
@@ -25,15 +26,20 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
 
   let(:hooks) { instance_double(OllamaAgent::Streaming::Hooks, emit: nil) }
   let(:logger) { instance_double(Logger, info: nil) }
+  let(:agent_workspace) { Dir.mktmpdir("kernel-bridge-agent") }
   let(:agent) do
     instance_double(
       OllamaAgent::Agent,
       hooks: hooks,
       logger: logger,
-      root: "/tmp/ollama_agent_kernel_bridge_root",
+      root: agent_workspace,
       read_only: false,
       current_turn: 2
     )
+  end
+
+  after do
+    FileUtils.rm_rf(agent_workspace) if agent_workspace && File.directory?(agent_workspace)
   end
 
   around do |example|
@@ -157,9 +163,104 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
           )
         )
       end
-      # rubocop:enable RSpec/ExampleLength
 
-      # rubocop:disable RSpec/ExampleLength -- full pipeline + SQLite assert
+      it "routes edit_file with search/replace through the kernel pipeline" do
+        ENV["OLLAMA_AGENT_KERNEL"] = "true"
+        pl_out = { result: :ok, state: "committed", manifest_id: "m2" }
+        pipeline = instance_double(OllamaAgent::Runtime::KernelPipeline, execute: pl_out)
+        bridge = described_class.new(agent, pipeline: pipeline)
+        calls = [{
+          "name" => "edit_file",
+          "arguments" => { "path" => "lib/e.rb", "search" => "a", "replace" => "b" }
+        }]
+
+        FileUtils.mkdir_p(File.join(agent_workspace, "lib"))
+        File.write(File.join(agent_workspace, "lib", "e.rb"), "a")
+
+        allow(agent).to receive(:send) do |method, *args|
+          case method
+          when :missing_tool_argument, :disallowed_path_message
+            "err"
+          when :blank_tool_value?
+            args.first.to_s.strip.empty?
+          when :path_allowed?
+            true
+          when :user_prompt
+            instance_double(OllamaAgent::UserPrompt, confirm_write_file: true, confirm_patch: true)
+          when :resolve_path
+            File.expand_path(args[0].to_s, agent.root)
+          when :tool_message
+            tc = args[0]
+            { role: "tool", name: tc.name, content: args[1].to_s }
+          when :save_message_to_session
+            nil
+          when :platform_guarded_tool_call
+            raise "legacy guarded path should not run for edit_file"
+          end
+        end
+
+        bridge.append_tool_results(messages: messages, tool_calls: calls)
+
+        expect(pipeline).to have_received(:execute).with(
+          hash_including(
+            intent: hash_including(kind: "edit_file", path: "lib/e.rb"),
+            manifest_id: kind_of(String),
+            mode: "normal"
+          )
+        )
+      end
+
+      it "routes apply_patch through the kernel pipeline" do
+        ENV["OLLAMA_AGENT_KERNEL"] = "true"
+        pl_out = { result: :ok, state: "committed", manifest_id: "m3" }
+        pipeline = instance_double(OllamaAgent::Runtime::KernelPipeline, execute: pl_out)
+        bridge = described_class.new(agent, pipeline: pipeline)
+        diff = <<~DIFF
+          diff --git a/lib/p.rb b/lib/p.rb
+          --- a/lib/p.rb
+          +++ b/lib/p.rb
+          @@ -1,1 +1,1 @@
+          -x
+          +y
+        DIFF
+        calls = [{ "name" => "apply_patch", "arguments" => { "patch" => diff } }]
+
+        FileUtils.mkdir_p(File.join(agent_workspace, "lib"))
+        File.write(File.join(agent_workspace, "lib", "p.rb"), "x")
+
+        allow(agent).to receive(:send) do |method, *args|
+          case method
+          when :missing_tool_argument, :disallowed_path_message
+            "err"
+          when :blank_tool_value?
+            args.first.to_s.strip.empty?
+          when :path_allowed?
+            true
+          when :user_prompt
+            instance_double(OllamaAgent::UserPrompt, confirm_write_file: true, confirm_patch: true)
+          when :resolve_path
+            File.expand_path(args[0].to_s, agent.root)
+          when :tool_message
+            tc = args[0]
+            { role: "tool", name: tc.name, content: args[1].to_s }
+          when :save_message_to_session
+            nil
+          when :platform_guarded_tool_call
+            raise "legacy guarded path should not run for apply_patch"
+          end
+        end
+
+        bridge.append_tool_results(messages: messages, tool_calls: calls)
+
+        expect(pipeline).to have_received(:execute).with(
+          hash_including(
+            intent: hash_including(kind: "apply_patch", path: "lib/p.rb"),
+            manifest_id: kind_of(String),
+            mode: "normal"
+          )
+        )
+      end
+
       it "persists a saga row when write_file runs through a real pipeline" do
         Dir.mktmpdir("kernel-bridge-on") do |root|
           ENV["OLLAMA_AGENT_KERNEL"] = "true"
@@ -222,4 +323,21 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
       # rubocop:enable RSpec/ExampleLength
     end
   end
+
+  describe ".pipeline_tool_names" do
+    it "includes delete, rename, and move when env is unset" do
+      previous = ENV.fetch("OLLAMA_AGENT_KERNEL_PIPELINE_TOOLS", nil)
+      ENV.delete("OLLAMA_AGENT_KERNEL_PIPELINE_TOOLS")
+      expect(described_class.pipeline_tool_names).to eq(
+        %w[write_file edit_file apply_patch delete_file rename_file move_file]
+      )
+    ensure
+      if previous
+        ENV["OLLAMA_AGENT_KERNEL_PIPELINE_TOOLS"] = previous
+      else
+        ENV.delete("OLLAMA_AGENT_KERNEL_PIPELINE_TOOLS")
+      end
+    end
+  end
 end
+# rubocop:enable RSpec/MultipleMemoizedHelpers

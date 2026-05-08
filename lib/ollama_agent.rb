@@ -77,8 +77,10 @@ require_relative "ollama_agent/runtime/saga_recovery_daemon"
 require_relative "ollama_agent/runtime/integration_queue"
 require_relative "ollama_agent/runtime/execution_manifest"
 require_relative "ollama_agent/runtime/kernel_feature"
+require_relative "ollama_agent/runtime/intent_translator"
 require_relative "ollama_agent/runtime/kernel_bridge"
 require_relative "ollama_agent/runtime/kernel_pipeline"
+require_relative "ollama_agent/runtime/workspace_wal_replay"
 
 # ── v2 indexing layer ─────────────────────────────────────────────────────────
 require_relative "ollama_agent/indexing/repo_scanner"

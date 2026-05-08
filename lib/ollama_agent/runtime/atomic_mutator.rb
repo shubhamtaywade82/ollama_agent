@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "digest"
 require "fileutils"
 require "json"
 require "pathname"
@@ -18,11 +19,12 @@ module OllamaAgent
     # or +NotImplementedError+), the step is skipped (see +mutation_step+ payload +dir_fsync_status+).
     # rubocop:disable Metrics/ClassLength -- single orchestrator; helpers are private below
     class AtomicMutator
-      def initialize(workspace_root:, ownership_index:, fencing_allocator:, wal:)
+      def initialize(workspace_root:, ownership_index:, fencing_allocator:, wal:, blob_store: nil)
         @workspace_root = File.expand_path(workspace_root)
         @ownership_index = ownership_index
         @fencing_allocator = fencing_allocator
         @wal = wal
+        @blob_store = blob_store
       end
 
       # Atomically replace +path+ under the configured workspace root.
@@ -46,6 +48,47 @@ module OllamaAgent
         return outcome if outcome != :continue
 
         persist_atomic_swap(absolute, content, manifest_id, logical_stamp)
+      end
+      # rubocop:enable Metrics/ParameterLists
+
+      # @return [:deleted, :duplicate, :forbidden, :stale_token, :precondition_failed, :inode_swapped]
+      # rubocop:disable Metrics/ParameterLists
+      def delete_file(path:, mode:, fencing_token:, expected_pre_hash:, intent_hash:, manifest_id:,
+                      logical_stamp:, owner_required: nil, supervisor_lease: false)
+        outcome = guard_and_ownership(path, mode, manifest_id, logical_stamp, owner_required,
+                                      supervisor_lease)
+        return outcome if outcome
+
+        absolute = expand_workspace_path(path.to_s)
+        outcome = cas_delete_and_wal(absolute, fencing_token, expected_pre_hash, intent_hash, manifest_id,
+                                     logical_stamp)
+        return outcome if outcome != :continue
+
+        two_step_unlink!(absolute, manifest_id, logical_stamp)
+        track_step(manifest_id, logical_stamp, "complete")
+        :deleted
+      end
+
+      # @return [:renamed, :duplicate, :forbidden, :stale_token, :precondition_failed]
+      def rename_file(from_path:, to_path:, mode:, fencing_token_from:, fencing_token_to:,
+                      expected_pre_hash_from:, intent_hash:, manifest_id:, logical_stamp:,
+                      owner_required: nil, supervisor_lease: false)
+        o1 = guard_and_ownership(from_path, mode, manifest_id, logical_stamp, owner_required,
+                                 supervisor_lease)
+        return o1 if o1
+
+        o2 = guard_and_ownership(to_path, mode, manifest_id, logical_stamp, owner_required,
+                                 supervisor_lease)
+        return o2 if o2
+
+        from_abs = expand_workspace_path(from_path.to_s)
+        to_abs = expand_workspace_path(to_path.to_s)
+        outcome = cas_rename_and_wal(from_abs, to_abs, fencing_token_from, fencing_token_to,
+                                     expected_pre_hash_from, intent_hash, manifest_id, logical_stamp)
+        return outcome if outcome != :continue
+
+        persist_rename(from_abs, to_abs, manifest_id, logical_stamp)
+        :renamed
       end
       # rubocop:enable Metrics/ParameterLists
 
@@ -104,11 +147,99 @@ module OllamaAgent
       end
 
       def atomic_write_payload(absolute, content)
+        hex = content_sha256_hex(content)
         JSON.generate(
           "op" => "atomic_write",
           "path" => relative_workspace_path(absolute),
-          "bytes" => content.b.bytesize
+          "bytes" => content.b.bytesize,
+          "sha256" => hex
         )
+      end
+
+      def content_sha256_hex(content)
+        return @blob_store.put(content.b) if @blob_store
+
+        Digest::SHA256.hexdigest(content.b)
+      end
+
+      def cas_delete_and_wal(absolute, fencing_token, expected_pre_hash, intent_hash, manifest_id,
+                             logical_stamp)
+        cas = fencing_and_precondition(absolute, fencing_token, expected_pre_hash)
+        return cas if cas != :ok
+
+        track_step(manifest_id, logical_stamp, "cas_ok")
+        wal_status = @wal.append_mutation(
+          manifest_id: manifest_id,
+          logical_stamp: logical_stamp,
+          payload: delete_payload(absolute),
+          intent_hash: intent_hash
+        )
+        return :duplicate if wal_status == :duplicate
+
+        track_step(manifest_id, logical_stamp, "wal_intent_inserted")
+        :continue
+      end
+
+      def delete_payload(absolute)
+        JSON.generate("op" => "delete_file", "path" => relative_workspace_path(absolute))
+      end
+
+      def two_step_unlink!(absolute, manifest_id, logical_stamp)
+        parent = File.dirname(absolute)
+        FileUtils.mkdir_p(parent)
+        temp = File.join(parent, ".deleted.#{Process.pid}.#{SecureRandom.hex(4)}")
+        File.rename(absolute, temp)
+        track_step(manifest_id, logical_stamp, "renamed_to_trash", "temp" => temp)
+        fsync_parent_directory(manifest_id, logical_stamp, parent)
+        File.unlink(temp) if File.exist?(temp)
+        track_step(manifest_id, logical_stamp, "unlinked_trash")
+        fsync_parent_directory(manifest_id, logical_stamp, parent)
+      end
+
+      def cas_rename_and_wal(from_abs, to_abs, fencing_token_from, fencing_token_to,
+                             expected_pre_hash_from, intent_hash, manifest_id, logical_stamp)
+        prior = read_destination_bytes(from_abs)
+        allocated_from = @fencing_allocator.allocate(scope: from_abs)
+        cas = CASGuard.check(
+          current_content_or_nil: prior,
+          expected_pre_hash: expected_pre_hash_from,
+          fencing_token_provided: fencing_token_from,
+          fencing_token_current: allocated_from
+        )
+        return cas if cas != :ok
+
+        allocated_to = @fencing_allocator.allocate(scope: to_abs)
+        return :stale_token unless CASGuard.fence_allows?(fencing_token_to, allocated_to)
+
+        track_step(manifest_id, logical_stamp, "cas_ok")
+        wal_status = @wal.append_mutation(
+          manifest_id: manifest_id,
+          logical_stamp: logical_stamp,
+          payload: rename_payload(from_abs, to_abs),
+          intent_hash: intent_hash
+        )
+        return :duplicate if wal_status == :duplicate
+
+        track_step(manifest_id, logical_stamp, "wal_intent_inserted")
+        :continue
+      end
+
+      def rename_payload(from_abs, to_abs)
+        JSON.generate(
+          "op" => "rename_file",
+          "from" => relative_workspace_path(from_abs),
+          "to" => relative_workspace_path(to_abs)
+        )
+      end
+
+      def persist_rename(from_abs, to_abs, manifest_id, logical_stamp)
+        FileUtils.mkdir_p(File.dirname(to_abs))
+        track_step(manifest_id, logical_stamp, "rename_start")
+        File.rename(from_abs, to_abs)
+        track_step(manifest_id, logical_stamp, "renamed")
+        fsync_parent_directory(manifest_id, logical_stamp, File.dirname(from_abs))
+        fsync_parent_directory(manifest_id, logical_stamp, File.dirname(to_abs))
+        track_step(manifest_id, logical_stamp, "complete")
       end
 
       # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- single try/rename/finally cleanup

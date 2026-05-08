@@ -2,11 +2,13 @@
 
 require "json"
 
+require_relative "event_store"
+
 module OllamaAgent
   module Runtime
     # Mutation-focused view over {EventStore} (+kind+ = +mutation+).
     class WAL
-      MUTATION_KIND = "mutation"
+      MUTATION_KIND = EventStore::MUTATION_KIND
       MUTATION_STEP_KIND = "mutation_step"
 
       # @param event_store [EventStore]
