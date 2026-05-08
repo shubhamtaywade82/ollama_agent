@@ -3,6 +3,7 @@
 require "fileutils"
 
 require "ollama_agent"
+require_relative "support/runtime_kernel_harness"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure

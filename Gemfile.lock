@@ -16,6 +16,7 @@ PATH
       ollama-client (~> 1.1)
       pastel (~> 0.8)
       prism (~> 1.0)
+      sqlite3 (~> 2.0)
       thor (~> 1.2)
       tty-box (~> 0.7)
       tty-logger (~> 0.6)
@@ -112,6 +113,7 @@ GEM
       lint_roller (~> 1.1)
       rubocop (~> 1.81)
     ruby-progressbar (1.13.0)
+    sqlite3 (2.9.4-x86_64-linux-gnu)
     stringio (3.2.0)
     strings (0.2.1)
       strings-ansi (~> 0.2)
@@ -158,7 +160,6 @@ GEM
     wisper (2.0.1)
 
 PLATFORMS
-  ruby
   x86_64-linux
 
 DEPENDENCIES
@@ -218,6 +219,7 @@ CHECKSUMS
   rubocop-rspec (3.9.0) sha256=8fa70a3619408237d789aeecfb9beef40576acc855173e60939d63332fdb55e2
   ruby-progressbar (1.13.0) sha256=80fc9c47a9b640d6834e0dc7b3c94c9df37f08cb072b7761e4a71e22cff29b33
   ruby_mastery (0.1.0)
+  sqlite3 (2.9.4-x86_64-linux-gnu) sha256=537a3eda71b1df1336d0055cbebe55a7317c34870c192c7b6b9d8d0be6871847
   stringio (3.2.0) sha256=c37cb2e58b4ffbd33fe5cd948c05934af997b36e0b6ca6fdf43afa234cf222e1
   strings (0.2.1) sha256=933293b3c95cf85b81eb44b3cf673e3087661ba739bbadfeadf442083158d6fb
   strings-ansi (0.2.0) sha256=90262d760ea4a94cc2ae8d58205277a343409c288cbe7c29416b1826bd511c88

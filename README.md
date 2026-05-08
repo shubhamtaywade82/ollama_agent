@@ -35,6 +35,7 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
 ## Requirements
 
 - Ruby ≥ 3.2 (enforced in the gemspec as `required_ruby_version`)
+- **Runtime kernel (SQLite):** the **sqlite3** gem is a runtime dependency; kernel storage uses `event_store.db` and `runtime.db` under `.ollama_agent/kernel/` in the configured project root.
 - **Local:** Ollama running and a capable tool-calling model, **or**
 - **Ollama Cloud:** API key and a cloud-capable model name (see below)
 

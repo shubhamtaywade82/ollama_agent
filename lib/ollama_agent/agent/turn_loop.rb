@@ -4,8 +4,11 @@ module OllamaAgent
   class Agent
     # One agent run: budget, loop detection, model round-trips, and tool results.
     class TurnLoop
+      require_relative "../runtime/kernel_bridge"
+
       def initialize(agent)
         @agent = agent
+        @kernel_bridge = Runtime::KernelBridge.new(agent)
       end
 
       def run(messages)
@@ -37,7 +40,7 @@ module OllamaAgent
 
         return false if loop_break?
 
-        @agent.send(:append_tool_results, messages, tool_calls)
+        @kernel_bridge.append_tool_results(messages: messages, tool_calls: tool_calls)
         true
       end
       # rubocop:enable Naming/PredicateMethod
