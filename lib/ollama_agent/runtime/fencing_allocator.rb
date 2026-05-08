@@ -16,10 +16,14 @@ module OllamaAgent
 
       # @return [Integer] new token for +scope+
       def allocate(scope:)
-        @db.transaction(:immediate) do
-          @db.execute(UPSERT_SQL, [scope])
-          @db.get_first_value("SELECT last_token FROM fencing_tokens WHERE scope = ?", [scope]).to_i
-        end
+        @db.transaction(:immediate) { allocate_joining(scope: scope) }
+      end
+
+      # Like {#allocate} but assumes the caller already holds an open +transaction(:immediate)+ on +@db+.
+      # @return [Integer]
+      def allocate_joining(scope:)
+        @db.execute(UPSERT_SQL, [scope])
+        @db.get_first_value("SELECT last_token FROM fencing_tokens WHERE scope = ?", [scope]).to_i
       end
     end
   end

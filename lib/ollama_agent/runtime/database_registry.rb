@@ -84,6 +84,7 @@ module OllamaAgent
       def open_db(path, schema_sql)
         db = SQLite3::Database.new(path)
         db.results_as_hash = true
+        db.busy_timeout = 60_000
         db.execute_batch(schema_sql)
         db
       end

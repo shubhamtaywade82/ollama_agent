@@ -25,6 +25,11 @@ RSpec/ExampleLength:
   Exclude:
     - spec/ollama_agent/runtime/storage_concurrency_spec.rb
     - spec/ollama_agent/runtime/storage_replay_spec.rb
+    - spec/ollama_agent/runtime/atomic_mutator_spec.rb
+    - spec/ollama_agent/runtime/lock_deadlock_fuzz_spec.rb
+    - spec/ollama_agent/runtime/saga_recovery_spec.rb
+    - spec/ollama_agent/runtime/compensation_engine_spec.rb
+    - spec/ollama_agent/runtime/saga_recovery_daemon_spec.rb
 
 RSpec/MultipleExpectations:
   Max: 10
@@ -38,6 +43,8 @@ RSpec/SpecFilePathFormat:
 
 RSpec/DescribeClass:
   Exclude:
+    - spec/ollama_agent/runtime/lock_deadlock_fuzz_spec.rb
+    - spec/ollama_agent/runtime/saga_recovery_spec.rb
     - spec/ollama_agent/security/owners_yml_fixture_spec.rb
 
 RSpec/DescribeMethod:

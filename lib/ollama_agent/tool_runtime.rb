@@ -11,14 +11,18 @@ module OllamaAgent
     class InvalidPlanError < Error; end
 
     class MaxStepsExceeded < Error; end
+
+    class ToolPhaseError < Error; end
   end
 end
 
 require_relative "tool_runtime/tool"
 require_relative "tool_runtime/memory"
 require_relative "tool_runtime/registry"
+require_relative "tool_runtime/tool_registry"
 require_relative "tool_runtime/executor"
 require_relative "tool_runtime/json_extractor"
 require_relative "tool_runtime/plan_extractor"
 require_relative "tool_runtime/ollama_json_planner"
+require_relative "tool_runtime/supervisor"
 require_relative "tool_runtime/loop"

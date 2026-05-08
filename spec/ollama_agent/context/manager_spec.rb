@@ -84,5 +84,9 @@ RSpec.describe OllamaAgent::Context::Manager do
       expect(described_class.estimate("hello")).to eq(1) # 5 / 4 = 1 (integer division)
       expect(described_class.estimate("x" * 400)).to eq(100)
     end
+
+    it "aliases count(text:) to estimate for injectable counters" do
+      expect(described_class.count(text: "hello")).to eq(described_class.estimate("hello"))
+    end
   end
 end

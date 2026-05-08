@@ -1,10 +1,13 @@
 # frozen_string_literal: true
 
+require "json"
+
 module OllamaAgent
   module Runtime
     # Mutation-focused view over {EventStore} (+kind+ = +mutation+).
     class WAL
       MUTATION_KIND = "mutation"
+      MUTATION_STEP_KIND = "mutation_step"
 
       # @param event_store [EventStore]
       def initialize(event_store)
@@ -20,6 +23,19 @@ module OllamaAgent
           payload: payload,
           intent_hash: intent_hash,
           created_at: created_at
+        )
+      end
+
+      # Fine-grained mutation progress (no +intent_hash+; not deduped).
+      def append_mutation_step(manifest_id:, logical_stamp:, step:, data: {})
+        blob = JSON.generate(data.merge("step" => step))
+        @event_store.append(
+          manifest_id: manifest_id,
+          logical_stamp: logical_stamp,
+          kind: MUTATION_STEP_KIND,
+          payload: blob,
+          intent_hash: nil,
+          created_at: nil
         )
       end
 
