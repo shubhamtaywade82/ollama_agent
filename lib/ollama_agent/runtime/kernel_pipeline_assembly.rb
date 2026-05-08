@@ -100,7 +100,7 @@ module OllamaAgent
         path = File.join(root, "config", "ollama_agent", "owners.yml")
         path = File.join(OllamaAgent.gem_root, "config", "ollama_agent", "owners.yml") unless File.file?(path)
 
-        OwnershipCompiler.new.compile(path: path)
+        OllamaAgent::Security::OwnershipCompiler.new.compile(path: path)
       end
 
       def ticking_clock

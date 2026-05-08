@@ -11,6 +11,18 @@ RSpec.describe "real Ollama end-to-end smoke", :real_llm do
 
   it "creates hello.txt with the requested content (and saga when kernel is on)" do
     Dir.mktmpdir("real-llm-smoke") do |root|
+      if ENV.fetch("OLLAMA_AGENT_KERNEL", "").strip.casecmp("true").zero?
+        owners_dir = File.join(root, "config", "ollama_agent")
+        FileUtils.mkdir_p(owners_dir)
+        File.write(File.join(owners_dir, "owners.yml"), <<~YAML)
+          rules:
+            - prefix: hello.txt
+              owner: smoke
+              mutable_in_modes: [normal, replay, validation, dry_run]
+              criticality: routine
+        YAML
+      end
+
       agent = OllamaAgent::Agent.new(
         root: root,
         confirm_patches: false,
