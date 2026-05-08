@@ -105,6 +105,19 @@ Alternatively pass `logger:` into `build_for_workspace` to auto-wrap `KernelEven
 - **Recovery lease occupancy:** `recovery_leases` rows (`manifest_id`, `holder`, `expires_at_epoch`) — non-expired rows indicate an in-flight or stuck recovery claim.
 - **Integration queue:** `integration_queue` status transitions (`pending` → `claimed` → `done`) after successful pipeline commits.
 
+## Compaction (bounded `runtime.db` / `event_store.db`)
+
+- Run **`OllamaAgent::Runtime::Compactor`** from a supervisor or job loop using the same **logical epoch** source as sagas (never `Time.now` inside the compactor). Defaults retain ~`100_000` epochs of history; tune `retention_epochs` per repo churn.
+- **Suggested schedule:** compact at least once per **10k–50k logical epochs** on busy repos, or nightly for low-volume pilots. Wire **`CompactorRunner`** with `interval_epochs:` so the caller’s `tick(current_epoch:)` decides when to invoke `compact`.
+- After compaction, spot-check `event_store_archive.db` under `.ollama_agent/kernel/` and confirm active (`terminal = 0`) sagas still replay from `event_store.db`.
+
+## Permission unification migration
+
+1. Land **`config/ollama_agent/owners.yml`** in pilot repos before enabling `OLLAMA_AGENT_KERNEL=true` so `PermissionBridge` can evaluate ownership + criticality consistently.
+2. Watch logs for `permission bridge:` warnings/errors (legacy vs kernel divergence); resolve by tightening **`Permissions`** profiles or ownership rules until divergence stops.
+3. Use **`OllamaAgent::PermissionConflictError`** from `#allow_mutation?` in integration tests to catch mismatches before rollout widens.
+4. Kernel-off workloads remain on legacy **`Permissions` / `Policies`** only until the flag is flipped.
+
 **Rollback**
 
 - Set `OLLAMA_AGENT_KERNEL=false` (or unset), restart sessions, and confirm kernel-off parity tests stay green before deeper incident response.

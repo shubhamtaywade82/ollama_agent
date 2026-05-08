@@ -63,6 +63,8 @@ module OllamaAgent
         open_mutex_sync { @runtime ||= connect_runtime }
       end
 
+      attr_reader :kernel_dir
+
       private
 
       def open_mutex_sync(&)

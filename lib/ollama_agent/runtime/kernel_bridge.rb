@@ -5,6 +5,7 @@ require "securerandom"
 require_relative "intent_translator"
 require_relative "kernel_feature"
 require_relative "kernel_pipeline"
+require_relative "permission_bridge"
 
 module OllamaAgent
   module Runtime
@@ -28,6 +29,8 @@ module OllamaAgent
       def initialize(agent, pipeline: nil)
         @agent = agent
         @pipeline = pipeline
+        @permission_bridge_memo = false
+        @permission_bridge = nil
       end
 
       def append_tool_results(messages:, tool_calls:)
@@ -104,6 +107,8 @@ module OllamaAgent
         end
         return "#{name} is disabled in read-only mode." if @agent.read_only
 
+        return "Mutation denied by kernel permission gate." unless pipeline_mutation_allowed?(name, intent)
+
         return "Cancelled by user" unless user_confirmed_mutation?(name, args, intent)
 
         manifest_id = SecureRandom.uuid
@@ -127,6 +132,74 @@ module OllamaAgent
         else
           [intent[:path].to_s]
         end
+      end
+
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- tool + rename branching for bridge calls
+      def pipeline_mutation_allowed?(name, intent)
+        return true unless KernelFeature.enabled?
+
+        bridge = permission_bridge
+        return true unless bridge
+
+        mode = KernelFeature.shadow? ? "shadow" : "normal"
+        tool = name.to_s
+        paths = pipeline_paths_for_tool(name, intent)
+        logger = @agent.respond_to?(:logger) ? @agent.logger : nil
+
+        if %w[rename_file move_file].include?(tool)
+          return bridge.pipeline_allowed?(
+            tool_name: tool,
+            path: paths[0],
+            mode: mode,
+            read_only: @agent.read_only,
+            rename_to: paths[1],
+            logger: logger,
+            root: @agent.root
+          )
+        end
+
+        paths.all? do |p|
+          bridge.pipeline_allowed?(
+            tool_name: tool,
+            path: p,
+            mode: mode,
+            read_only: @agent.read_only,
+            rename_to: nil,
+            logger: logger,
+            root: @agent.root
+          )
+        end
+      end
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
+
+      # rubocop:disable Metrics/MethodLength -- lazy memo + compiler wiring
+      def permission_bridge
+        return @permission_bridge if @permission_bridge_memo
+
+        @permission_bridge_memo = true
+        path = File.join(@agent.root, "config", "ollama_agent", "owners.yml")
+        @permission_bridge =
+          if File.exist?(path)
+            PermissionBridge.new(
+              permissions: agent_permissions,
+              policies: agent_policies,
+              ownership_index: OllamaAgent::Security::OwnershipCompiler.new.compile(path: path),
+              workspace_root: @agent.root
+            )
+          end
+      end
+      # rubocop:enable Metrics/MethodLength
+
+      def agent_permissions
+        return @agent.permissions if @agent.respond_to?(:permissions)
+
+        Permissions.new(profile: :standard)
+      end
+
+      def agent_policies
+        return @agent.policies if @agent.respond_to?(:policies)
+
+        Policies.new
       end
 
       def user_confirmed_mutation?(name, args, intent)

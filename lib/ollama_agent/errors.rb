@@ -17,6 +17,17 @@ module OllamaAgent
 
   class BlobIntegrityFault < Error; end
 
+  # Legacy {Runtime::Permissions}/{Runtime::Policies} disagree with kernel ownership gates.
+  class PermissionConflictError < Error
+    attr_reader :legacy_allowed, :kernel_allowed
+
+    def initialize(legacy_allowed:, kernel_allowed:, message: nil)
+      @legacy_allowed = legacy_allowed
+      @kernel_allowed = kernel_allowed
+      super(message || "permission conflict: legacy=#{legacy_allowed} kernel=#{kernel_allowed}")
+    end
+  end
+
   # Context assembly exceeded a declared section budget (no silent truncation).
   class BudgetExceeded < Error; end
 

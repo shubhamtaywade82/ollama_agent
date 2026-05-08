@@ -25,11 +25,10 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
   end
 
   let(:hooks) { instance_double(OllamaAgent::Streaming::Hooks, emit: nil) }
-  let(:logger) { instance_double(Logger, info: nil) }
+  let(:logger) { instance_double(Logger, info: nil, warn: nil, error: nil) }
   let(:agent_workspace) { Dir.mktmpdir("kernel-bridge-agent") }
   let(:agent) do
-    instance_double(
-      OllamaAgent::Agent,
+    double(
       hooks: hooks,
       logger: logger,
       root: agent_workspace,
@@ -92,6 +91,14 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
 
     context "when kernel flag is enabled" do
       before do
+        cfg_dir = File.join(agent_workspace, "config", "ollama_agent")
+        FileUtils.mkdir_p(cfg_dir)
+        File.write(File.join(cfg_dir, "owners.yml"), minimal_owners_yaml)
+        allow(agent).to receive_messages(
+          permissions: OllamaAgent::Runtime::Permissions.new(profile: :full),
+          policies: OllamaAgent::Runtime::Policies.new
+        )
+
         iv = { :@current_turn => 2, :@confirm_patches => false, :@loop_detector => nil, :@memory_manager => nil }
         allow(agent).to receive(:instance_variable_get) { |k| iv[k] }
         allow(agent).to receive(:send) do |method, *args|
@@ -261,10 +268,58 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
         )
       end
 
+      it "does not call the pipeline when kernel ownership forbids the path" do
+        ENV["OLLAMA_AGENT_KERNEL"] = "true"
+        forbidden_yaml = <<~YAML
+          rules:
+            - prefix: lib
+              owner: blocked
+              mutable_in_modes: [normal, replay, validation, dry_run, shadow]
+              criticality: routine
+              forbidden: true
+              children: []
+        YAML
+        File.write(File.join(agent_workspace, "config", "ollama_agent", "owners.yml"), forbidden_yaml)
+
+        pl_out = { result: :ok, state: "committed", manifest_id: "m1" }
+        pipeline = instance_double(OllamaAgent::Runtime::KernelPipeline, execute: pl_out)
+        bridge = described_class.new(agent, pipeline: pipeline)
+        calls = [{ "name" => "write_file", "arguments" => { "path" => "lib/x.rb", "content" => "1" } }]
+
+        allow(agent).to receive(:send) do |method, *args|
+          case method
+          when :missing_tool_argument, :disallowed_path_message
+            "err"
+          when :blank_tool_value?
+            args.first.to_s.strip.empty?
+          when :path_allowed?
+            true
+          when :user_prompt
+            instance_double(OllamaAgent::UserPrompt, confirm_write_file: true)
+          when :resolve_path
+            File.expand_path(args[0].to_s, agent_workspace)
+          when :tool_message
+            tc = args[0]
+            { role: "tool", name: tc.name, content: args[1].to_s }
+          when :save_message_to_session
+            nil
+          when :platform_guarded_tool_call
+            raise "legacy guarded path should not run for write_file"
+          end
+        end
+
+        bridge.append_tool_results(messages: messages, tool_calls: calls)
+
+        expect(pipeline).not_to have_received(:execute)
+      end
+
       it "persists a saga row when write_file runs through a real pipeline" do
         Dir.mktmpdir("kernel-bridge-on") do |root|
           ENV["OLLAMA_AGENT_KERNEL"] = "true"
           FileUtils.mkdir_p(File.join(root, "lib"))
+          cfg_dir = File.join(root, "config", "ollama_agent")
+          FileUtils.mkdir_p(cfg_dir)
+          File.write(File.join(cfg_dir, "owners.yml"), minimal_owners_yaml)
           tick = [0]
           clock = proc { tick[0] += 1 }
           index = OllamaAgent::Security::OwnershipCompiler.new.compile(yaml_string: minimal_owners_yaml)
@@ -274,12 +329,15 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
             clock_epoch_provider: clock,
             isolated_validator: fake_validator
           )
-          local_agent = instance_double(
-            OllamaAgent::Agent,
+          local_agent = double(
             hooks: hooks,
             logger: logger,
             root: root,
             read_only: false
+          )
+          allow(local_agent).to receive_messages(
+            permissions: OllamaAgent::Runtime::Permissions.new(profile: :full),
+            policies: OllamaAgent::Runtime::Policies.new
           )
           iv = { :@current_turn => 0, :@confirm_patches => false, :@loop_detector => nil, :@memory_manager => nil }
           allow(local_agent).to receive(:instance_variable_get) { |k| iv[k] }

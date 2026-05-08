@@ -42,6 +42,28 @@ module OllamaAgent
         File.exist?(blob_path(normalize_sha(sha256)))
       end
 
+      # @return [String] absolute filesystem path for a normalized hex digest
+      def path_for_hex(sha256)
+        blob_path(normalize_sha(sha256))
+      end
+
+      # Yields each lowercase 64-hex digest that exists on disk under +@root+.
+      def each_stored_hex
+        return enum_for(:each_stored_hex) unless block_given?
+
+        return unless File.directory?(@root)
+
+        Dir.each_child(@root) do |dir2|
+          sub = File.join(@root, dir2)
+          next unless dir2.length == 2 && File.directory?(sub)
+
+          Dir.each_child(sub) do |tail|
+            hex = "#{dir2}#{tail}"
+            yield hex if hex.match?(/\A[0-9a-f]{64}\z/)
+          end
+        end
+      end
+
       private
 
       def verify_existing!(path, bytes, hex)

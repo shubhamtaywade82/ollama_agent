@@ -51,6 +51,10 @@ OLLAMA_AGENT_KERNEL=true bundle exec ollama_agent ask "Your task"
 
 Design notes and roadmap items live in **`docs/new_features_plan_v2.md`**. Operational rollout, shadow mode, and rollback expectations are in **`docs/agile/release_rollout_runbook.md`**. For **E7 validator activation** (Docker-backed isolated checks), see **`docs/agile/docker_spec_activation.md`**.
 
+**Compaction and disk bounds:** long-lived workspaces accumulate kernel SQLite rows and content-addressed blobs. Use **`OllamaAgent::Runtime::Compactor`** (logical `current_epoch` only — no wall clock) to prune sealed sagas, cold-archive old WAL rows into `event_store_archive.db`, purge expired recovery leases and stale intent reservations, and unlink blob files not referenced by compensations or in-flight mutation WAL payloads. **`OllamaAgent::Runtime::CompactorRunner`** wraps the compactor with an epoch interval for daemon loops (opt-in; nothing starts automatically).
+
+**Permission unification:** when `OLLAMA_AGENT_KERNEL` is on and `config/ollama_agent/owners.yml` exists, **`OllamaAgent::Runtime::PermissionBridge`** reconciles legacy **`Runtime::Permissions` / `Runtime::Policies`** with **`Security::OwnershipIndex`** + **`CriticalityPolicy`** before pipeline execution. On divergence the bridge logs and **prefers the kernel decision** (stricter path wins). `OllamaAgent::PermissionConflictError` is raised only by the strict `#allow_mutation?` API for tests and diagnostics. With the kernel **off**, only the legacy permission path runs (no bridge).
+
 ## Requirements
 
 - Ruby ≥ 3.2 (enforced in the gemspec as `required_ruby_version`)
