@@ -7,6 +7,7 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
 ## Contents
 
 - [Features](#features)
+- [Kernel runtime (deterministic execution)](#kernel-runtime-deterministic-execution)
 - [Requirements](#requirements)
 - [Security and sandbox](#security-and-sandbox)
 - [Installation](#installation)
@@ -31,6 +32,24 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
 - **`improve`** — same as **`self_review --mode automated`** (you can pass **`--mode automated`** explicitly; other modes belong on **`self_review`**).
 - **`orchestrate`** / **`OLLAMA_AGENT_ORCHESTRATOR=1`** — optional **orchestrator** tools to probe and delegate to other local CLI agents (see [Orchestrator](#orchestrator-external-cli-agents)); **`agents`** lists availability.
 - **Ruby API** — embed **`Runner`**, **`Agent`**, custom tools, hooks, sessions, and (optionally) **`ToolRuntime`**; see [Library usage (Ruby)](#library-usage-ruby).
+
+## Kernel runtime (deterministic execution)
+
+The **runtime kernel** is an optional execution layer behind `OLLAMA_AGENT_KERNEL`. It wraps file mutations in a **saga-style finite state machine**: intent reservation, **atomic writes** (CAS + pre-image hashes), ownership checks against compiled rules, **SQLite-backed WAL** and sagas, isolated post-mutation validation, and compensation on failure. The workspace root remains the **trust boundary**; the kernel adds structured **ownership** and **fencing** so replays and automation stay auditable. When cloud or validator paths fail, **circuit-breaker style** escalation limits (see the rollout runbook) keep bad states from compounding.
+
+| `OLLAMA_AGENT_KERNEL` | Behavior |
+| --- | --- |
+| unset / `false` (default) | Legacy tool paths; kernel pipeline is not used for tool routing. |
+| `shadow` | Same routing as `true`, but the pipeline runs in **shadow** mode: saga + WAL + observability run, while workspace bytes for certain mutations stay off the “real” path (see runbook). |
+| `true` / `1` | Tool intents for configured mutation tools go through **`OllamaAgent::Runtime::KernelPipeline`**. |
+
+**Quick start (kernel on):**
+
+```bash
+OLLAMA_AGENT_KERNEL=true bundle exec ollama_agent ask "Your task"
+```
+
+Design notes and roadmap items live in **`docs/new_features_plan_v2.md`**. Operational rollout, shadow mode, and rollback expectations are in **`docs/agile/release_rollout_runbook.md`**. For **E7 validator activation** (Docker-backed isolated checks), see **`docs/agile/docker_spec_activation.md`**.
 
 ## Requirements
 

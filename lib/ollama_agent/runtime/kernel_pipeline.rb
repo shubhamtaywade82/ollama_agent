@@ -48,6 +48,8 @@ module OllamaAgent
       end
       # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength, Metrics/AbcSize
 
+      attr_reader :workspace_root
+
       # @return [Hash] +:result+, +:state+, +:manifest_id+, optional +:error+
       # rubocop:disable Metrics/MethodLength -- guard + single orchestration entry
       def execute(intent:, manifest_id:, mode: "normal")
@@ -72,7 +74,7 @@ module OllamaAgent
       # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength, Metrics/AbcSize -- private saga steps
       attr_reader :saga_coordinator, :lock_manager, :atomic_mutator, :post_condition_verifier,
                   :compensation_engine, :integration_queue, :blob_store, :compensation_manifest,
-                  :clock_epoch_provider, :workspace_root, :hooks, :wal, :fencing_allocator, :ownership_index
+                  :clock_epoch_provider, :hooks, :wal, :fencing_allocator, :ownership_index
 
       def unknown_kind_reply(manifest_id, kind)
         {

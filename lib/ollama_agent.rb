@@ -85,6 +85,7 @@ require_relative "ollama_agent/runtime/kernel_pipeline"
 require_relative "ollama_agent/runtime/workspace_wal_replay"
 require_relative "ollama_agent/runtime/rollback_signals"
 require_relative "ollama_agent/runtime/kernel_event_logger"
+require_relative "ollama_agent/runtime/kernel_tool_seed"
 
 # ── v2 indexing layer ─────────────────────────────────────────────────────────
 require_relative "ollama_agent/indexing/repo_scanner"
@@ -161,6 +162,11 @@ module OllamaAgent
   #   OllamaAgent.run("Refactor the auth module", root: "/my/project")
   def self.run(query, root: Dir.pwd, **)
     Runner.build(root: root, **).run(query)
+  end
+
+  # Registers default phase-scoped kernel tools on a {OllamaAgent::ToolRuntime::ToolRegistry}.
+  def self.seed_kernel_tools(registry:, pipeline:)
+    Runtime::KernelToolSeed.seed(tool_registry: registry, kernel_pipeline: pipeline)
   end
 end
 
