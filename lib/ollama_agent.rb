@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "logger"
+
 require_relative "ollama_agent/version"
 require_relative "ollama_agent/errors"
 
@@ -81,6 +83,8 @@ require_relative "ollama_agent/runtime/intent_translator"
 require_relative "ollama_agent/runtime/kernel_bridge"
 require_relative "ollama_agent/runtime/kernel_pipeline"
 require_relative "ollama_agent/runtime/workspace_wal_replay"
+require_relative "ollama_agent/runtime/rollback_signals"
+require_relative "ollama_agent/runtime/kernel_event_logger"
 
 # ── v2 indexing layer ─────────────────────────────────────────────────────────
 require_relative "ollama_agent/indexing/repo_scanner"
@@ -139,6 +143,14 @@ require_relative "ollama_agent/cli"
 
 # Public namespace for the universal AI operator runtime + developer shell.
 module OllamaAgent
+  class << self
+    attr_writer :logger
+  end
+
+  def self.logger
+    @logger ||= Logger.new($stderr, progname: "ollama_agent", level: Logger::INFO)
+  end
+
   def self.gem_root
     File.expand_path("..", __dir__)
   end

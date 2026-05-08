@@ -107,7 +107,8 @@ module OllamaAgent
         return "Cancelled by user" unless user_confirmed_mutation?(name, args, intent)
 
         manifest_id = SecureRandom.uuid
-        outcome = pipeline.execute(intent: intent, manifest_id: manifest_id, mode: "normal")
+        mode = KernelFeature.shadow? ? "shadow" : "normal"
+        outcome = pipeline.execute(intent: intent, manifest_id: manifest_id, mode: mode)
         format_pipeline_outcome(outcome)
       end
 

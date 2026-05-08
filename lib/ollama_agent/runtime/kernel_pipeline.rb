@@ -2,8 +2,11 @@
 
 require "digest"
 require "json"
+require "pathname"
 
 require_relative "../security/resource_guard"
+require_relative "criticality_policy"
+require_relative "execution_mode"
 require_relative "cas_guard"
 require_relative "logical_clock"
 require_relative "unified_diff_apply"
@@ -19,11 +22,11 @@ module OllamaAgent
         KernelPipelineAssembly.build_for_workspace(...)
       end
 
-      # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength -- explicit runtime wiring per E13
+      # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength, Metrics/AbcSize -- explicit runtime wiring per E13
       def initialize(workspace_root:, database_registry:, ownership_index:, fencing_allocator:, lock_manager:,
                      intent_reservation:, atomic_mutator:, saga_coordinator:, isolated_validator:,
                      post_condition_verifier:, blob_store:, compensation_manifest:, compensation_engine:,
-                     saga_recovery_daemon:, integration_queue:, wal:, clock_epoch_provider:)
+                     saga_recovery_daemon:, integration_queue:, wal:, clock_epoch_provider:, hooks: nil)
         @workspace_root = workspace_root
         @database_registry = database_registry
         @ownership_index = ownership_index
@@ -41,27 +44,35 @@ module OllamaAgent
         @integration_queue = integration_queue
         @wal = wal
         @clock_epoch_provider = clock_epoch_provider
+        @hooks = hooks
       end
-      # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength
+      # rubocop:enable Metrics/ParameterLists, Metrics/MethodLength, Metrics/AbcSize
 
       # @return [Hash] +:result+, +:state+, +:manifest_id+, optional +:error+
+      # rubocop:disable Metrics/MethodLength -- guard + single orchestration entry
       def execute(intent:, manifest_id:, mode: "normal")
         intent = normalize_intent(intent)
         kind = intent[:kind].to_s
-        return unknown_kind_reply(manifest_id, kind) unless SUPPORTED_KINDS.include?(kind)
+        unless SUPPORTED_KINDS.include?(kind)
+          return emit_pipeline_complete(manifest_id, unknown_kind_reply(manifest_id, kind))
+        end
 
         ge = guard_delete_rename_paths_if_applicable(intent, kind)
-        return { result: :precondition_failed, state: nil, manifest_id: manifest_id, error: ge } if ge
+        if ge
+          payload = { result: :precondition_failed, state: nil, manifest_id: manifest_id, error: ge }
+          return emit_pipeline_complete(manifest_id, payload)
+        end
 
-        run_after_path_guard(kind, intent, manifest_id, mode)
+        emit_pipeline_complete(manifest_id, run_after_path_guard(kind, intent, manifest_id, mode))
       end
+      # rubocop:enable Metrics/MethodLength
 
       private
 
       # rubocop:disable Metrics/ParameterLists, Metrics/MethodLength, Metrics/AbcSize -- private saga steps
       attr_reader :saga_coordinator, :lock_manager, :atomic_mutator, :post_condition_verifier,
                   :compensation_engine, :integration_queue, :blob_store, :compensation_manifest,
-                  :clock_epoch_provider, :workspace_root
+                  :clock_epoch_provider, :workspace_root, :hooks, :wal, :fencing_allocator, :ownership_index
 
       def unknown_kind_reply(manifest_id, kind)
         {
@@ -85,6 +96,12 @@ module OllamaAgent
         started = @saga_coordinator.start(manifest_id: manifest_id, intent_hash: intent_hash,
                                           planned_scopes: scopes, metadata: {})
         return terminal_payload(manifest_id, :error, "saga start #{started}") unless started == :reserved
+
+        emit_kernel_hook(:on_saga_start,
+                         manifest_id: manifest_id,
+                         intent_hash: intent_hash,
+                         scopes: scopes,
+                         kind: kind)
 
         lock_outcome = acquire_locks!(manifest_id, scopes)
         return lock_outcome if lock_outcome[:result] == :error
@@ -273,15 +290,16 @@ module OllamaAgent
       end
 
       def advance_or_fail(state, reason, manifest_id, lease_handles, intent, intent_hash, stamp, mode, enqueue_kind:)
-        ok = saga_coordinator.advance(manifest_id: manifest_id, to_state: state, reason: reason)
+        ok = saga_advance!(manifest_id, state, reason)
         return abort_compensated(manifest_id, lease_handles, "advance #{state} #{ok}") unless ok == :ok
 
         mutate_verify_and_commit(manifest_id, lease_handles, intent, intent_hash, stamp, mode,
                                  enqueue_kind: enqueue_kind)
       end
 
+      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity -- shadow vs live mutator branch
       def advance_delete_file(manifest_id, lease_handles, intent, intent_hash, stamp, mode, enqueue_kind:)
-        ok = saga_coordinator.advance(manifest_id: manifest_id, to_state: :locked, reason: "locked")
+        ok = saga_advance!(manifest_id, :locked, "locked")
         return abort_compensated(manifest_id, lease_handles, "advance locked #{ok}") unless ok == :ok
 
         absolute = File.expand_path(intent[:path].to_s, @workspace_root)
@@ -289,26 +307,34 @@ module OllamaAgent
         return pre if pre
 
         lease = lease_handles.find { |h| h[:scope] == absolute } || lease_handles.last
-        record_pre_state!(manifest_id, absolute, lease[:fencing_token], stamp, compensation_op: "delete")
+        comp_op = shadow_execution?(mode) ? "shadow" : "delete"
+        record_pre_state!(manifest_id, absolute, lease[:fencing_token], stamp, compensation_op: comp_op)
 
-        del_out = atomic_mutator.delete_file(
-          path: intent[:path].to_s,
-          mode: mode.to_s,
-          fencing_token: lease[:fencing_token],
-          expected_pre_hash: intent[:expected_pre_hash],
-          intent_hash: intent_hash,
-          manifest_id: manifest_id,
-          logical_stamp: stamp.next_stamp,
-          owner_required: intent[:owner_required],
-          supervisor_lease: intent[:supervisor_lease] || false
-        )
+        del_out =
+          if shadow_execution?(mode)
+            shadow_wal_delete_file!(intent, intent_hash, manifest_id, stamp, lease[:fencing_token])
+          else
+            atomic_mutator.delete_file(
+              path: intent[:path].to_s,
+              mode: mode.to_s,
+              fencing_token: lease[:fencing_token],
+              expected_pre_hash: intent[:expected_pre_hash],
+              intent_hash: intent_hash,
+              manifest_id: manifest_id,
+              logical_stamp: stamp.next_stamp,
+              owner_required: intent[:owner_required],
+              supervisor_lease: intent[:supervisor_lease] || false
+            )
+          end
         return abort_compensated(manifest_id, lease_handles, "mutator #{del_out}") if del_out != :deleted
 
         verify_commit_tail(manifest_id, lease_handles, stamp, intent, enqueue_kind: enqueue_kind)
       end
+      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
+      # rubocop:disable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
       def advance_rename_file(manifest_id, lease_handles, intent, intent_hash, stamp, mode, enqueue_kind:)
-        ok = saga_coordinator.advance(manifest_id: manifest_id, to_state: :locked, reason: "locked")
+        ok = saga_advance!(manifest_id, :locked, "locked")
         return abort_compensated(manifest_id, lease_handles, "advance locked #{ok}") unless ok == :ok
 
         from_abs = File.expand_path(intent[:from_path].to_s, @workspace_root)
@@ -318,46 +344,63 @@ module OllamaAgent
 
         lease_from = lease_handles.find { |h| h[:scope] == from_abs }
         lease_to = lease_handles.find { |h| h[:scope] == to_abs }
-        record_rename_compensations!(manifest_id, from_abs, to_abs, lease_from, lease_to, stamp)
+        record_rename_compensations!(manifest_id, from_abs, to_abs, lease_from, lease_to, stamp, mode)
 
-        ren_out = atomic_mutator.rename_file(
-          from_path: intent[:from_path].to_s,
-          to_path: intent[:to_path].to_s,
-          mode: mode.to_s,
-          fencing_token_from: lease_from[:fencing_token],
-          fencing_token_to: lease_to[:fencing_token],
-          expected_pre_hash_from: intent[:expected_pre_hash],
-          intent_hash: intent_hash,
-          manifest_id: manifest_id,
-          logical_stamp: stamp.next_stamp,
-          owner_required: intent[:owner_required],
-          supervisor_lease: intent[:supervisor_lease] || false
-        )
+        ren_out =
+          if shadow_execution?(mode)
+            shadow_wal_rename_file!(
+              intent, intent_hash, manifest_id, stamp,
+              lease_from[:fencing_token], lease_to[:fencing_token]
+            )
+          else
+            atomic_mutator.rename_file(
+              from_path: intent[:from_path].to_s,
+              to_path: intent[:to_path].to_s,
+              mode: mode.to_s,
+              fencing_token_from: lease_from[:fencing_token],
+              fencing_token_to: lease_to[:fencing_token],
+              expected_pre_hash_from: intent[:expected_pre_hash],
+              intent_hash: intent_hash,
+              manifest_id: manifest_id,
+              logical_stamp: stamp.next_stamp,
+              owner_required: intent[:owner_required],
+              supervisor_lease: intent[:supervisor_lease] || false
+            )
+          end
         return abort_compensated(manifest_id, lease_handles, "mutator #{ren_out}") if ren_out != :renamed
 
         verify_commit_tail(manifest_id, lease_handles, stamp, intent, enqueue_kind: enqueue_kind)
       end
+      # rubocop:enable Metrics/CyclomaticComplexity, Metrics/PerceivedComplexity
 
-      def record_rename_compensations!(manifest_id, from_abs, to_abs, lease_from, lease_to, stamp)
+      def record_rename_compensations!(manifest_id, from_abs, to_abs, lease_from, lease_to, stamp, mode)
+        op_restore = shadow_execution?(mode) ? "shadow" : "restore"
+        op_unlink = shadow_execution?(mode) ? "shadow" : "unlink"
         ls1 = stamp.next_stamp
         sha = blob_store.put(File.binread(from_abs))
-        record_compensation(manifest_id, from_abs, sha, 1, lease_from[:fencing_token], ls1, operation: "restore")
+        record_compensation(manifest_id, from_abs, sha, 1, lease_from[:fencing_token], ls1, operation: op_restore)
 
         ls2 = stamp.next_stamp
         if File.file?(to_abs)
           sha_to = blob_store.put(File.binread(to_abs))
-          record_compensation(manifest_id, to_abs, sha_to, 1, lease_to[:fencing_token], ls2, operation: "restore")
+          record_compensation(manifest_id, to_abs, sha_to, 1, lease_to[:fencing_token], ls2, operation: op_restore)
         else
-          record_compensation(manifest_id, to_abs, "", 0, lease_to[:fencing_token], ls2, operation: "unlink")
+          record_compensation(manifest_id, to_abs, "", 0, lease_to[:fencing_token], ls2, operation: op_unlink)
         end
       end
 
       def mutate_verify_and_commit(manifest_id, lease_handles, intent, intent_hash, stamp, mode, enqueue_kind:)
         absolute = File.expand_path(intent[:path].to_s, @workspace_root)
         lease = lease_handles.find { |h| h[:scope] == absolute } || lease_handles.last
-        record_pre_state!(manifest_id, absolute, lease[:fencing_token], stamp)
+        comp_op = shadow_execution?(mode) ? "shadow" : "atomic_write"
+        record_pre_state!(manifest_id, absolute, lease[:fencing_token], stamp, compensation_op: comp_op)
 
-        write_outcome = apply_atomic_write(intent, intent_hash, manifest_id, stamp, mode, lease[:fencing_token])
+        write_outcome =
+          if shadow_execution?(mode)
+            shadow_wal_atomic_write!(intent, intent_hash, manifest_id, stamp, lease[:fencing_token])
+          else
+            apply_atomic_write(intent, intent_hash, manifest_id, stamp, mode, lease[:fencing_token])
+          end
         unless write_outcome == :written
           return abort_compensated(manifest_id, lease_handles, "mutator #{write_outcome}")
         end
@@ -366,8 +409,7 @@ module OllamaAgent
       end
 
       def verify_commit_tail(manifest_id, lease_handles, stamp, intent, enqueue_kind:)
-        ok = saga_coordinator.advance(manifest_id: manifest_id, to_state: :mutations_applied,
-                                      reason: "mutations_applied")
+        ok = saga_advance!(manifest_id, :mutations_applied, "mutations_applied")
         return abort_compensated(manifest_id, lease_handles, "advance mutations_applied #{ok}") unless ok == :ok
 
         verify_outcome = post_condition_verifier.verify(
@@ -419,11 +461,10 @@ module OllamaAgent
       end
 
       def commit_success_path(manifest_id, leases, stamp, enqueue_kind:)
-        v = saga_coordinator.advance(manifest_id: manifest_id, to_state: :verified, reason: "verified")
+        v = saga_advance!(manifest_id, :verified, "verified")
         return abort_compensated(manifest_id, leases, "advance verified #{v}") unless v == :ok
 
-        q = saga_coordinator.advance(manifest_id: manifest_id, to_state: :integration_queued,
-                                     reason: "integration_queued")
+        q = saga_advance!(manifest_id, :integration_queued, "integration_queued")
         return abort_compensated(manifest_id, leases, "advance integration_queued #{q}") unless q == :ok
 
         integration_queue.enqueue(
@@ -432,7 +473,7 @@ module OllamaAgent
           created_at: stamp.next_stamp
         )
 
-        c = saga_coordinator.advance(manifest_id: manifest_id, to_state: :committed, reason: "committed")
+        c = saga_advance!(manifest_id, :committed, "committed")
         return abort_compensated(manifest_id, leases, "advance committed #{c}") unless c == :ok
 
         release_locks(leases)
@@ -443,6 +484,7 @@ module OllamaAgent
 
       def abort_precondition_failed(manifest_id, leases, error)
         release_locks(leases)
+        emit_kernel_hook(:on_saga_compensate, manifest_id: manifest_id, reason: error.to_s)
         saga_coordinator.compensate(manifest_id: manifest_id, reason: error.to_s)
         snap = saga_coordinator.state_of(manifest_id: manifest_id)
         { result: :precondition_failed, state: snap[:state], manifest_id: manifest_id, error: error.to_s }
@@ -451,6 +493,7 @@ module OllamaAgent
       def abort_compensated(manifest_id, leases, reason)
         release_locks(leases)
         epoch = clock_epoch_provider.call.to_s
+        emit_kernel_hook(:on_saga_compensate, manifest_id: manifest_id, reason: reason)
         compensation_engine.compensate(manifest_id: manifest_id, logical_stamp: epoch)
         saga_coordinator.compensate(manifest_id: manifest_id, reason: reason)
         snapshot_after_abort(manifest_id)
@@ -482,6 +525,167 @@ module OllamaAgent
         return nil if disk_content_pre_hash(absolute) == expected.to_s
 
         abort_precondition_failed(manifest_id, leases, "expected_pre_hash mismatch")
+      end
+
+      def shadow_execution?(mode)
+        mode.to_s == ExecutionMode::SHADOW
+      end
+
+      def relative_workspace_path(absolute)
+        Pathname.new(absolute).relative_path_from(Pathname.new(@workspace_root)).to_s
+      end
+
+      def read_path_bytes_or_nil(absolute)
+        return nil unless File.file?(absolute)
+
+        File.binread(absolute)
+      end
+
+      # rubocop:disable Metrics/CyclomaticComplexity
+      def shadow_guard_absolute!(absolute, mode, intent)
+        guard = Security::ResourceGuard.new(root: @workspace_root)
+        return :forbidden unless guard.allow?(absolute)
+
+        node = ownership_index.lookup(absolute_path: absolute, workspace_root: @workspace_root)
+        return :forbidden if node.nil?
+        return :forbidden if intent[:owner_required] && node.owner != intent[:owner_required]
+
+        decision = CriticalityPolicy.gate(node, mode: mode.to_s)
+        return :forbidden if decision == :reject
+
+        sup = intent[:supervisor_lease]
+        return :forbidden if decision == :require_supervisor_lease && !sup
+
+        nil
+      end
+      # rubocop:enable Metrics/CyclomaticComplexity
+
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength
+      def shadow_wal_atomic_write!(intent, intent_hash, manifest_id, stamp, fencing_token)
+        absolute = File.expand_path(intent[:path].to_s, @workspace_root)
+        g = shadow_guard_absolute!(absolute, ExecutionMode::SHADOW, intent)
+        return g if g
+
+        content = intent[:content].to_s
+        prior = read_path_bytes_or_nil(absolute)
+        allocated = fencing_allocator.allocate(scope: absolute)
+        cas = CASGuard.check(
+          current_content_or_nil: prior,
+          expected_pre_hash: intent[:expected_pre_hash],
+          fencing_token_provided: fencing_token,
+          fencing_token_current: allocated
+        )
+        return cas if cas != :ok
+
+        hex = blob_store.put(content.b)
+        payload = JSON.generate(
+          "op" => "atomic_write",
+          "path" => relative_workspace_path(absolute),
+          "bytes" => content.b.bytesize,
+          "sha256" => hex
+        )
+        st = wal.append_mutation(
+          manifest_id: manifest_id,
+          logical_stamp: stamp.next_stamp,
+          payload: payload,
+          intent_hash: intent_hash
+        )
+        return :duplicate if st == :duplicate
+
+        :written
+      end
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
+
+      # rubocop:disable Metrics/MethodLength
+      def shadow_wal_delete_file!(intent, intent_hash, manifest_id, stamp, fencing_token)
+        absolute = File.expand_path(intent[:path].to_s, @workspace_root)
+        g = shadow_guard_absolute!(absolute, ExecutionMode::SHADOW, intent)
+        return g if g
+
+        prior = read_path_bytes_or_nil(absolute)
+        allocated = fencing_allocator.allocate(scope: absolute)
+        cas = CASGuard.check(
+          current_content_or_nil: prior,
+          expected_pre_hash: intent[:expected_pre_hash],
+          fencing_token_provided: fencing_token,
+          fencing_token_current: allocated
+        )
+        return cas if cas != :ok
+
+        payload = JSON.generate("op" => "delete_file", "path" => relative_workspace_path(absolute))
+        st = wal.append_mutation(
+          manifest_id: manifest_id,
+          logical_stamp: stamp.next_stamp,
+          payload: payload,
+          intent_hash: intent_hash
+        )
+        return :duplicate if st == :duplicate
+
+        :deleted
+      end
+      # rubocop:enable Metrics/MethodLength
+
+      # rubocop:disable Metrics/AbcSize, Metrics/MethodLength, Metrics/ParameterLists
+      def shadow_wal_rename_file!(intent, intent_hash, manifest_id, stamp, fencing_token_from, fencing_token_to)
+        from_abs = File.expand_path(intent[:from_path].to_s, @workspace_root)
+        to_abs = File.expand_path(intent[:to_path].to_s, @workspace_root)
+        g1 = shadow_guard_absolute!(from_abs, ExecutionMode::SHADOW, intent)
+        return g1 if g1
+
+        g2 = shadow_guard_absolute!(to_abs, ExecutionMode::SHADOW, intent)
+        return g2 if g2
+
+        prior = read_path_bytes_or_nil(from_abs)
+        allocated_from = fencing_allocator.allocate(scope: from_abs)
+        cas = CASGuard.check(
+          current_content_or_nil: prior,
+          expected_pre_hash: intent[:expected_pre_hash],
+          fencing_token_provided: fencing_token_from,
+          fencing_token_current: allocated_from
+        )
+        return cas if cas != :ok
+
+        allocated_to = fencing_allocator.allocate(scope: to_abs)
+        return :stale_token unless CASGuard.fence_allows?(fencing_token_to, allocated_to)
+
+        payload = JSON.generate(
+          "op" => "rename_file",
+          "from" => relative_workspace_path(from_abs),
+          "to" => relative_workspace_path(to_abs)
+        )
+        st = wal.append_mutation(
+          manifest_id: manifest_id,
+          logical_stamp: stamp.next_stamp,
+          payload: payload,
+          intent_hash: intent_hash
+        )
+        return :duplicate if st == :duplicate
+
+        :renamed
+      end
+      # rubocop:enable Metrics/AbcSize, Metrics/MethodLength, Metrics/ParameterLists
+
+      def emit_kernel_hook(event, **payload)
+        return if hooks.nil? || !hooks.respond_to?(:emit)
+
+        hooks.emit(event, payload)
+      end
+
+      def emit_pipeline_complete(manifest_id, outcome)
+        emit_kernel_hook(
+          :on_kernel_pipeline_complete,
+          result: outcome[:result],
+          manifest_id: manifest_id,
+          state: outcome[:state],
+          error: outcome[:error]
+        )
+        outcome
+      end
+
+      def saga_advance!(manifest_id, to_state, reason)
+        ok = saga_coordinator.advance(manifest_id: manifest_id, to_state: to_state, reason: reason)
+        emit_kernel_hook(:on_saga_advance, manifest_id: manifest_id, state: to_state, reason: reason) if ok == :ok
+        ok
       end
     end
     # rubocop:enable Metrics/ClassLength

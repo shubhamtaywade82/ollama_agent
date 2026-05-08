@@ -7,7 +7,12 @@ module OllamaAgent
       module_function
 
       def enabled?
-        ENV.fetch("OLLAMA_AGENT_KERNEL", "").strip == "true"
+        v = ENV.fetch("OLLAMA_AGENT_KERNEL", "").strip.downcase
+        %w[true shadow].include?(v)
+      end
+
+      def shadow?
+        ENV.fetch("OLLAMA_AGENT_KERNEL", "").strip.casecmp("shadow").zero?
       end
     end
   end

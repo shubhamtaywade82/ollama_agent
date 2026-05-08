@@ -47,8 +47,56 @@
 
 **Feature flag**
 
-- `OLLAMA_AGENT_KERNEL=true` routes `write_file` (and any tools listed in `OLLAMA_AGENT_KERNEL_PIPELINE_TOOLS`, default `write_file`) through `Runtime::KernelPipeline`.
+- `OLLAMA_AGENT_KERNEL=true` routes `write_file`, `edit_file`, `apply_patch`, `delete_file`, `rename_file`, and `move_file` (or the subset configured in `OLLAMA_AGENT_KERNEL_PIPELINE_TOOLS`) through `Runtime::KernelPipeline`.
+- `OLLAMA_AGENT_KERNEL=shadow` enables the same bridge routing as `true`, but the pipeline runs in **shadow** execution mode (see below): saga + WAL + observability + compensation rows are recorded, **without** mutating workspace file bytes for `atomic_write` / WAL-only shadow paths for delete/rename.
 - Unset or `false` keeps `KernelBridge` on the legacy `append_tool_results` path (no saga rows for tool execution).
+
+## Shadow mode (`OLLAMA_AGENT_KERNEL=shadow`)
+
+Use shadow on selected hosts or CI smoke jobs before turning the kernel on for real writes:
+
+```bash
+OLLAMA_AGENT_KERNEL=shadow ruby -S ollama_agent …
+```
+
+Behavior (see `Runtime::ExecutionMode::SHADOW`, `Runtime::KernelFeature.shadow?`, `Runtime::KernelPipeline`):
+
+- Full saga FSM (locks → mutations_applied → verified → integration_queued → committed).
+- **No** `AtomicMutator` disk swap for content writes; mutation intent is still appended to the WAL with content-addressed `sha256` blobs (replay semantics preserved).
+- `CompensationManifest` rows use `op = shadow` for the pre-state snapshot associated with the shadowed mutation.
+- Post-condition checks still run against the **unchanged** workspace tree (validators must tolerate shadow semantics).
+- Observability hooks (`:on_saga_start`, `:on_saga_advance`, `:on_saga_compensate`, `:on_kernel_pipeline_complete`) still fire when a `hooks` subscriber is wired.
+
+## Rollback signal table (`Runtime::RollbackSignals`)
+
+Pure in-memory helper for operators (e.g. pipe counters to Prometheus). Rolling window: last **60 logical-epoch ticks** via `tick(epoch:)`; samples carry optional `epoch` in `record` payloads.
+
+| Signal / event | Default threshold | Suggested action |
+|----------------|-------------------|------------------|
+| `:replay_determinism_violation` | ≥ 1 / window | Freeze rollout; inspect WAL replay fixtures; compare `WorkspaceFingerprint` hashes |
+| `:recovery_duplicate` | ≥ 1 / window | Investigate saga recovery / intent reservation collisions |
+| `:mutation_failure` + `:mutation_success` (rate) | failure rate ≥ 0.1 | Treat as elevated mutation failure rate; scale traffic or disable kernel |
+| `:validator_integrity_mismatch` | ≥ 1 / window | Treat as provenance / validator mismatch; disable isolated validator requirement or rotate image |
+
+Call `RollbackSignals#should_rollback?` after feeding events; when `trigger` is true, execute the **Rollback Procedure** above.
+
+## Observability hook subscription example
+
+```ruby
+signals = OllamaAgent::Runtime::RollbackSignals.new
+logger = OllamaAgent::Runtime::KernelEventLogger.new(
+  logger: OllamaAgent.logger,
+  rollback_signals: signals
+)
+OllamaAgent::Runtime::KernelPipelineAssembly.build_for_workspace(
+  workspace_root: project_root,
+  hooks: logger
+)
+# Drive logical epochs from your orchestration clock (tests call tick explicitly):
+signals.tick(epoch: 1)
+```
+
+Alternatively pass `logger:` into `build_for_workspace` to auto-wrap `KernelEventLogger` when you do **not** pass custom `hooks:`.
 
 **Monitoring / inspection keys**
 

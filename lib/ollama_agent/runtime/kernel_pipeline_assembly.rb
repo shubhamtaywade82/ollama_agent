@@ -16,6 +16,7 @@ require_relative "post_condition_verifier"
 require_relative "saga_coordinator"
 require_relative "saga_recovery_daemon"
 require_relative "wal"
+require_relative "kernel_event_logger"
 
 module OllamaAgent
   module Runtime
@@ -23,9 +24,9 @@ module OllamaAgent
     module KernelPipelineAssembly
       module_function
 
-      # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- one-shot wiring; mirrors constructor list
+      # rubocop:disable Metrics/MethodLength, Metrics/AbcSize, Metrics/ParameterLists -- one-shot wiring; mirrors constructor list
       def build_for_workspace(workspace_root:, ownership_index: nil, clock_epoch_provider: nil,
-                              isolated_validator: nil)
+                              isolated_validator: nil, hooks: nil, logger: nil, rollback_signals: nil)
         root = File.expand_path(workspace_root.to_s)
         index = ownership_index || default_ownership_index(root)
         clock = clock_epoch_provider || ticking_clock
@@ -68,6 +69,10 @@ module OllamaAgent
         validator = isolated_validator || default_validator(root, wal)
         post_condition_verifier = PostConditionVerifier.new(isolated_validator: validator)
         integration_queue = IntegrationQueue.new(db)
+        resolved_hooks = hooks
+        if resolved_hooks.nil? && !logger.nil?
+          resolved_hooks = KernelEventLogger.new(logger: logger, rollback_signals: rollback_signals)
+        end
         KernelPipeline.new(
           workspace_root: root,
           database_registry: registry,
@@ -85,10 +90,11 @@ module OllamaAgent
           saga_recovery_daemon: saga_recovery_daemon,
           integration_queue: integration_queue,
           wal: wal,
-          clock_epoch_provider: clock
+          clock_epoch_provider: clock,
+          hooks: resolved_hooks
         )
       end
-      # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
+      # rubocop:enable Metrics/MethodLength, Metrics/AbcSize, Metrics/ParameterLists
 
       def default_ownership_index(root)
         path = File.join(root, "config", "ollama_agent", "owners.yml")

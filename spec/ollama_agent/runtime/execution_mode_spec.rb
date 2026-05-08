@@ -9,6 +9,7 @@ RSpec.describe OllamaAgent::Runtime::ExecutionMode do
       expect(described_class.valid?("replay")).to be(true)
       expect(described_class.valid?("validation")).to be(true)
       expect(described_class.valid?("dry_run")).to be(true)
+      expect(described_class.valid?("shadow")).to be(true)
     end
 
     it "returns false for unsupported execution modes" do

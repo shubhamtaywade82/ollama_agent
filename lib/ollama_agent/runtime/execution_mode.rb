@@ -8,8 +8,9 @@ module OllamaAgent
       REPLAY = "replay"
       VALIDATION = "validation"
       DRY_RUN = "dry_run"
+      SHADOW = "shadow"
 
-      ALL = [NORMAL, REPLAY, VALIDATION, DRY_RUN].freeze
+      ALL = [NORMAL, REPLAY, VALIDATION, DRY_RUN, SHADOW].freeze
 
       module_function
 

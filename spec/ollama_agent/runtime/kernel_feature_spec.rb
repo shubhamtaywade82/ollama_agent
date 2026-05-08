@@ -10,15 +10,24 @@ RSpec.describe OllamaAgent::Runtime::KernelFeature do
       ENV["OLLAMA_AGENT_KERNEL"] = original_value
     end
 
-    it "returns true only when env is true" do
+    it "returns true when env is true or shadow" do
       ENV["OLLAMA_AGENT_KERNEL"] = "true"
       expect(described_class.enabled?).to be(true)
 
+      ENV["OLLAMA_AGENT_KERNEL"] = "shadow"
+      expect(described_class.enabled?).to be(true)
+      expect(described_class.shadow?).to be(true)
+
+      ENV["OLLAMA_AGENT_KERNEL"] = "SHADOW"
+      expect(described_class.shadow?).to be(true)
+
       ENV["OLLAMA_AGENT_KERNEL"] = "1"
       expect(described_class.enabled?).to be(false)
+      expect(described_class.shadow?).to be(false)
 
       ENV["OLLAMA_AGENT_KERNEL"] = nil
       expect(described_class.enabled?).to be(false)
+      expect(described_class.shadow?).to be(false)
     end
   end
 end

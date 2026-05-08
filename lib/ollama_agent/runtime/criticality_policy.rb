@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "execution_mode"
+
 module OllamaAgent
   module Runtime
     # Gates mutations by ownership node criticality and mode.
@@ -19,7 +21,11 @@ module OllamaAgent
         private
 
         def gateable?(node, mode_s)
-          node && !node.forbidden && node.mutable_in_modes.include?(mode_s)
+          return false unless node && !node.forbidden
+          return true if node.mutable_in_modes.include?(mode_s)
+          return true if mode_s == "shadow" && node.mutable_in_modes.include?(ExecutionMode::NORMAL)
+
+          false
         end
 
         def criticality_result(node, mode_s)
