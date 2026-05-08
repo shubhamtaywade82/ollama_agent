@@ -1,5 +1,7 @@
 # Runtime Kernel Release and Rollout Runbook
 
+**Operator deep-dive:** incident SQL, health JSON fields, compaction tuning, and cost-ledger queries live in **`docs/OPERATIONS.md`** (keep this runbook for stage gates; use OPERATIONS for on-call).
+
 ## Pre-Release Checklist
 
 1. M1-M6 milestone acceptance criteria verified.
@@ -40,7 +42,7 @@
 
 **Prerequisites**
 
-- `sqlite3` gem present and `db/ollama_agent/schema.sql` applied on first kernel open under `.ollama_agent/kernel/`.
+- `sqlite3` gem present; versioned migrations under `db/ollama_agent/migrations/` applied on first kernel open by `OllamaAgent::Runtime::SchemaMigrator` (see `docs/OPERATIONS.md` pre-flight).
 - `config/ollama_agent/owners.yml` compiled successfully (or repo-local copy under the workspace); ownership index matches the tree you intend to mutate.
 - Docker available on hosts running E7 isolated-validator specs (`DOCKER_AVAILABLE=true` when executing those examples).
 - `ANTHROPIC_API_KEY` set anywhere external agent delegation (`ExternalAgents::Runner`) is used; absence raises `AnthropicAPIError`.
