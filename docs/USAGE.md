@@ -215,6 +215,26 @@ bundle exec ollama_agent ask "Perform a write that would normally hit AtomicMuta
 | `Permission denied` tools | `Permissions` profile or ownership | Kernel on: check `owners.yml` + `PermissionBridge` logs; kernel off: `--permissions` / env. |
 | Empty model / connection errors | `OLLAMA_HOST` / model name | `ollama_agent agents` unrelated; verify Ollama tags and `OLLAMA_AGENT_MODEL`. |
 | Anthropic `429` / timeouts | rate limits / network | Client retries (`lib/ollama_agent/llm/anthropic_client.rb`); tune `open_timeout_seconds` / `request_timeout_seconds`. |
+| Shell `export OLLAMA_HOST=...` ignored | XDG global `~/.config/ollama_agent/.env` overrides via `Dotenv.overload` | Edit XDG file, OR run with `OLLAMA_AGENT_USE_LOCAL_DOTENV=1` to bypass for one session, OR point at a custom file via `OLLAMA_AGENT_DOTENV_PATH=/path/to/.env`. |
+| `"<model>" does not support thinking` | Model lacks thinking mode but `OLLAMA_AGENT_THINK=true` | Set `OLLAMA_AGENT_THINK=false`, or switch to a thinking-capable model (qwen3, deepseek-r1). |
+
+### Environment variable cheat sheet
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `OLLAMA_AGENT_KERNEL` | Kernel routing: `false` / `shadow` / `true` | `false` |
+| `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` |
+| `OLLAMA_HOST` | Alias used by some specs / examples | (unset) |
+| `OLLAMA_API_KEY` | Cloud Ollama key (if using `ollama.com`) | (unset) |
+| `OLLAMA_AGENT_MODEL` | Default chat model | (gem default) |
+| `OLLAMA_AGENT_THINK` | Thinking mode (`true` only with capable models) | `false` |
+| `OLLAMA_AGENT_USE_LOCAL_DOTENV` | Bypass XDG global `.env` | (unset) |
+| `OLLAMA_AGENT_DOTENV_PATH` | Custom global `.env` path | XDG default |
+| `OLLAMA_AGENT_ROOT` | Workspace root | `Dir.pwd` |
+| `ANTHROPIC_API_KEY` | Cloud escalation key (E10) | (unset) |
+| `DOCKER_AVAILABLE` | Run `--tag docker` specs | `false` |
+| `OLLAMA_AGENT_VALIDATOR_IMAGE` | Docker validator image tag | (varies) |
+| `OLLAMA_AGENT_KERNEL_PIPELINE_TOOLS` | Tool names routed via kernel pipeline | `write_file,edit_file,apply_patch,delete_file,rename_file,move_file` |
 
 ---
 
