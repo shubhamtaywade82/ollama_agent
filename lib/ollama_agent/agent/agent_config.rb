@@ -5,6 +5,7 @@ module OllamaAgent
     # Value object grouping Agent construction options (Runner and tests build this explicitly).
     class AgentConfig
       attr_reader :model, :root, :confirm_patches, :http_timeout, :think, :read_only, :patch_policy,
+                  :system_prompt,
                   :skill_paths, :skills_enabled, :skills_include, :skills_exclude, :external_skills_enabled,
                   :orchestrator, :confirm_delegation, :max_retries, :audit, :session_id, :resume,
                   :max_tokens, :context_summarize, :stdin, :stdout, :user_prompt, :logger,
@@ -16,6 +17,7 @@ module OllamaAgent
       # rubocop:disable Metrics/MethodLength, Metrics/ParameterLists, Metrics/AbcSize -- value object mirrors Agent keywords
       def initialize(model: nil, root: nil, confirm_patches: true, http_timeout: nil, think: nil,
                      read_only: false, patch_policy: nil,
+                     system_prompt: nil,
                      skill_paths: nil, skills_enabled: nil, skills_include: nil, skills_exclude: nil,
                      external_skills_enabled: nil,
                      orchestrator: false, confirm_delegation: nil,
@@ -34,6 +36,7 @@ module OllamaAgent
         @think = think
         @read_only = read_only
         @patch_policy = patch_policy
+        @system_prompt = system_prompt
         @skill_paths = skill_paths
         @skills_enabled = skills_enabled
         @skills_include = skills_include

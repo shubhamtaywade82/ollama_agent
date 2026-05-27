@@ -1,45 +1,40 @@
-# trading_agent
+# TradingAgent
 
-Event-driven autonomous trading runtime with an LLM reasoning layer, built on top of
-[`ollama_agent`](https://github.com/shubhamtaywade82/ollama_agent).
+An autonomous trading agent framework built on top of `ollama_agent`.
 
-> **Status: starter skeleton.** The architecture is wired and self-documenting; most
-> trading-logic bodies are stubs (`raise NotImplementedError`) to be filled in by phase.
-> See [`../docs/TRADING_AGENT_PLAN.md`](../docs/TRADING_AGENT_PLAN.md) for the full design.
+## Features
+- **Reasoning Layer**: Uses Ollama models (via `ollama_agent`) to analyze market data and plan trades.
+- **Deterministic Risk Engine**: Enforces leverage, position size, and drawdown limits.
+- **Event-Driven**: Built on `dry-events` and `async` for high-concurrency market processing.
+- **Exchange Agnostic**: Pluggable exchange adapter (currently supporting Binance Futures).
 
-## The one rule
+## Getting Started
 
-**The deterministic Ruby runtime — not the LLM — is the source of truth.**
-The LLM only reasons and emits a structured, schema-validated trade *intent*. It never touches
-the exchange, sizes orders, sets leverage, or picks symbols off the whitelist.
-
-## Architecture
-
-```
-WS stream ─► StateEngine (source of truth) ─► StrategyEngine ─► LLM TradeEvaluator
-                                                                     │ structured intent
-                                                                     ▼
-                                              ResponseValidator ─► RiskEngine ─► OrderManager ─► Binance
+### Installation
+Add to your Gemfile:
+```ruby
+gem 'trading_agent', path: './trading_agent'
 ```
 
-## Quickstart (target API)
+### Basic Usage
 
 ```ruby
-require "trading_agent"
+require 'trading_agent'
 
-TradingAgent.configure do |c|
-  c.exchange      = :binance_futures
-  c.testnet       = true
-  c.model         = "qwen3.5:14b"
-  c.symbols       = %w[BTCUSDT ETHUSDT]
-end
+exchange = TradingAgent::Exchanges::BinanceFutures.new(
+  api_key: ENV['BINANCE_API_KEY'],
+  secret_key: ENV['BINANCE_SECRET_KEY'],
+  testnet: true
+)
 
-TradingAgent::Runner.new(strategy: TradingAgent::Strategies::SmcMomentum).start
+runner = TradingAgent::Runner.new(
+  exchange: exchange,
+  model: "qwen2.5:14b",
+  symbols: ["BTCUSDT", "ETHUSDT"]
+)
+
+runner.start
 ```
 
-## Development
-
-```bash
-bundle install
-bundle exec rspec
-```
+## Architecture
+See `docs/TRADING_AGENT_PLAN.md` in the root repository for detailed architectural overview.

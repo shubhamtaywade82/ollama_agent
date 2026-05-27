@@ -1,27 +1,29 @@
 # frozen_string_literal: true
 
 module TradingAgent
-  # Minimal synchronous pub/sub bus that wires the pipeline stages together
-  # (stream tick -> state -> strategy -> evaluator). Kept dependency-free and
-  # deterministic; swap for an async implementation in Phase 4 if needed.
   class EventBus
-    def initialize
-      @subscribers = Hash.new { |h, k| h[k] = [] }
+    include Dry::Events::Publisher[:trading_agent]
+
+    register_event("market.tick")
+    register_event("market.candle_closed")
+    register_event("order.created")
+    register_event("order.filled")
+    register_event("position.updated")
+    register_event("strategy.signal")
+    register_event("llm.intent")
+    register_event("risk.validated")
+    register_event("execution.started")
+
+    def self.instance
+      @instance ||= new
     end
 
-    # @param topic [String, Symbol]
-    def subscribe(topic, &handler)
-      raise ArgumentError, "handler block required" unless block_given?
-
-      @subscribers[topic.to_s] << handler
-      self
+    def self.publish(event_id, payload = {})
+      instance.publish(event_id, payload)
     end
 
-    # @param topic [String, Symbol]
-    # @param payload [Object]
-    def publish(topic, payload = nil)
-      @subscribers[topic.to_s].each { |h| h.call(payload) }
-      nil
+    def self.subscribe(event_id, &block)
+      instance.subscribe(event_id, &block)
     end
   end
 end

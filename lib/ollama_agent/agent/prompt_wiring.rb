@@ -8,7 +8,7 @@ module OllamaAgent
 
       # rubocop:disable Metrics/MethodLength
       def system_prompt
-        base = @read_only ? AgentPrompt.self_review_text : AgentPrompt.text
+        base = @system_prompt || (@read_only ? AgentPrompt.self_review_text : AgentPrompt.text)
         composed = PromptSkills.compose(
           base: base,
           skills_enabled: resolved_skills_enabled,
