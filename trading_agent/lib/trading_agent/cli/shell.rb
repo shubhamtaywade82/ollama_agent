@@ -45,6 +45,8 @@ module TradingAgent
           print_positions
         elsif line =~ %r{^/ticker\s+(\S+)}
           print_ticker($1)
+        elsif line =~ %r{^/live\s+(\S+)}
+          print_live_ticker($1)
         elsif line.start_with?("/")
           puts "\e[31mUnknown command: #{line}. Type /help for commands.\e[0m"
         else
@@ -117,6 +119,7 @@ module TradingAgent
       puts "  \e[33m/balances\e[0m or \e[33m/bal\e[0m   - View current account balances"
       puts "  \e[33m/positions\e[0m or \e[33m/pos\e[0m  - View current open positions"
       puts "  \e[33m/ticker <symbol>\e[0m    - Fetch current price of a symbol (e.g. /ticker BTCUSDT)"
+      puts "  \e[33m/live <symbol>\e[0m      - Stream live LTP of a symbol in-place (e.g. /live BTCUSDT)"
       puts "  \e[33m/help\e[0m               - Show this help message"
       puts "  \e[33m/quit\e[0m or \e[33m/exit\e[0m      - Exit the shell"
       puts "  \e[90m<any other text>\e[0m    - Ask the LLM Trading Advisor a question\n\n"
@@ -159,6 +162,28 @@ module TradingAgent
       puts "Current \e[1m#{symbol}\e[0m price: \e[1;32m#{ticker[:price]}\e[0m"
     rescue StandardError => e
       puts "\e[31mFailed to fetch ticker for #{symbol}: #{e.message}\e[0m"
+    end
+
+    def print_live_ticker(symbol)
+      symbol = symbol.upcase
+      puts "\e[36mStreaming live price for #{symbol}. Press Ctrl+C to return to shell...\e[0m"
+      
+      begin
+        loop do
+          ticker = @exchange.fetch_ticker(symbol)
+          price = ticker[:price]
+          if price && price > 0.0
+            print "\r\e[32m●\e[0m LTP: \e[1;33m$#{'%.2f' % price}\e[0m (updated: #{Time.now.strftime('%H:%M:%S')})   "
+            $stdout.flush
+          else
+            print "\r\e[31m●\e[0m LTP: \e[31mConnection error or invalid symbol\e[0m   "
+            $stdout.flush
+          end
+          sleep 0.5
+        end
+      rescue Interrupt
+        puts "\n\e[36mStopped streaming.\e[0m\n"
+      end
     end
 
     def chat_with_advisor(query)

@@ -44,6 +44,12 @@ RSpec.describe TradingAgent::InteractiveShell do
       expect(state).to receive(:update_price).with("BTCUSDT", 95000.0)
       expect { shell.send(:print_ticker, "BTCUSDT") }.to output(/95000/).to_stdout
     end
+
+    it "streams live ticker price and exits on Interrupt" do
+      expect(exchange).to receive(:fetch_ticker).with("BTCUSDT").and_return({ price: 95000.0 })
+      allow(exchange).to receive(:fetch_ticker).with("BTCUSDT").and_raise(Interrupt)
+      expect { shell.send(:print_live_ticker, "BTCUSDT") }.to output(/LTP:.*95000.*Stopped/m).to_stdout
+    end
   end
 
   describe "#read_line" do
