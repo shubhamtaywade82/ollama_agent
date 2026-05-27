@@ -1,0 +1,12 @@
+# frozen_string_literal: true
+
+source "https://rubygems.org"
+
+gemspec
+
+# Use the local ollama_agent checkout (this gem lives inside that repo for now).
+gem "ollama_agent", path: ".."
+
+group :development, :test do
+  gem "rubocop", "~> 1.21"
+end
