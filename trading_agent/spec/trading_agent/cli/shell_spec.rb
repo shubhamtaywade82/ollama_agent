@@ -1,0 +1,48 @@
+# frozen_string_literal: true
+
+require "spec_helper"
+
+RSpec.describe TradingAgent::InteractiveShell do
+  let(:state) { instance_double(TradingAgent::Market::State) }
+  let(:exchange) { double("Exchange") }
+  let(:orchestrator) { double("Orchestrator") }
+  let(:shell) { described_class.new(state, exchange, orchestrator) }
+
+  before do
+    allow(state).to receive(:update_balances)
+    allow(state).to receive(:update_position)
+    allow(state).to receive(:get_balances).and_return([])
+    allow(state).to receive(:current_drawdown_pct).and_return(0.0)
+    allow(state).to receive(:get_price).and_return(100.0)
+    
+    allow(exchange).to receive(:fetch_balances).and_return([])
+    allow(exchange).to receive(:fetch_positions).and_return([])
+  end
+
+  describe "#chat_with_advisor" do
+    it "constructs a prompt and gets response from orchestrator" do
+      expect(orchestrator).to receive(:free_chat).with(anything).and_return("Advice")
+      expect { shell.send(:chat_with_advisor, "what should I do?") }.to output(/Advice/).to_stdout
+    end
+  end
+
+  describe "slash commands" do
+    it "fetches balances and prints them" do
+      balances = [{ asset: "BTC", balance: 1.0, free: 1.0 }]
+      expect(exchange).to receive(:fetch_balances).and_return(balances)
+      expect { shell.send(:print_balances) }.to output(/Asset:.*BTC/).to_stdout
+    end
+
+    it "fetches positions and prints them" do
+      positions = [{ symbol: "BTCUSDT", position_amt: 0.5, entry_price: 90000.0, leverage: 3, unrealized_profit: 100.0 }]
+      expect(exchange).to receive(:fetch_positions).and_return(positions)
+      expect { shell.send(:print_positions) }.to output(/Symbol:.*BTCUSDT/).to_stdout
+    end
+
+    it "fetches ticker price and prints it" do
+      expect(exchange).to receive(:fetch_ticker).with("BTCUSDT").and_return({ price: 95000.0 })
+      expect(state).to receive(:update_price).with("BTCUSDT", 95000.0)
+      expect { shell.send(:print_ticker, "BTCUSDT") }.to output(/95000/).to_stdout
+    end
+  end
+end

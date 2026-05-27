@@ -17,6 +17,7 @@ require_relative "trading_agent/execution/manager"
 require_relative "trading_agent/llm/tool_registry"
 require_relative "trading_agent/llm/orchestrator"
 require_relative "trading_agent/runner"
+require_relative "trading_agent/cli/shell"
 
 module TradingAgent
   include SemanticLogger::Loggable

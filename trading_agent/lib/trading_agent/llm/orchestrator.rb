@@ -39,6 +39,18 @@ module TradingAgent
         end
       end
 
+      def free_chat(prompt)
+        last_response = nil
+        @agent.hooks.on(:on_complete) do |payload|
+          last_response = payload[:messages]&.last
+        end
+
+        @agent.run(prompt)
+        
+        return "No response received from advisor." if last_response.nil?
+        last_response[:content] || last_response["content"]
+      end
+
       private
 
       def system_prompt

@@ -2,11 +2,12 @@
 
 module TradingAgent
   class Runner
-    attr_reader :exchange, :state, :risk_engine, :execution_manager, :llm_orchestrator, :symbols
+    attr_reader :exchange, :state, :risk_engine, :execution_manager, :llm_orchestrator, :symbols, :confirm
 
-    def initialize(exchange:, model: "qwen2.5:14b", symbols: ["BTCUSDT"])
+    def initialize(exchange:, model: "qwen2.5:14b", symbols: ["BTCUSDT"], confirm: false)
       @exchange = exchange
       @symbols = symbols
+      @confirm = confirm
       @state = Market::State.new
       @risk_engine = Risk::Engine.new
       @execution_manager = Execution::Manager.new(exchange)
@@ -16,7 +17,7 @@ module TradingAgent
     end
 
     def start
-      TradingAgent.logger.info("Starting Trading Agent", symbols: @symbols)
+      TradingAgent.logger.info("Starting Trading Agent", symbols: @symbols, confirm_mode: @confirm)
       
       Async do |task|
         # 1. Fetch initial state
@@ -88,12 +89,36 @@ module TradingAgent
       EventBus.publish("risk.validated", intent: intent, validation: validation)
       
       if validation[:success]
-        @execution_manager.execute_intent(intent, @state)
-        # Update local cache after order execution
-        update_initial_state
+        if @confirm
+          print_proposed_intent(intent)
+          print "Confirm execution of this trade? (y/N): "
+          answer = $stdin.gets.to_s.strip.downcase
+          if answer == "y" || answer == "yes"
+            @execution_manager.execute_intent(intent, @state)
+            update_initial_state
+          else
+            TradingAgent.logger.info("Trade intent execution cancelled by user")
+          end
+        else
+          @execution_manager.execute_intent(intent, @state)
+          update_initial_state
+        end
       else
         TradingAgent.logger.warn("Trade intent rejected by Risk Engine", reason: validation[:reason])
       end
+    end
+
+    def print_proposed_intent(intent)
+      puts "\n=== PROPOSED TRADE INTENT ==="
+      puts "Action:      #{intent[:action]}"
+      puts "Symbol:      #{intent[:symbol]}"
+      puts "Leverage:    #{intent[:leverage]}x"
+      puts "Risk %:      #{intent[:risk_percent]}%"
+      puts "Stop Loss:   #{intent[:stop_loss]}"
+      puts "Take Profit: #{intent[:take_profit]}"
+      puts "Reasoning:"
+      Array(intent[:reasoning]).each { |r| puts "  - #{r}" }
+      puts "==============================\n"
     end
   end
 end
