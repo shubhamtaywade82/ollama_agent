@@ -13,20 +13,22 @@ module OllamaAgent
       PROFILES = {
         read_only: {
           allowed: %w[read_file list_files search_code git_status git_log git_diff
-                      memory_recall memory_list http_get],
+                      memory_recall memory_list http_get
+                      list_directory_contents calculate],
           denied: []
         },
         standard: {
           allowed: %w[read_file list_files search_code edit_file write_file
                       memory_store memory_recall memory_list memory_delete
-                      git_status git_log git_diff http_get],
+                      git_status git_log git_diff http_get
+                      list_directory_contents calculate],
           denied: %w[run_shell git_commit http_post]
         },
         developer: {
           allowed: %w[read_file list_files search_code edit_file write_file
                       git_status git_log git_diff git_commit git_branch
                       run_shell memory_store memory_recall memory_list memory_delete
-                      http_get],
+                      http_get list_directory_contents calculate],
           denied: %w[http_post]
         },
         full: {

@@ -131,6 +131,8 @@ require_relative "ollama_agent/tools/shell_tools"
 require_relative "ollama_agent/tools/git_tools"
 require_relative "ollama_agent/tools/http_tools"
 require_relative "ollama_agent/tools/memory_tools"
+require_relative "ollama_agent/tools/filesystem_explorer"
+require_relative "ollama_agent/tools/safe_calculator"
 
 # ── deterministic skill system (JSON-contract pipelines) ─────────────────────
 require_relative "ollama_agent/skills/json_extractor"

@@ -48,12 +48,26 @@ module OllamaAgent
       when "list_files"           then execute_list_files(args)
       when "edit_file"            then execute_edit_file_tool(args)
       when "write_file"           then execute_write_file_tool(args)
-      when "list_external_agents" then execute_list_external_agents(args)
-      when "delegate_to_agent"    then execute_delegate_to_agent_tool(args)
+      when "list_external_agents"    then execute_list_external_agents(args)
+      when "delegate_to_agent"       then execute_delegate_to_agent_tool(args)
+      when "list_directory_contents" then execute_list_directory_contents(args)
+      when "calculate"               then execute_calculate(args)
       else "Unknown tool: #{name}"
       end
     end
     # rubocop:enable Metrics/MethodLength, Metrics/CyclomaticComplexity
+
+    def execute_list_directory_contents(args)
+      path = tool_arg(args, "path") || "."
+      Tools::FilesystemExplorer.new.call({ "path" => path }, context: { root: @root })
+    end
+
+    def execute_calculate(args)
+      expression = tool_arg(args, "expression")
+      return missing_tool_argument("calculate", "expression") if blank_tool_value?(expression)
+
+      Tools::SafeCalculator.new.call({ "expression" => expression })
+    end
 
     def execute_list_files(args)
       directory = tool_arg(args, "directory") || "."
