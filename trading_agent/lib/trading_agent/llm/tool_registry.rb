@@ -9,10 +9,13 @@ module TradingAgent
           :fetch_market_context,
           schema: {
             description: "Retrieve current price, indicators (SMA, EMA, RSI, ATR), account balances, and open positions for a symbol.",
-            properties: {
-              symbol: { type: "string", description: "Symbol to fetch, e.g., BTCUSDT" }
-            },
-            required: ["symbol"]
+            parameters: {
+              type: "object",
+              properties: {
+                symbol: { type: "string", description: "Symbol to fetch, e.g., BTCUSDT" }
+              },
+              required: ["symbol"]
+            }
           }
         ) do |args, context|
           symbol = (args[:symbol] || args["symbol"] || "BTCUSDT").upcase
@@ -71,11 +74,14 @@ module TradingAgent
           :check_indicators,
           schema: {
             description: "Check technical indicators (SMA, EMA, RSI, ATR) for a symbol on a specific timeframe interval.",
-            properties: {
-              symbol: { type: "string", description: "Symbol, e.g., BTCUSDT" },
-              interval: { type: "string", description: "Interval, e.g., 15m, 1h, 4h, 1d" }
-            },
-            required: ["symbol", "interval"]
+            parameters: {
+              type: "object",
+              properties: {
+                symbol: { type: "string", description: "Symbol, e.g., BTCUSDT" },
+                interval: { type: "string", description: "Interval, e.g., 15m, 1h, 4h, 1d" }
+              },
+              required: ["symbol", "interval"]
+            }
           }
         ) do |args, context|
           symbol = (args[:symbol] || args["symbol"] || "BTCUSDT").upcase
