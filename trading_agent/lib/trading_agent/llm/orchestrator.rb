@@ -41,13 +41,21 @@ module TradingAgent
 
       def free_chat(prompt)
         last_response = nil
+
+        # Capture the final assistant message
         @agent.hooks.on(:on_complete) do |payload|
           last_response = payload[:messages]&.last
         end
 
+        # Subscribe to :on_assistant_message so ChatCoordinator skips its own
+        # Console.puts_assistant_message call — prevents the double-output problem
+        # where the framework prints the response AND the shell prints it again.
+        @agent.hooks.on(:on_assistant_message) { |_| }
+
         @agent.run(prompt)
-        
+
         return "No response received from advisor." if last_response.nil?
+
         last_response[:content] || last_response["content"]
       end
 

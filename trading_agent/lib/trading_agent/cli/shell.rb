@@ -207,7 +207,9 @@ module TradingAgent
       
       puts "\e[90mAdvisor is analyzing...\e[0m"
       response = @orchestrator.free_chat(prompt)
-      puts "\n\e[1;36m[Advisor]:\e[0m #{response}\n\n"
+      puts "\n\e[1;36m╔═ Advisor ═══════════════════════════════════════════╗\e[0m"
+      puts OllamaAgent::Console.format_assistant(response.to_s)
+      puts "\e[1;36m╚═════════════════════════════════════════════════════╝\e[0m\n"
     end
   end
 end

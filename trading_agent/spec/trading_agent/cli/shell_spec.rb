@@ -20,9 +20,10 @@ RSpec.describe TradingAgent::InteractiveShell do
   end
 
   describe "#chat_with_advisor" do
-    it "constructs a prompt and gets response from orchestrator" do
+    it "constructs a prompt, renders response via Console.format_assistant, and wraps in advisor box" do
       expect(orchestrator).to receive(:free_chat).with(anything).and_return("Advice")
-      expect { shell.send(:chat_with_advisor, "what should I do?") }.to output(/Advice/).to_stdout
+      allow(OllamaAgent::Console).to receive(:format_assistant).with("Advice").and_return("Advice")
+      expect { shell.send(:chat_with_advisor, "what should I do?") }.to output(/Advisor.*Advice/m).to_stdout
     end
   end
 
