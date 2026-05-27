@@ -3,6 +3,7 @@
 require "fileutils"
 
 require "ollama_agent"
+require_relative "support/runtime_kernel_harness"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
@@ -13,5 +14,13 @@ RSpec.configure do |config|
 
   config.expect_with :rspec do |c|
     c.syntax = :expect
+  end
+
+  config.before(:example, :docker) do
+    skip "DOCKER_AVAILABLE is not set to \"true\"" unless ENV["DOCKER_AVAILABLE"] == "true"
+    skip "/usr/bin/docker is not executable" unless File.executable?("/usr/bin/docker")
+    unless system("/usr/bin/docker", "info", out: File::NULL, err: File::NULL)
+      skip "Docker daemon is not reachable via /usr/bin/docker info"
+    end
   end
 end

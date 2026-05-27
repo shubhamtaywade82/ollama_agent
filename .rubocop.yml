@@ -3,6 +3,7 @@ AllCops:
   NewCops: enable
   Exclude:
     - "*.gemspec"
+    - "db/**/*.sql"
     - "reproduce_429.rb"
 plugins:
   - rubocop-rake
@@ -21,6 +22,31 @@ Style/StringLiteralsInInterpolation:
 # Integration-style examples often need more lines and expectations than micro-examples.
 RSpec/ExampleLength:
   Max: 30
+  Exclude:
+    - spec/ollama_agent/runtime/storage_concurrency_spec.rb
+    - spec/ollama_agent/runtime/storage_replay_spec.rb
+    - spec/ollama_agent/runtime/atomic_mutator_spec.rb
+    - spec/ollama_agent/runtime/lock_deadlock_fuzz_spec.rb
+    - spec/ollama_agent/runtime/saga_recovery_spec.rb
+    - spec/ollama_agent/runtime/compensation_engine_spec.rb
+    - spec/ollama_agent/runtime/saga_recovery_daemon_spec.rb
 
 RSpec/MultipleExpectations:
   Max: 10
+
+# Acceptance specs may describe a class whose primary spec lives under another filename.
+RSpec/SpecFilePathFormat:
+  Exclude:
+    - spec/ollama_agent/runtime/storage_concurrency_spec.rb
+    - spec/ollama_agent/runtime/storage_replay_spec.rb
+    - spec/ollama_agent/security/owners_yml_fixture_spec.rb
+
+RSpec/DescribeClass:
+  Exclude:
+    - spec/ollama_agent/runtime/lock_deadlock_fuzz_spec.rb
+    - spec/ollama_agent/runtime/saga_recovery_spec.rb
+    - spec/ollama_agent/security/owners_yml_fixture_spec.rb
+
+RSpec/DescribeMethod:
+  Exclude:
+    - spec/ollama_agent/security/owners_yml_fixture_spec.rb

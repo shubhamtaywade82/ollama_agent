@@ -1,0 +1,53 @@
+# Example ownership graph for a typical Rails app (workspace-relative prefixes, no trailing slashes).
+# Copy or extend for your repo; compile with OllamaAgent::Security::OwnershipCompiler.
+
+version: 1
+rules:
+  - prefix: app
+    owner: application
+    mutable_in_modes: [normal, replay, validation, dry_run]
+    criticality: routine
+    forbidden: false
+    children:
+      - prefix: app/models
+        owner: domain
+        mutable_in_modes: [normal, replay, validation]
+        criticality: sensitive
+        children: []
+
+  - prefix: config
+    owner: platform
+    mutable_in_modes: [normal, replay, validation, dry_run]
+    criticality: sensitive
+    children: []
+
+  - prefix: db/migrate
+    owner: data
+    mutable_in_modes: [normal, validation]
+    criticality: critical
+    children: []
+
+  - prefix: lib
+    owner: shared_libraries
+    mutable_in_modes: [normal, replay, validation, dry_run]
+    criticality: routine
+    children: []
+
+  - prefix: log
+    owner: observability
+    mutable_in_modes: [normal, dry_run]
+    criticality: routine
+    children: []
+
+  - prefix: tmp
+    owner: scratch
+    mutable_in_modes: [normal, dry_run]
+    criticality: routine
+    children: []
+
+  - prefix: .env
+    owner: secrets
+    mutable_in_modes: [normal, replay, validation, dry_run]
+    criticality: critical
+    forbidden: true
+    children: []

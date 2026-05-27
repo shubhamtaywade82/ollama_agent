@@ -42,6 +42,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "ollama-client", "~> 1.1"
   spec.add_dependency "pastel", "~> 0.8"
   spec.add_dependency "prism", "~> 1.0"
+  spec.add_dependency "sqlite3", "~> 2.0"
   spec.add_dependency "thor", "~> 1.2"
   spec.add_dependency "tty-box", "~> 0.7"
   spec.add_dependency "tty-logger", "~> 0.6"

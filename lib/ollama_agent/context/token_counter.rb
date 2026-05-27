@@ -15,6 +15,11 @@ module OllamaAgent
         text.to_s.length / 4
       end
 
+      # Keyword API for injectable token counters (e.g. {ContextBuilder}).
+      def self.count(text:)
+        estimate(text)
+      end
+
       def self.ensure_tiktoken_loaded
         return if @tiktoken_loaded
 

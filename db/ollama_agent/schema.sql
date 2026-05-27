@@ -1,0 +1,1 @@
+-- Runtime schema is applied from versioned files in db/ollama_agent/migrations/ (see OllamaAgent::Runtime::SchemaMigrator).

@@ -1,8 +1,11 @@
-# Default external CLI agents (override via ~/.config/ollama_agent/agents.yml or OLLAMA_AGENT_EXTERNAL_AGENTS_CONFIG).
-# argv uses placeholders: binary, task_file, root — subshell interpolation is not supported (argv array only).
+# Default external agents (override via ~/.config/ollama_agent/agents.yml or OLLAMA_AGENT_EXTERNAL_AGENTS_CONFIG).
+# argv/version_argv are retained for config merge compatibility; delegation uses transport: anthropic_api.
+# Placeholders binary, task_file, root are not used by the HTTPS runner (E13+).
 version: 1
 agents:
   - id: claude_cli
+    transport: anthropic_api
+    model: claude-opus-4-7
     binary: claude
     env_path: OLLAMA_AGENT_CLAUDE_CLI_PATH
     capabilities:
@@ -18,6 +21,8 @@ agents:
     timeout_sec: 600
 
   - id: gemini_cli
+    transport: anthropic_api
+    model: claude-opus-4-7
     binary: gemini
     env_path: OLLAMA_AGENT_GEMINI_CLI_PATH
     capabilities:
@@ -32,6 +37,8 @@ agents:
     timeout_sec: 600
 
   - id: codex_cli
+    transport: anthropic_api
+    model: claude-opus-4-7
     binary: codex
     env_path: OLLAMA_AGENT_CODEX_CLI_PATH
     capabilities:
@@ -46,6 +53,8 @@ agents:
     timeout_sec: 600
 
   - id: cursor_cli
+    transport: anthropic_api
+    model: claude-opus-4-7
     binary: cursor
     env_path: OLLAMA_AGENT_CURSOR_CLI_PATH
     capabilities:

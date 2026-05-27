@@ -7,7 +7,8 @@ gates, and rollout controls so implementation can proceed with lower ambiguity.
 ## 1) Canonical Status
 
 - Canonical implementation plan: `docs/new_features_plan_v2.md` (this file)
-- Source ideation history: `docs/new_features.md`, `docs/new_features copy.md`
+- Architectural detail (per-epic file paths): `docs/new_features_plan.md` §3
+- Source ideation history: `docs/new_features.md`, `docs/new_features copy.md` (26 design rounds; copy is elaboration, no new components — recommend deleting after merge)
 - Namespace decision remains unchanged: all components stay under `OllamaAgent::*`
 
 ## 2) Frozen Architecture (No Functional Changes)
@@ -20,6 +21,12 @@ The architecture remains exactly as agreed:
 - `lib/ollama_agent/llm/` for planner, context builder, fallback, supervision
 - `lib/ollama_agent/topology/` for symbol graph, typed IR, linker pipeline
 - `lib/ollama_agent/synthesis/` for runtime-derived route/job/event synthesis
+- `containers/ollama_agent-verification-sandbox.Dockerfile` for isolated validator
+- `db/ollama_agent/schema.sql` for split-DB schema (runtime.db + event_store.db)
+- `config/ollama_agent/owners.yml` for ownership graph
+
+Per-epic file-path detail lives in `docs/new_features_plan.md` §3. This v2 doc
+treats those paths as authoritative and does not restate them.
 
 ## 3) Included Feature Checklist (Nothing Dropped)
 
@@ -31,10 +38,16 @@ iterative design rounds and expected in implementation:
 - [ ] Fencing allocator and lease-aware mutation controls
 - [ ] Canonicalization with schema-aware semantics
 - [ ] Workspace fingerprint and lineage manifest chain
+- [ ] Workspace lineage DAG (`parent_workspace_version`, `parent_manifest_id`)
+- [ ] `ExecutionMode` enum (NORMAL / REPLAY / VALIDATION / DRY_RUN)
+- [ ] `ExecutionContext` (mode bound to context, no globals)
+- [ ] `LogicalClock` (no `Time.now` on orchestration path)
 - [ ] Owners graph compiler + LPM prefix authorization
 - [ ] Realpath/inode/path traversal hardening
+- [ ] `CriticalityPolicy` matrix + state-gated saga (critical → supervisor lease, no auto-compensation)
 - [ ] Atomic mutator (temp write -> fsync -> rename -> fsync parent)
 - [ ] CAS guard (`expected_pre_hash`, `fencing_token`, `intent_hash`)
+- [ ] Schema-versioned `intent_hash` (version field in payload)
 - [ ] Lock manager with deadlock-safe acquisition ordering
 - [ ] Intent reservation and pre-flight conflict checks
 - [ ] Saga coordinator FSM + checkpointing + terminal sealing
@@ -43,6 +56,8 @@ iterative design rounds and expected in implementation:
 - [ ] Isolated validator with array-exec command policy
 - [ ] Post-condition verification in deterministic phases
 - [ ] Planner JSON contracts and strict schema coercion
+- [ ] Phase-scoped tool registry (capabilities scoped per saga phase)
+- [ ] Prism-based AST/semantic extractor for re-entry packets
 - [ ] Think-tag sanitization and escalation circuit breakers
 - [ ] Cloud fallback via direct Anthropic API client (no shell-out)
 - [ ] Re-entry packet with bounded semantic context
@@ -50,6 +65,7 @@ iterative design rounds and expected in implementation:
 - [ ] Staged vs committed topology promotion
 - [ ] Runtime-derived integration extraction/synthesis
 - [ ] Existing runtime bridge behind `OLLAMA_AGENT_KERNEL=true`
+- [ ] `external_agents.rb` rewrite from CLI shell-out → direct Anthropic API client (breaking change for existing escalation path)
 
 ## 4) Milestones and Exit Criteria
 

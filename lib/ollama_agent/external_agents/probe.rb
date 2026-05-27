@@ -8,9 +8,14 @@ require_relative "env_helpers"
 module OllamaAgent
   module ExternalAgents
     # Resolves executables and optional --version for registry entries.
+    # rubocop:disable Metrics/ModuleLength -- CLI resolution + Anthropic transport in one module
     module Probe
+      # rubocop:disable Metrics/ClassLength -- single helper singleton for PATH + API probes
       class << self
+        # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- branching PATH vs env vs Anthropic
         def resolve_executable(agent)
+          return resolve_anthropic_executable(agent) if agent["transport"].to_s == "anthropic_api"
+
           env_key = agent["env_path"]
           if env_key && EnvHelpers.env_present?(env_key)
             path = File.expand_path(ENV[env_key].to_s.strip)
@@ -25,6 +30,7 @@ module OllamaAgent
 
           resolve_via_path_walk(name)
         end
+        # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
         # rubocop:disable Metrics/MethodLength, Metrics/AbcSize
         def fetch_status(agent)
@@ -40,7 +46,7 @@ module OllamaAgent
               "path" => nil,
               "version" => nil,
               "capabilities" => agent["capabilities"] || [],
-              "error" => "executable not found (set #{agent["env_path"] || "PATH"})"
+              "error" => agent_unavailable_message(agent)
             }
             status_cache[cache_key] = status
             return status.dup
@@ -59,8 +65,10 @@ module OllamaAgent
         end
         # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
 
-        # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength
+        # rubocop:disable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
         def capture_version(agent, exe)
+          return anthropic_model_label(agent) if anthropic_executable?(agent, exe)
+
           argv_templ = agent["version_argv"]
           return nil unless argv_templ.is_a?(Array) && !argv_templ.empty?
 
@@ -76,7 +84,7 @@ module OllamaAgent
         rescue StandardError
           nil
         end
-        # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength
+        # rubocop:enable Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Metrics/PerceivedComplexity
 
         # rubocop:disable Metrics/MethodLength
         def print_table(registry, io: $stdout)
@@ -111,6 +119,26 @@ module OllamaAgent
 
         private
 
+        def resolve_anthropic_executable(agent)
+          return nil unless EnvHelpers.env_present?("ANTHROPIC_API_KEY")
+
+          "anthropic-api:#{agent["id"]}"
+        end
+
+        def anthropic_executable?(agent, exe)
+          agent["transport"].to_s == "anthropic_api" && exe.to_s.start_with?("anthropic-api:")
+        end
+
+        def anthropic_model_label(agent)
+          (agent["model"] || ENV.fetch("OLLAMA_AGENT_ANTHROPIC_MODEL", "claude-opus-4-7")).to_s
+        end
+
+        def agent_unavailable_message(agent)
+          return "ANTHROPIC_API_KEY is not set" if agent["transport"].to_s == "anthropic_api"
+
+          "executable not found (set #{agent["env_path"] || "PATH"})"
+        end
+
         # POSIX `command -v` when /usr/bin/command exists; rescues ENOENT when `command` is shell-only.
         def resolve_via_command_v(name)
           out, status = Open3.capture2("command", "-v", name)
@@ -135,6 +163,8 @@ module OllamaAgent
           @status_cache ||= {}
         end
       end
+      # rubocop:enable Metrics/ClassLength
     end
+    # rubocop:enable Metrics/ModuleLength
   end
 end

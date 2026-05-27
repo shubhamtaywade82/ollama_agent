@@ -549,7 +549,11 @@ module OllamaAgent
   require_relative "cli/repl_shared"
   require_relative "cli/repl"
   require_relative "cli/skill_command"
+  require_relative "cli/health_command"
 
   CLI.desc "skill SUBCOMMAND ...ARGS", "Run deterministic JSON-contract skills (list | run | pipeline)"
   CLI.subcommand "skill", CLI::SkillCommand
+
+  CLI.desc "kernel SUBCOMMAND", "Kernel runtime diagnostics (health)"
+  CLI.subcommand "kernel", CLI::KernelHealthCommand
 end
