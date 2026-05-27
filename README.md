@@ -11,6 +11,7 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
 - [Security and sandbox](#security-and-sandbox)
 - [Installation](#installation)
 - [Usage](#usage)
+  - [Agentic tool calling](#agentic-tool-calling-local-environment-tools)
 - [Skills](#skills-deterministic-json-contract-pipelines)
 - [Troubleshooting](#troubleshooting)
 - [How it works](#how-it-works)
@@ -23,6 +24,8 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
 - Tool `read_file` – read file contents.
 - Tool `search_code` – search code with ripgrep or grep.
 - Tool `edit_file` – apply unified diffs safely.
+- Tool `list_directory_contents` – sandboxed filesystem inspection; see [Agentic tool calling](#agentic-tool-calling-local-environment-tools).
+- Tool `calculate` – safe arithmetic evaluator (Shunting-yard, no `eval`); see [Agentic tool calling](#agentic-tool-calling-local-environment-tools).
 - CLI built with Thor, entry point `exe/ollama_agent`.
 - **`self_review`** – self-review / improvement with a **`--mode`**:
   - **`analysis`** (default, alias `1`) — read-only tools; report only; no writes.
@@ -46,6 +49,8 @@ Ruby gem that runs a **CLI coding agent** against a local [Ollama](https://ollam
 ## Security and sandbox
 
 - **Project root** — File tools and search are constrained to the configured workspace (`--root` / `OLLAMA_AGENT_ROOT`). Treat that directory as the trust boundary: only aim the agent at trees you are willing to modify.
+- **`list_directory_contents`** — Paths are resolved with `File.expand_path` relative to the project root and rejected before the filesystem is touched if they escape that boundary. `../../etc`, `/etc`, and any other traversal are caught by a prefix check, not a regex.
+- **`calculate`** — Uses a hand-written tokenizer and Shunting-yard evaluator. `eval` is never called. Only numeric literals and the operators `+`, `-`, `*`, `/`, `**` are accepted; any other character is an error.
 - **`run_shell` (optional tool)** — Commands are parsed into an argument vector (no shell) and must match an allowlist; a denylist blocks obviously dangerous patterns. You can still shoot yourself in the foot with an allowed prefix (for example `git` with destructive subcommands), so keep profiles and permissions tight in automated setups.
 - **Timeouts** — Text search honors `OLLAMA_AGENT_SEARCH_TIMEOUT_SEC` (default 120). Shell execution has its own per-invocation timeout.
 - **Logging** — Budget, loop-detection, and `list_local_model_names` failures go through Ruby’s `Logger` (stderr by default). Set `OLLAMA_AGENT_LOG_LEVEL=debug` or `OLLAMA_AGENT_DEBUG=1` for more detail.
@@ -269,6 +274,59 @@ Use the **`orchestrate`** command (or **`OLLAMA_AGENT_ORCHESTRATOR=1`** with **`
 - Delegation audit logs: set **`OLLAMA_AGENT_DELEGATE_LOG=1`** (or `OLLAMA_AGENT_DEBUG=1`) to emit a structured stderr line with agent id, argv, env keys (names only), exit code, and duration.
 - Adjust **`argv` / `version_argv`** in YAML to match your real CLI (vendor flags differ). If a tool has no stable non-interactive mode, do not expose it in the registry.
 - Tool contract version: **`OllamaAgent::ORCHESTRATOR_TOOLS_SCHEMA_VERSION`**.
+
+### Agentic tool calling (local environment tools)
+
+Two built-in tools let the model observe its environment and compute precisely — the pattern described in [Easy Agentic Tool Calling with Gemma 4](https://www.kdnuggets.com/easy-agentic-tool-calling-with-gemma-4) — adapted here for the Ruby runtime.
+
+#### `list_directory_contents`
+
+Lists files and subdirectories inside the current workspace. The model decides when to inspect the environment rather than guessing at what exists.
+
+```bash
+bundle exec ruby exe/ollama_agent ask \
+  "What scripts are in the current folder, and which one looks like it handles CSV processing?"
+```
+
+All paths are sandboxed to `OLLAMA_AGENT_ROOT`. Traversal attempts (`../../etc`, absolute paths) are rejected before the filesystem is touched.
+
+#### `calculate`
+
+Evaluates an arithmetic expression using a Shunting-yard parser. The model offloads precision arithmetic instead of computing in its weights.
+
+```bash
+bundle exec ruby exe/ollama_agent ask \
+  "What is the standard deviation of 12, 18, 23, 29, 31, 35, 44, 47 — compute it step by step using the formula."
+```
+
+Supports `+`, `-`, `*`, `/`, `**` (right-associative), parentheses, and unary `+`/`-`. No `eval`.
+
+#### Combining both tools
+
+The model can chain the two tools in a single request — inspect the workspace first, then compute something about what it found:
+
+```bash
+bundle exec ruby exe/ollama_agent ask \
+  "Look at the files in the current folder and tell me the total size in kilobytes, rounded to two decimal places."
+```
+
+Internally: the model calls `list_directory_contents` to get byte sizes, then calls `calculate` with the sum and division by 1024.
+
+#### Ruby API
+
+```ruby
+require "ollama_agent"
+
+runner = OllamaAgent::Runner.build(root: Dir.pwd)
+
+# Filesystem inspection
+puts runner.run("What files are in lib/ollama_agent/tools/?")
+
+# Arithmetic
+puts runner.run("What is (412 + 1834 + 10786 + 88 + 2210) / 1024, rounded to 2 decimal places?")
+```
+
+See `examples/agentic_tool_calling.rb` for a runnable end-to-end demo.
 
 ### Library usage (Ruby)
 

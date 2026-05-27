@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Added
+
+- **Tool `list_directory_contents`** (`OllamaAgent::Tools::FilesystemExplorer`) — inspect files and subdirectories inside the current workspace. All paths are resolved relative to the project root (`context[:root]` / `OLLAMA_AGENT_ROOT`); traversal outside that boundary (including `../../etc` and absolute paths) is rejected before the filesystem is touched. Returns `[DIR]` / `[FILE]` entries with byte sizes.
+- **Tool `calculate`** (`OllamaAgent::Tools::SafeCalculator`) — evaluate an arithmetic expression using a hand-written **Shunting-yard** tokenizer and RPN evaluator. Supports `+`, `-`, `*`, `/`, `**` (right-associative), parentheses, and unary `+`/`-`. **No `eval` is used at any point.** Right-associativity of `**` is correct: `2 ** 3 ** 2` → `512`. Division by zero returns a non-finite message rather than raising.
+- Both tools are available in **all permission profiles** (`read_only`, `standard`, `developer`, `full`), registered in `CORE_TOOLS` so they appear in the Ollama tool schema automatically, and dispatched through the existing `SandboxedTools#execute_tool` loop.
+- `examples/agentic_tool_calling.rb` — runnable demo covering filesystem inspection, arithmetic evaluation, and a combined prompt that chains both tools. Mirrors the KDnuggets *Easy Agentic Tool Calling with Gemma 4* article pattern, adapted to the `OllamaAgent` Ruby runtime.
+- `docs/TOOLS.md` — new **Built-in agentic tools** section documenting `list_directory_contents` and `calculate` with Ruby API examples.
+
 ### Documentation
 
 - **README:** New **Reasoning / thinking output** section—how to set `think` (including **GPT-OSS** `low`/`medium`/`high`), streaming vs one-shot, display env vars, troubleshooting when **Thinking** is missing, Gemma-style tags, and **`Runner.build`** example. **`OLLAMA_AGENT_STREAM`** and GPT-OSS notes added to the environment table; Ollama Cloud example sets **`OLLAMA_AGENT_THINK`**.
