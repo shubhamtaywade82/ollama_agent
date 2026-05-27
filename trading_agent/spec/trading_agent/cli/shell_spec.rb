@@ -45,9 +45,21 @@ RSpec.describe TradingAgent::InteractiveShell do
       expect { shell.send(:print_ticker, "BTCUSDT") }.to output(/95000/).to_stdout
     end
 
-    it "streams live ticker price and exits on Interrupt" do
-      expect(exchange).to receive(:fetch_ticker).with("BTCUSDT").and_return({ price: 95000.0 })
-      allow(exchange).to receive(:fetch_ticker).with("BTCUSDT").and_raise(Interrupt)
+    it "streams live ticker price via WsListener and exits on Interrupt" do
+      fake_listener = instance_double(
+        TradingAgent::Market::WsListener,
+        on_tick: nil,
+        start: nil,
+        stop: nil
+      )
+      # on_tick should capture the callback and invoke it with a price
+      allow(fake_listener).to receive(:on_tick) do |&blk|
+        blk.call("BTCUSDT", 95000.0)
+        fake_listener
+      end
+      allow(fake_listener).to receive(:start) { raise Interrupt }
+      allow(TradingAgent::Market::WsListener).to receive(:new).and_return(fake_listener)
+
       expect { shell.send(:print_live_ticker, "BTCUSDT") }.to output(/LTP:.*95000.*Stopped/m).to_stdout
     end
   end

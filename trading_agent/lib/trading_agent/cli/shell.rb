@@ -165,25 +165,26 @@ module TradingAgent
     end
 
     def print_live_ticker(symbol)
-      symbol = symbol.upcase
-      puts "\e[36mStreaming live price for #{symbol}. Press Ctrl+C to return to shell...\e[0m"
-      
-      begin
-        loop do
-          ticker = @exchange.fetch_ticker(symbol)
-          price = ticker[:price]
-          if price && price > 0.0
-            print "\r\e[32m●\e[0m LTP: \e[1;33m$#{'%.2f' % price}\e[0m (updated: #{Time.now.strftime('%H:%M:%S')})   "
-            $stdout.flush
-          else
-            print "\r\e[31m●\e[0m LTP: \e[31mConnection error or invalid symbol\e[0m   "
-            $stdout.flush
-          end
-          sleep 0.5
-        end
-      rescue Interrupt
-        puts "\n\e[36mStopped streaming.\e[0m\n"
+      symbol  = symbol.upcase
+      futures = symbol.end_with?("PERP") || @exchange.is_a?(TradingAgent::Exchanges::BinanceFutures)
+
+      listener = Market::WsListener.new(@state, [symbol], futures: futures)
+
+      # Each tick: overwrite the same terminal line with the latest price
+      listener.on_tick do |sym, price|
+        print "\r\e[32m●\e[0m \e[1m#{sym}\e[0m LTP: \e[1;33m$#{'%.4f' % price}\e[0m  \e[90m#{Time.now.strftime('%H:%M:%S.%L')}\e[0m   "
+        $stdout.flush
       end
+
+      puts "\e[36mStreaming \e[1m#{symbol}\e[0m via WebSocket. Press \e[1mCtrl+C\e[0m to return to shell...\e[0m"
+
+      listener.start
+      # Block this shell method until Ctrl+C interrupts — the WS thread does all the work
+      sleep
+    rescue Interrupt
+      puts "\n\e[36mStopped streaming.\e[0m\n"
+    ensure
+      listener&.stop
     end
 
     def chat_with_advisor(query)
