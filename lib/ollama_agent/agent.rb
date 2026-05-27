@@ -53,6 +53,7 @@ module OllamaAgent
     def initialize(client: nil, config: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil,
                    think: nil,
                    read_only: false, patch_policy: nil,
+                   system_prompt: nil,
                    skill_paths: nil, skills_enabled: nil, skills_include: nil, skills_exclude: nil,
                    external_skills_enabled: nil,
                    orchestrator: false, confirm_delegation: nil,
@@ -67,6 +68,7 @@ module OllamaAgent
       cfg = config || AgentConfig.new(
         model: model, root: root, confirm_patches: confirm_patches, http_timeout: http_timeout, think: think,
         read_only: read_only, patch_policy: patch_policy,
+        system_prompt: system_prompt,
         skill_paths: skill_paths, skills_enabled: skills_enabled, skills_include: skills_include,
         skills_exclude: skills_exclude, external_skills_enabled: external_skills_enabled,
         orchestrator: orchestrator, confirm_delegation: confirm_delegation,
@@ -173,6 +175,7 @@ module OllamaAgent
       @confirm_patches = cfg.confirm_patches
       @read_only = cfg.read_only
       @patch_policy = cfg.patch_policy
+      @system_prompt = cfg.system_prompt
       @http_timeout_override = cfg.http_timeout
       @think = cfg.think
       @orchestrator = cfg.orchestrator
