@@ -35,3 +35,31 @@ jobs:
       - name: Run RuboCop
         run: bundle exec rubocop
         continue-on-error: true
+
+  trading_agent:
+    runs-on: ubuntu-latest
+    name: trading_agent Ruby ${{ matrix.ruby }}
+    strategy:
+      matrix:
+        ruby:
+          - "3.3.4"
+          - "3.2.0"
+
+    defaults:
+      run:
+        working-directory: trading_agent
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: ${{ matrix.ruby }}
+          bundler-cache: true
+          working-directory: trading_agent
+
+      - name: Run RSpec
+        run: bundle exec rspec

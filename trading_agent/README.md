@@ -38,4 +38,3 @@ runner.start
 
 ## Architecture
 See `docs/TRADING_AGENT_PLAN.md` in the root repository for detailed architectural overview.
-PROFIT!
