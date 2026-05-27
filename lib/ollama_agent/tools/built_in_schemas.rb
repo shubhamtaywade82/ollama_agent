@@ -140,6 +140,44 @@ module OllamaAgent
               required: %w[path content]
             }
           }
+        },
+        {
+          type: "function",
+          function: {
+            name: "list_directory_contents",
+            description: "Inspect files and folders inside the current workspace. " \
+                         "Use this to see what actually exists before answering questions about local files.",
+            parameters: {
+              type: "object",
+              properties: {
+                path: {
+                  type: "string",
+                  description: "Relative path inside the workspace, e.g. '.', 'lib', or 'spec/unit'. " \
+                               "Defaults to the workspace root."
+                }
+              },
+              required: []
+            }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "calculate",
+            description: "Evaluate an arithmetic expression and return the numeric result. " \
+                         "Supports +, -, *, /, ** (power) and parentheses. " \
+                         "Use for precise computation rather than mental arithmetic.",
+            parameters: {
+              type: "object",
+              properties: {
+                expression: {
+                  type: "string",
+                  description: "Arithmetic expression, e.g. '(12 + 8) / 5' or '2 ** 10'"
+                }
+              },
+              required: ["expression"]
+            }
+          }
         }
       ].freeze
 
