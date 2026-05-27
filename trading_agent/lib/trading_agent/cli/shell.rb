@@ -102,7 +102,7 @@ module TradingAgent
       end
     rescue Interrupt
       puts ""
-      ""
+      nil
     end
 
     def print_banner

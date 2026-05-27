@@ -45,4 +45,15 @@ RSpec.describe TradingAgent::InteractiveShell do
       expect { shell.send(:print_ticker, "BTCUSDT") }.to output(/95000/).to_stdout
     end
   end
+
+  describe "#read_line" do
+    context "when readline is available" do
+      before { allow(shell).to receive(:readline_available?).and_return(true) }
+
+      it "returns nil and prints newline when Interrupt is raised" do
+        allow(Readline).to receive(:readline).and_raise(Interrupt)
+        expect { expect(shell.send(:read_line)).to be_nil }.to output("\n").to_stdout
+      end
+    end
+  end
 end
