@@ -30,6 +30,7 @@ PATH
       oj (~> 3.16)
       ollama_agent (>= 1.0.0)
       semantic_logger (~> 4.15)
+      websocket-eventmachine-client (~> 1.3)
 
 GEM
   remote: https://rubygems.org/
