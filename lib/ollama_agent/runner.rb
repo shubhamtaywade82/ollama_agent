@@ -25,6 +25,7 @@ module OllamaAgent
     #
     # @param root [String] project root directory (default: Dir.pwd)
     # @param model [String, nil] Ollama model name
+    # @param system_prompt [String, nil] custom system prompt override
     # @param stream [Boolean] enable streaming token output to stdout
     # @param session_id [String, nil] named session for persistence
     # @param resume [Boolean] load prior session messages before running
@@ -50,6 +51,7 @@ module OllamaAgent
     def self.build(
       root:            Dir.pwd,
       model:           nil,
+      system_prompt:   nil,
       stream:          false,
       session_id:      nil,
       resume:          false,
@@ -75,7 +77,7 @@ module OllamaAgent
       logger:          nil
     )
       new(
-        root: root, model: model, stream: stream,
+        root: root, model: model, system_prompt: system_prompt, stream: stream,
         session_id: session_id, resume: resume,
         max_tokens: max_tokens, context_summarize: context_summarize,
         max_retries: max_retries, audit: audit, read_only: read_only,
@@ -104,7 +106,7 @@ module OllamaAgent
     private
 
     # rubocop:disable Metrics/MethodLength, Metrics/ParameterLists
-    def initialize(root:, model:, stream:, session_id:, resume:,
+    def initialize(root:, model:, system_prompt:, stream:, session_id:, resume:,
                    max_tokens:, context_summarize:,
                    max_retries:, audit:, read_only:, skills_enabled:, skill_paths:,
                    confirm_patches:, orchestrator:, think:, http_timeout:,
@@ -118,6 +120,7 @@ module OllamaAgent
       config = Agent::AgentConfig.new(
         root: root,
         model: model,
+        system_prompt: system_prompt,
         confirm_patches: confirm_patches,
         http_timeout: http_timeout,
         think: think,
