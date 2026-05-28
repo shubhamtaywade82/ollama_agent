@@ -26,9 +26,11 @@ module OllamaAgent
   # Implementation synced from tty-reader 0.9.0 (+lib/tty/reader.rb+).
   # rubocop:disable Metrics/PerceivedComplexity, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Style/StringConcatenation, Metrics/BlockNesting
   class TuiSlashReader < TTY::Reader
+    attr_accessor :completion_candidates
+
     def initialize(completion_candidates:, **)
       super(**)
-      @completion_candidates = Array(completion_candidates).uniq.sort.freeze
+      @completion_candidates = Array(completion_candidates).uniq.sort
     end
 
     def read_line(prompt = "", value: "", echo: true, raw: true, nonblock: false)

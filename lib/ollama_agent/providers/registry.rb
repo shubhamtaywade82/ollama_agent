@@ -12,6 +12,8 @@ require_relative "error_classifier"
 require_relative "credential_pool"
 require_relative "health_monitor"
 require_relative "credential_router"
+require_relative "model_descriptor"
+require_relative "model_registry"
 
 module OllamaAgent
   module Providers

@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "fileutils"
 require_relative "version"
 require_relative "tui_slash_reader"
 
@@ -16,6 +17,9 @@ module OllamaAgent
   # Avoids fixed multi-pane layouts; pairs with {CLI::TuiRepl}.
   # rubocop:disable Metrics/ClassLength -- façade over multiple tty-* components
   class TUI
+    HISTORY_FILE = File.join(Dir.home, ".config", "ollama_agent", "repl_history")
+    MAX_HISTORY  = 500
+
     attr_reader :prompt
 
     def initialize(stdout: $stdout, stderr: $stderr, logger: nil, god_mode: false)
@@ -25,6 +29,13 @@ module OllamaAgent
       @prompt = TTY::Prompt.new(output: stdout, input: $stdin)
       @pastel = Pastel.new
       @logger = logger || TTY::Logger.new(output: stdout)
+      @slash_reader = TuiSlashReader.new(
+        completion_candidates: [],
+        input: $stdin,
+        output: @stdout,
+        interrupt: :error
+      )
+      load_history
     end
 
     def render_dashboard(**options)
@@ -84,24 +95,15 @@ module OllamaAgent
     #
     # @param completion_candidates [Array<String>] e.g. +/help+, +/model+; empty falls back to {TTY::Prompt#ask}.
     # @return [String, nil]
-    # rubocop:disable Metrics/MethodLength -- prompt ask vs reader branch
     def ask_user_line(completion_candidates: [])
-      if completion_candidates.nil? || completion_candidates.empty?
-        return @prompt.ask(@pastel.green.bold("❯")) { |q| q.required true }
-      end
-
       prompt = @pastel.green.bold("❯ ")
-      reader = TuiSlashReader.new(
-        completion_candidates: completion_candidates,
-        input: $stdin,
-        output: @stdout,
-        interrupt: :error
-      )
-      reader.read_line(prompt).to_s
+      @slash_reader.completion_candidates = Array(completion_candidates).uniq.sort
+      line = @slash_reader.read_line(prompt).to_s
+      save_history
+      line
     rescue TTY::Reader::InputInterrupt
       nil
     end
-    # rubocop:enable Metrics/MethodLength
 
     def log(level, message)
       case level
@@ -122,6 +124,33 @@ module OllamaAgent
     end
 
     private
+
+    def load_history
+      return unless File.exist?(HISTORY_FILE)
+
+      hist = @slash_reader.instance_variable_get(:@history)
+      return unless hist
+
+      hist.clear
+      File.readlines(HISTORY_FILE, chomp: true).last(MAX_HISTORY).each do |line|
+        next if line.strip.empty?
+
+        hist << line
+      end
+    rescue StandardError
+      nil
+    end
+
+    def save_history
+      hist = @slash_reader.instance_variable_get(:@history)
+      return unless hist
+
+      dir = File.dirname(HISTORY_FILE)
+      FileUtils.mkdir_p(dir)
+      File.write(HISTORY_FILE, hist.to_a.last(MAX_HISTORY).join("\n"))
+    rescue StandardError
+      nil
+    end
 
     def status_row(status)
       s = status.to_s

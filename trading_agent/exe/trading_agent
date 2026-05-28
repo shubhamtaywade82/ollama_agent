@@ -24,7 +24,7 @@ module TradingAgent
         testnet: options[:testnet]
       )
 
-      model_name = options[:model] || ENV["OLLAMA_AGENT_MODEL"] || "qwen2.5:14b"
+      model_name = options[:model] || ENV["OLLAMA_AGENT_MODEL"] || ENV["OLLAMA_MODEL"] || ENV["MODEL"] || "qwen2.5:14b"
 
       runner = TradingAgent::Runner.new(
         exchange: exchange,
@@ -37,7 +37,7 @@ module TradingAgent
     end
 
     desc "chat", "Start the interactive trading chat shell"
-    method_option :model, type: :string, desc: "Ollama model name (defaults to OLLAMA_AGENT_MODEL or qwen2.5:14b)"
+    method_option :model, type: :string, desc: "Ollama model name (defaults to OLLAMA_AGENT_MODEL, OLLAMA_MODEL, MODEL, or qwen2.5:14b)"
     method_option :testnet, type: :boolean, default: true, desc: "Use Binance Testnet"
     def chat
       exchange = TradingAgent::Exchanges::BinanceSpot.new(
@@ -46,7 +46,7 @@ module TradingAgent
         testnet: options[:testnet]
       )
 
-      model_name = options[:model] || ENV["OLLAMA_AGENT_MODEL"] || "qwen2.5:14b"
+      model_name = options[:model] || ENV["OLLAMA_AGENT_MODEL"] || ENV["OLLAMA_MODEL"] || ENV["MODEL"] || "qwen2.5:14b"
       state = TradingAgent::Market::State.new
       orchestrator = TradingAgent::Llm::Orchestrator.new(state, exchange, model: model_name)
 

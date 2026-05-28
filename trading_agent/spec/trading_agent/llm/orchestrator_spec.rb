@@ -80,4 +80,35 @@ RSpec.describe TradingAgent::Llm::Orchestrator do
       expect(orchestrator.analyze_and_plan(market_context)).to be_nil
     end
   end
+
+  describe "model resolution and assignment" do
+    let(:agent_double) { double("Agent") }
+
+    before do
+      allow(runner).to receive(:agent).and_return(agent_double)
+      allow(agent_double).to receive(:model).and_return("resolved-model")
+    end
+
+    it "exposes the active model name and delegates assignment" do
+      orchestrator = described_class.new(state, exchange)
+      expect(orchestrator.model).to eq("resolved-model")
+
+      expect(agent_double).to receive(:assign_chat_model!).with("new-model")
+      orchestrator.assign_chat_model!("new-model")
+    end
+
+    it "uses ENV variables for model selection during init" do
+      stub_const("ENV", ENV.to_h.merge(
+        "OLLAMA_AGENT_MODEL" => nil,
+        "OLLAMA_MODEL" => "env-model"
+      ))
+      expect(OllamaAgent::Runner).to receive(:build).with(
+        model: "env-model",
+        system_prompt: anything,
+        read_only: true
+      ).and_return(runner)
+
+      described_class.new(state, exchange, model: nil)
+    end
+  end
 end

@@ -13,8 +13,8 @@ module OllamaAgent
         "/remember" => "Store a fact (usage: /remember key = value)",
         "/clear"    => "Clear short-term context for this session",
         "/config"   => "Show current agent configuration",
-        "/model"    => "Show or set chat model (usage: /model [name] | /model list)",
-        "/models"   => "List Ollama cloud catalog (ollama.com/api/tags); /model <name> to switch",
+        "/model"    => "Show or set chat model (usage: /model [name])",
+        "/models"   => "List available models and capabilities (usage: /models [filter])",
         "/provider" => "Show or switch provider (usage: /provider [name])",
         "/index"    => "Summarise the project repository index",
         "/exit"     => "Exit the REPL"
@@ -78,7 +78,7 @@ module OllamaAgent
         when "/clear"    then handle_clear
         when "/config"   then print_config
         when "/model"    then handle_model(arg)
-        when "/models"   then print_model_list
+        when "/models"   then print_model_list(arg)
         when "/provider" then handle_provider(arg)
         when "/index"    then handle_index
         else
@@ -203,13 +203,35 @@ module OllamaAgent
       def handle_model(arg)
         return print_current_model if arg.nil? || arg.strip.empty?
 
-        if arg.strip.casecmp("list").zero?
-          print_model_list
+        parts = arg.strip.split(" ", 2)
+        subcommand = parts[0]
+        filter = parts[1]
+
+        if subcommand.casecmp("list").zero?
+          print_model_list(filter)
           return
         end
 
-        name = @agent.assign_chat_model!(arg)
-        @stdout.puts "  Chat model set to: #{name}"
+        require_relative "../providers/model_registry"
+        descriptor = OllamaAgent::Providers::ModelRegistry.find(subcommand, agent: @agent)
+
+        if descriptor
+          if !descriptor.tools?
+            @stdout.puts "  \e[33mWarning: Model '#{descriptor.name}' does not list tool calling capabilities.\e[0m"
+            @stdout.puts "  Agentic tools (e.g. edit_file, diffs) may not work correctly."
+          end
+
+          current_model_desc = OllamaAgent::Providers::ModelRegistry.find(@agent.model, agent: @agent)
+          if current_model_desc && descriptor.context_size < current_model_desc.context_size
+            @stdout.puts "  \e[33mWarning: Context size is shrinking from #{current_model_desc.context_size} to #{descriptor.context_size}.\e[0m"
+            @stdout.puts "  Older messages may be truncated or summarized."
+          end
+        else
+          @stdout.puts "  \e[33mWarning: Model '#{subcommand}' not found in registry. Switching anyway...\e[0m"
+        end
+
+        name = @agent.assign_chat_model!(subcommand)
+        @stdout.puts "  ✓ Chat model switched to: \e[1;32m#{name}\e[0m"
       rescue OllamaAgent::Error => e
         @stdout.puts "  #{e.message}"
       end
@@ -218,16 +240,51 @@ module OllamaAgent
         @stdout.puts "  Current chat model: #{@agent.model}"
       end
 
-      def print_model_list
-        names = @agent.list_cloud_model_names
-        if names.empty?
-          @stdout.puts "  Could not load the cloud model catalog (network or ollama.com)."
-          @stdout.puts "  Set OLLAMA_API_KEY if your account requires it; or set /model <name> manually."
+      def print_model_list(filter = nil)
+        require_relative "../providers/model_registry"
+        models = OllamaAgent::Providers::ModelRegistry.all(agent: @agent)
+
+        if filter && !filter.strip.empty?
+          query = filter.strip.downcase
+          if query == "--vision"
+            models.select!(&:vision?)
+          elsif query == "--tools"
+            models.select!(&:tools?)
+          elsif query == "--local"
+            models.select! { |m| m.provider == "local" }
+          elsif query == "--loaded"
+            models.select! { |m| m.status == "loaded" }
+          else
+            models.select! { |m| m.name.downcase.include?(query) || m.provider.downcase.include?(query) }
+          end
+        end
+
+        if models.empty?
+          @stdout.puts "  No models matching '#{filter}' found."
           return
         end
 
-        @stdout.puts "\n\e[1mOllama cloud models (ollama.com/api/tags):\e[0m"
-        names.each { |n| @stdout.puts "  #{n}" }
+        grouped = models.group_by(&:provider)
+
+        @stdout.puts "\n\e[1mRegistered Inference Models:\e[0m"
+        grouped.each do |provider, list|
+          @stdout.puts "\n  \e[1;36m#{provider.upcase}\e[0m"
+          @stdout.puts "  " + "─" * 60
+          list.each do |m|
+            is_current = m.name.casecmp(@agent.model.to_s).zero?
+            marker = is_current ? " \e[32m● (current)\e[0m" : ""
+
+            caps = ["chat"]
+            caps << "tools" if m.tools?
+            caps << "vision" if m.vision?
+            caps << "reasoning" if m.reasoning?
+
+            size_info = m.size_gb ? " [#{m.size_gb} GB]" : ""
+            status_info = m.status == "loaded" ? " \e[90m(loaded)\e[0m" : ""
+
+            @stdout.puts "    \e[1m#{m.name.ljust(30)}\e[0m | ctx: #{m.context_size.to_s.ljust(6)} | caps: #{caps.join(",")}#{size_info}#{status_info}#{marker}"
+          end
+        end
         @stdout.puts ""
       end
 
