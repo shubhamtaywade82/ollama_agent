@@ -100,6 +100,18 @@ module OllamaAgent
       agent.run(query)
     end
 
+    # @return [String] the active model
+    def model
+      @agent.model
+    end
+
+    # Assign a new chat model.
+    # @param name [String]
+    # @return [String]
+    def assign_chat_model!(name)
+      @agent.assign_chat_model!(name)
+    end
+
     protected
 
     # Exposed for spec stubbing only.

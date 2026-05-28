@@ -82,18 +82,15 @@ RSpec.describe TradingAgent::Llm::Orchestrator do
   end
 
   describe "model resolution and assignment" do
-    let(:agent_double) { double("Agent") }
-
     before do
-      allow(runner).to receive(:agent).and_return(agent_double)
-      allow(agent_double).to receive(:model).and_return("resolved-model")
+      allow(runner).to receive(:model).and_return("resolved-model")
     end
 
     it "exposes the active model name and delegates assignment" do
       orchestrator = described_class.new(state, exchange)
       expect(orchestrator.model).to eq("resolved-model")
 
-      expect(agent_double).to receive(:assign_chat_model!).with("new-model")
+      expect(runner).to receive(:assign_chat_model!).with("new-model")
       orchestrator.assign_chat_model!("new-model")
     end
 

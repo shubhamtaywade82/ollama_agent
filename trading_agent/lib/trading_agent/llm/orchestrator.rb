@@ -14,11 +14,11 @@ module TradingAgent
       end
 
       def model
-        @agent.agent.model
+        @agent.model
       end
 
       def assign_chat_model!(name)
-        @agent.agent.assign_chat_model!(name)
+        @agent.assign_chat_model!(name)
       end
 
       def analyze_and_plan(market_context)
