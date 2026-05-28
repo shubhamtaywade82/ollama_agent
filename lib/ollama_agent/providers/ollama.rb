@@ -5,14 +5,30 @@ require_relative "base"
 module OllamaAgent
   module Providers
     # Ollama provider — wraps the existing ollama-client gem.
-    # This is the default provider; all existing Agent behaviour is preserved.
+    #
+    # Supports two modes:
+    #
+    #   Local Ollama (default)
+    #     host:    "http://localhost:11434"  (or OLLAMA_HOST)
+    #     api_key: nil
+    #
+    #   Ollama Cloud
+    #     host:    "https://api.ollama.com"  (or OLLAMA_BASE_URL)
+    #     api_key: "ollama_..."               (or OLLAMA_API_KEY)
+    #
+    # When api_key is provided the key is injected into Ollama::Config so every
+    # request carries +Authorization: Bearer <key>+. This is how multi-key
+    # Ollama Cloud credential pools work — each Credential supplies its own key.
     class Ollama < Base
-      DEFAULT_MODEL   = "llama3.2"
+      CLOUD_HOST      = "https://api.ollama.com"
+      LOCAL_HOST      = "http://localhost:11434"
       DEFAULT_TIMEOUT = 120
 
-      def initialize(host: nil, timeout: nil, **)
+      def initialize(host: nil, api_key: nil, timeout: nil, **)
         super(name: "ollama", **)
-        @host    = host    || ENV.fetch("OLLAMA_HOST", "http://localhost:11434")
+        @api_key = api_key || ENV.fetch("OLLAMA_API_KEY", nil)
+        @host    = host    || ENV.fetch("OLLAMA_BASE_URL", nil) ||
+                              ENV.fetch("OLLAMA_HOST", LOCAL_HOST)
         @timeout = timeout || DEFAULT_TIMEOUT
       end
 
@@ -41,8 +57,14 @@ module OllamaAgent
 
       def available?
         require "net/http"
+        # For Ollama Cloud, check by hitting the tags endpoint with the key
         uri = URI("#{@host}/api/tags")
-        Net::HTTP.get_response(uri).is_a?(Net::HTTPSuccess)
+        req = Net::HTTP::Get.new(uri)
+        req["Authorization"] = "Bearer #{@api_key}" if @api_key
+        resp = Net::HTTP.start(uri.host, uri.port,
+                               use_ssl: uri.scheme == "https",
+                               open_timeout: 5, read_timeout: 10) { |h| h.request(req) }
+        resp.is_a?(Net::HTTPSuccess)
       rescue StandardError
         false
       end
@@ -51,16 +73,22 @@ module OllamaAgent
         true
       end
 
+      # True when this credential is configured for Ollama Cloud (has an api_key).
+      def cloud?
+        @api_key && !@api_key.to_s.strip.empty?
+      end
+
       private
 
       def build_client
         require_relative "../ollama_connection"
 
         OllamaAgent::OllamaConnection.retry_wrapped_client(
-          timeout: @timeout,
+          timeout:      @timeout,
           max_attempts: options.fetch(:max_retries, 3),
-          base_url: @host,
-          hooks: nil
+          base_url:     @host,
+          api_key:      @api_key,
+          hooks:        nil
         )
       end
 
@@ -80,14 +108,24 @@ module OllamaAgent
         raise OllamaAgent::Error, "Empty response from Ollama" if msg.nil?
 
         message = {
-          role: msg.role,
-          content: msg.content,
+          role:       msg.role,
+          content:    msg.content,
           tool_calls: normalize_tool_calls(msg.tool_calls)
         }
 
         usage = extract_usage(raw)
-
         Response.new(message: message, usage: usage, provider: "ollama", model: model)
+      rescue OllamaAgent::Error
+        raise
+      rescue StandardError => e
+        # Map Ollama Cloud HTTP errors into the typed hierarchy
+        raise OllamaAgent::AuthenticationError, e.message  if e.message.to_s.match?(/\b(401|403)\b/)
+        raise OllamaAgent::RateLimitError, e.message       if e.message.to_s.match?(/\b429\b/) &&
+                                                               !e.message.downcase.match?(/quota|limit/)
+        raise OllamaAgent::QuotaExhaustedError, e.message  if e.message.to_s.match?(/\b429\b/)
+        raise OllamaAgent::TemporaryProviderError, e.message if e.message.to_s.match?(/\b5\d{2}\b/)
+
+        raise
       end
 
       def normalize_tool_calls(calls)

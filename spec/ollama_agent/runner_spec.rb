@@ -39,6 +39,22 @@ RSpec.describe OllamaAgent::Runner do
       runner = described_class.build(root: tmpdir, max_tokens: 16_384, context_summarize: true)
       expect(runner).to be_a(described_class)
     end
+
+    it "auto-detects multiple Ollama Cloud keys from environment" do
+      stub_const("ENV", ENV.to_h.merge(
+        "OLLAMA_API_KEY_1" => "key-1",
+        "OLLAMA_API_KEY_2" => "key-2",
+        "OLLAMA_API_KEY_5" => "key-5"
+      ))
+      runner = described_class.build(root: tmpdir)
+      expect(runner.instance_variable_get(:@credential_router)).to be_a(OllamaAgent::Providers::CredentialRouter)
+
+      status = runner.instance_variable_get(:@credential_router).pool_status
+      expect(status.size).to eq(3)
+      expect(status[0][:id]).to eq("ollama-cloud-1")
+      expect(status[1][:id]).to eq("ollama-cloud-2")
+      expect(status[2][:id]).to eq("ollama-cloud-5")
+    end
   end
 
   describe "#run" do

@@ -40,6 +40,19 @@ module OllamaAgent
       @stdout.puts "\n#{frame}\n"
     end
 
+    # Render the three-panel providers dashboard: status, usage, routing decisions.
+    #
+    # @param pool_status      [Array<Hash>] from CredentialRouter#pool_status
+    # @param routing_decisions [Array<String>] from CredentialRouter#routing_decisions
+    # @param aggregate_usage  [Hash, nil]   from CredentialRouter#aggregate_usage
+    def render_providers_dashboard(pool_status:, routing_decisions: [], aggregate_usage: nil)
+      @stdout.puts "\n"
+      @stdout.puts render_credential_status_box(pool_status)
+      @stdout.puts render_usage_box(aggregate_usage || {})          if aggregate_usage
+      @stdout.puts render_routing_decisions_box(routing_decisions)  unless routing_decisions.empty?
+      @stdout.puts ""
+    end
+
     def render_assistant_message(message)
       thinking = message.respond_to?(:thinking) ? message.thinking : nil
       content  = message.respond_to?(:content) ? message.content : message.to_s
@@ -177,6 +190,91 @@ module OllamaAgent
       return first[:value] if first.is_a?(Hash) && first.key?(:value)
 
       first
+    end
+
+    # ── Providers dashboard helpers ─────────────────────────────────────
+
+    def render_credential_status_box(pool_status)
+      table = TTY::Table.new(header: [
+        @pastel.bold("Credential"),
+        @pastel.bold("Provider"),
+        @pastel.bold("Status"),
+        @pastel.bold("Quota")
+      ])
+
+      pool_status.each do |cred|
+        table << [
+          cred[:name] || cred[:id],
+          cred[:provider],
+          credential_status_label(cred),
+          quota_bar(cred.dig(:quota, :daily_pct))
+        ]
+      end
+
+      inner = table.render(:unicode, padding: [0, 1]) || "(no credentials configured)"
+      TTY::Box.frame(
+        width: [TTY::Screen.width, 50].max,
+        title: { top_left: " Providers " },
+        border: :thick,
+        style: { border: { fg: :cyan } }
+      ) { inner }
+    end
+
+    def render_usage_box(usage)
+      lines = []
+      lines << format_usage_line("RPM",          usage[:total_rpm],            nil)
+      lines << format_usage_line("TPM",          usage[:total_tpm],            nil)
+      lines << format_usage_line("Daily tokens", usage[:total_daily_tokens],   nil)
+      lines << format_usage_line("Daily reqs",   usage[:total_daily_requests], nil)
+
+      TTY::Box.frame(
+        width: [TTY::Screen.width, 50].max,
+        title: { top_left: " Usage " },
+        border: :thick,
+        style: { border: { fg: :blue } }
+      ) { lines.join("\n") }
+    end
+
+    def render_routing_decisions_box(decisions)
+      inner = decisions.last(8).join("\n")
+      TTY::Box.frame(
+        width: [TTY::Screen.width, 50].max,
+        title: { top_left: " Recent Routing " },
+        border: :thick,
+        style: { border: { fg: :magenta } }
+      ) { inner }
+    end
+
+    def credential_status_label(cred)
+      if cred[:disabled]
+        @pastel.red("🔴 disabled")
+      elsif cred[:cooling_down]
+        secs = cred[:cooldown_secs].to_i
+        @pastel.yellow("💤 cool #{secs}s")
+      elsif cred[:near_exhaustion]
+        pct = (cred.dig(:quota, :daily_pct).to_f * 100).round
+        @pastel.yellow("⚠️  #{pct}% quota")
+      elsif cred[:available]
+        @pastel.green("✅ healthy")
+      else
+        @pastel.red("❌ unavailable")
+      end
+    end
+
+    def quota_bar(pct)
+      return @pastel.dim("n/a") unless pct && pct.positive?
+
+      filled = (pct * 10).round.clamp(0, 10)
+      bar    = ("█" * filled) + ("░" * (10 - filled))
+      label  = "#{(pct * 100).round}%"
+      color  = pct >= 0.9 ? :red : pct >= 0.7 ? :yellow : :green
+      @pastel.send(color, "#{bar} #{label}")
+    end
+
+    def format_usage_line(label, value, limit)
+      val_str = value ? value.to_s : "—"
+      lim_str = limit ? " / #{limit}" : ""
+      "  #{@pastel.bold(label.ljust(14))} #{val_str}#{lim_str}"
     end
   end
   # rubocop:enable Metrics/ClassLength

@@ -44,7 +44,8 @@ module OllamaAgent
     MAX_TURNS = 64
     DEFAULT_HTTP_TIMEOUT = 120
 
-    attr_reader :client, :root, :hooks, :model, :logger,
+    attr_accessor :client
+    attr_reader :root, :hooks, :model, :logger,
                 :session_id, :read_only, :max_tokens, :orchestrator, :provider_name
 
     # @param config [AgentConfig, nil] when set, keyword options are ignored (use {Runner} or build {AgentConfig}).
@@ -123,11 +124,12 @@ module OllamaAgent
       []
     end
 
-    # Cloud catalog from +https://ollama.com/api/tags+ (see {OllamaCloudCatalog}). REPL +/models+ uses this only.
-    #
-    # @return [Array<String>]
     def list_cloud_model_names
-      OllamaCloudCatalog.list_model_names
+      api_key = nil
+      if @client.respond_to?(:first_available_key)
+        api_key = @client.first_available_key("ollama_cloud") || @client.first_available_key("ollama")
+      end
+      OllamaCloudCatalog.list_model_names(api_key: api_key)
     end
 
     # Subclasses that override chat or tool wiring should keep {#assign_chat_model!} in sync
