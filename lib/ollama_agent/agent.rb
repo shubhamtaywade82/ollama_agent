@@ -140,11 +140,23 @@ module OllamaAgent
     end
 
     def list_cloud_model_names
+      base_url = nil
       api_key = nil
-      if @client.respond_to?(:first_available_key)
-        api_key = @client.first_available_key("ollama_cloud") || @client.first_available_key("ollama")
+
+      if @client.respond_to?(:client) && @client.client.respond_to?(:config)
+        config = @client.client.config
+        base_url = config.base_url
+        api_key = config.api_key
       end
-      OllamaCloudCatalog.list_model_names(api_key: api_key)
+
+      # Fallback to OLLAMA_BASE_URL if client doesn't expose it
+      base_url ||= ENV.fetch("OLLAMA_BASE_URL", nil)
+      
+      # If it's a cloud-like URL, we can try to append /api/tags if needed, 
+      # but OllamaCloudCatalog.list_model_names handles the mapping.
+      catalog_host = base_url ? "#{base_url.to_s.chomp("/")}/api/tags" : nil
+
+      OllamaCloudCatalog.list_model_names(base_url: catalog_host, api_key: api_key)
     end
 
     # Subclasses that override chat or tool wiring should keep {#assign_chat_model!} in sync

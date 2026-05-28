@@ -38,14 +38,11 @@ module OllamaAgent
           if local_models.empty?
             begin
               agent.list_local_model_names.each do |name|
-                caps = [:chat]
-                caps << :tools if name.include?("qwen") || name.include?("llama3") || name.include?("mistral")
-                caps << :reasoning if name.include?("deepseek-r1")
                 list << ModelDescriptor.new(
                   name: name,
                   provider: "local",
                   context_size: name.include?("qwen2.5-coder") ? 128_000 : 32_768,
-                  capabilities: caps,
+                  capabilities: infer_capabilities(name),
                   status: "loaded"
                 )
               end
@@ -62,24 +59,13 @@ module OllamaAgent
               # Avoid duplicating if already present
               next if list.any? { |m| m.name == name }
 
-              caps = [:chat]
-              caps << :tools if name.include?("qwen") || name.include?("llama") || name.include?("mistral")
-              caps << :reasoning if name.include?("deepseek-r1")
-
-              # Heuristic: models with -pro suffix or very large parameter sizes (inferred from name)
-              # or known Level 4 models often require a subscription.
-              sub = name.downcase.include?("-pro") ||
-                    name.downcase.include?(":671b") ||
-                    name.downcase.include?(":1t") ||
-                    name.downcase.include?(":405b")
-
               list << ModelDescriptor.new(
                 name: name,
                 provider: "ollama_cloud",
                 context_size: 128_000,
-                capabilities: caps,
+                capabilities: infer_capabilities(name),
                 status: "available",
-                subscription_required: sub
+                subscription_required: subscription_required?(name)
               )
             end
           rescue StandardError
@@ -133,19 +119,13 @@ module OllamaAgent
           size_bytes = m["size"] || 0
           size_gb = (size_bytes.to_f / 1_073_741_824).round(2)
 
-          caps = [:chat]
-          family = details["family"].to_s.downcase
-          caps << :tools if m_name.include?("qwen") || m_name.include?("llama3") || m_name.include?("mistral")
-          caps << :vision if family.include?("mllm") || m_name.include?("llava") || m_name.include?("vision")
-          caps << :reasoning if m_name.include?("deepseek-r1")
-
           status = loaded_names.include?(m_name) ? "loaded" : "unloaded"
 
           ModelDescriptor.new(
             name: m_name,
             provider: "local",
             context_size: m_name.include?("qwen2.5-coder") ? 128_000 : 32_768,
-            capabilities: caps,
+            capabilities: infer_capabilities(m_name, details),
             size_gb: size_gb,
             status: status
           )
@@ -153,6 +133,49 @@ module OllamaAgent
       rescue StandardError
         []
       end
+
+      def infer_capabilities(name, details = {})
+        name = name.to_s.downcase
+        caps = [:chat]
+
+        # Tool calling capabilities
+        if name.include?("qwen") || name.include?("llama") || name.include?("mistral") ||
+           name.include?("mixtral") || name.include?("kimi") || name.include?("deepseek") ||
+           name.include?("command-r") || name.include?("firefunction") || name.include?("hermes")
+          caps << :tools
+        end
+
+        # Vision capabilities
+        family = details["family"].to_s.downcase
+        families = Array(details["families"]).map(&:to_s).map(&:downcase)
+        if family.include?("mllm") || families.any? { |f| f.include?("mllm") } ||
+           name.include?("llava") || name.include?("vision") || name.include?("moondream")
+          caps << :vision
+        end
+
+        # Reasoning capabilities
+        if name.include?("deepseek-r1") || name.include?("thinking") ||
+           name.include?("reasoning") || name.match?(/\bo1\b/) || name.match?(/\bo3\b/)
+          caps << :reasoning
+        end
+
+        caps.uniq
+      end
+
+      def subscription_required?(name)
+        name = name.to_s.downcase
+        # Heuristic: models with -pro suffix or very large parameter sizes (inferred from name)
+        # or known high-end models often require a subscription on Ollama Cloud.
+        name.include?("-pro") ||
+          name.match?(/(?::|-)67[0-9]b/) || # 671b, 675b
+          name.include?(":1t") ||
+          name.include?(":405b") ||
+          name.include?("mistral-large") ||
+          name.include?("o1-") ||
+          name.include?("o3-")
+      end
+
+      private_class_method :infer_capabilities, :subscription_required?
     end
   end
 end
