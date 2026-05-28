@@ -134,30 +134,35 @@ module OllamaAgent
         []
       end
 
+      TOOL_CAPABLE_PATTERNS = %w[
+        qwen llama mistral mixtral kimi deepseek command-r firefunction hermes
+        glm minimax nemotron gpt-oss devstral gemma4 gemini
+      ].freeze
+
+      VISION_CAPABLE_PATTERNS = %w[
+        llava vision moondream gemma4 qwen3.5 qwen3-vl kimi-k2.5 kimi-k2.6 gemini-3
+      ].freeze
+
+      THINKING_CAPABLE_PATTERNS = %w[
+        thinking glm minimax nemotron gemma4 gemini deepseek-v qwen3 kimi gpt-oss devstral
+      ].freeze
+
       def infer_capabilities(name, details = {})
-        name = name.to_s.downcase
+        n = name.to_s.downcase
         caps = [:chat]
 
-        # Tool calling capabilities
-        if name.include?("qwen") || name.include?("llama") || name.include?("mistral") ||
-           name.include?("mixtral") || name.include?("kimi") || name.include?("deepseek") ||
-           name.include?("command-r") || name.include?("firefunction") || name.include?("hermes")
-          caps << :tools
-        end
+        caps << :tools if TOOL_CAPABLE_PATTERNS.any? { |p| n.include?(p) }
 
-        # Vision capabilities
         family = details["family"].to_s.downcase
         families = Array(details["families"]).map(&:to_s).map(&:downcase)
-        if family.include?("mllm") || families.any? { |f| f.include?("mllm") } ||
-           name.include?("llava") || name.include?("vision") || name.include?("moondream")
-          caps << :vision
-        end
+        caps << :vision if family.include?("mllm") ||
+                           families.any? { |f| f.include?("mllm") } ||
+                           VISION_CAPABLE_PATTERNS.any? { |p| n.include?(p) }
 
-        # Reasoning capabilities
-        if name.include?("deepseek-r1") || name.include?("thinking") ||
-           name.include?("reasoning") || name.match?(/\bo1\b/) || name.match?(/\bo3\b/)
-          caps << :reasoning
-        end
+        caps << :reasoning if n.include?("deepseek-r1") || n.include?("reasoning") ||
+                              n.match?(/\bo1\b/) || n.match?(/\bo3\b/)
+
+        caps << :thinking if THINKING_CAPABLE_PATTERNS.any? { |p| n.include?(p) }
 
         caps.uniq
       end

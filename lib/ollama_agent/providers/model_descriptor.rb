@@ -29,6 +29,10 @@ module OllamaAgent
         @capabilities.include?(:reasoning)
       end
 
+      def thinking?
+        @capabilities.include?(:thinking)
+      end
+
       def subscription_required?
         @subscription_required
       end
