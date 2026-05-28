@@ -32,6 +32,7 @@ module OllamaAgent
     def initialize(completion_candidates:, **)
       super(**)
       @completion_candidates = Array(completion_candidates).uniq.sort
+      @menu_lines_printed = 0
     end
 
     def read_line(prompt = "", value: "", echo: true, raw: true, nonblock: false)
@@ -200,13 +201,41 @@ module OllamaAgent
     def show_completion_menu(text, suggestions = nil)
       suggestions ||= @command_palette.suggestions(text)
       @command_palette.menu.show(suggestions)
-      return if suggestions.empty?
+      # draw_menu_items intentionally omitted — auto-redraw in read_line handles it
+    end
 
-      output.puts
-      suggestions.first(8).each_with_index do |suggestion, index|
-        marker = index == @command_palette.menu.index ? "›" : " "
-        output.puts "  #{marker} #{suggestion.display_text}"
+    def erase_completion_menu
+      return if @menu_lines_printed.nil? || @menu_lines_printed.zero?
+
+      output.print(cursor.save)
+      @menu_lines_printed.times do
+        output.print(cursor.down(1))
+        output.print(cursor.clear_line)
       end
+      output.print(cursor.restore)
+      @menu_lines_printed = 0
+    end
+
+    def draw_menu_items
+      return unless completion_menu_visible?
+
+      items = @command_palette.menu.suggestions.first(8)
+      return if items.empty?
+
+      output.print(cursor.save)
+      items.each_with_index do |suggestion, i|
+        output.print(cursor.down(1))
+        output.print(cursor.clear_line)
+        marker = i == @command_palette.menu.index ? "\e[32m›\e[0m" : " "
+        output.print("  #{marker} #{suggestion.display_text}")
+      end
+      output.print(cursor.restore)
+      @menu_lines_printed = items.length
+    end
+
+    def close_completion_menu
+      erase_completion_menu
+      @command_palette&.menu&.hide
     end
 
     def apply_selected_suggestion!(line, suggestion)
