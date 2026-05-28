@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "tty-reader"
+require_relative "runtime_command_system/command_palette"
 
 module OllamaAgent
   # Longest shared prefix for tab completion (readline-style).
@@ -26,7 +27,7 @@ module OllamaAgent
   # Implementation synced from tty-reader 0.9.0 (+lib/tty/reader.rb+).
   # rubocop:disable Metrics/PerceivedComplexity, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Style/StringConcatenation, Metrics/BlockNesting
   class TuiSlashReader < TTY::Reader
-    attr_accessor :completion_candidates
+    attr_accessor :completion_candidates, :command_palette
 
     def initialize(completion_candidates:, **)
       super(**)
@@ -61,9 +62,20 @@ module OllamaAgent
         elsif console.keys[char].to_s =~ /ctrl_/
           # skip
         elsif console.keys[char] == :up
-          line.replace(mutable_copy(history_previous)) if history_previous?
+          if completion_menu_visible?
+            apply_selected_suggestion!(line, @command_palette.menu.previous)
+            buffer = line.text
+          elsif history_previous?
+            line.replace(mutable_copy(history_previous))
+          end
         elsif console.keys[char] == :down
-          line.replace(mutable_copy(history_next? ? history_next : buffer)) if track_history?
+          if command_palette_active_for?(line.text)
+            show_completion_menu(line.text) unless completion_menu_visible?
+            apply_selected_suggestion!(line, @command_palette.menu.next)
+            buffer = line.text
+          elsif track_history?
+            line.replace(mutable_copy(history_next? ? history_next : buffer))
+          end
         elsif console.keys[char] == :left
           line.left
         elsif console.keys[char] == :right
@@ -95,6 +107,11 @@ module OllamaAgent
 
         if raw && echo
           output.print(line.to_s)
+          ghost = current_ghost_for(line)
+          if ghost && line.end?
+            output.print("\e[2m#{ghost.suffix}\e[0m")
+            output.print(cursor.backward(ghost.suffix.length))
+          end
           if char == "\n"
             line.move_to_start
           elsif !line.end?
@@ -122,6 +139,25 @@ module OllamaAgent
     end
 
     def apply_slash_tab!(line, char)
+      return apply_command_palette_tab!(line, char) if command_palette_active_for?(line.text)
+
+      apply_candidate_tab!(line, char)
+    end
+
+    def apply_command_palette_tab!(line, char)
+      accepted = @command_palette.accept_ghost(line.text, line.cursor)
+      if accepted
+        line.replace(mutable_copy(accepted))
+      else
+        suggestions = @command_palette.suggestions(line.text, line.cursor)
+        show_completion_menu(line.text, suggestions)
+      end
+      line.text
+    rescue StandardError
+      apply_candidate_tab!(line, char)
+    end
+
+    def apply_candidate_tab!(line, char)
       text = line.text
       unless text.start_with?("/")
         line.insert(char)
@@ -143,6 +179,42 @@ module OllamaAgent
         end
       end
       line.text
+    end
+
+    def command_palette_active_for?(text)
+      @command_palette && text.to_s.start_with?("/")
+    end
+
+    def completion_menu_visible?
+      @command_palette&.menu&.visible?
+    end
+
+    def current_ghost_for(line)
+      return nil unless command_palette_active_for?(line.text)
+
+      @command_palette.ghost_text(line.text, line.cursor)
+    rescue StandardError
+      nil
+    end
+
+    def show_completion_menu(text, suggestions = nil)
+      suggestions ||= @command_palette.suggestions(text)
+      @command_palette.menu.show(suggestions)
+      return if suggestions.empty?
+
+      output.puts
+      suggestions.first(8).each_with_index do |suggestion, index|
+        marker = index == @command_palette.menu.index ? "›" : " "
+        output.puts "  #{marker} #{suggestion.display_text}"
+      end
+    end
+
+    def apply_selected_suggestion!(line, suggestion)
+      return unless suggestion
+
+      text = line.text
+      start = suggestion.replacement_start
+      line.replace(mutable_copy("#{text[0...start]}#{suggestion.text}"))
     end
   end
   # rubocop:enable Metrics/PerceivedComplexity, Metrics/AbcSize, Metrics/CyclomaticComplexity, Metrics/MethodLength, Style/StringConcatenation, Metrics/BlockNesting

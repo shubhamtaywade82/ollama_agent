@@ -51,7 +51,7 @@ module OllamaAgent
       private
 
       def read_user_line
-        @tui.ask_user_line(completion_candidates: slash_completer_candidates)
+        @tui.ask_user_line(completion_candidates: slash_completer_candidates, command_palette: runtime_command_palette)
       rescue Interrupt
         nil
       end

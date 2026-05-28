@@ -64,6 +64,16 @@ module OllamaAgent
         safe_plugin_command_handlers.map { |h| h[:slash_command].to_s }
       end
 
+      def runtime_command_palette
+        require_relative "../runtime_command_system/command_palette"
+
+        commands = SLASH_COMMANDS.merge(plugin_slash_command_strings.to_h { |cmd| [cmd, "Plugin command"] })
+        OllamaAgent::RuntimeCommandSystem::CommandPalette.new(
+          commands: commands,
+          session: { agent: @agent }
+        )
+      end
+
       def handle_slash(line)
         parts   = line.split(" ", 2)
         command = parts[0].downcase

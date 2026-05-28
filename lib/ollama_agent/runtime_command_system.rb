@@ -1,0 +1,11 @@
+# frozen_string_literal: true
+
+require_relative "runtime_command_system/ast"
+require_relative "runtime_command_system/command_registry"
+require_relative "runtime_command_system/suggestion"
+require_relative "runtime_command_system/suggestion_engine"
+require_relative "runtime_command_system/ghost_text"
+require_relative "runtime_command_system/input_buffer"
+require_relative "runtime_command_system/interactive_menu"
+require_relative "runtime_command_system/completers"
+require_relative "runtime_command_system/command_palette"
