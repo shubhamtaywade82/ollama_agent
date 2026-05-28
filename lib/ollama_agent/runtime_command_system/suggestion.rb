@@ -16,10 +16,14 @@ module OllamaAgent
       end
 
       def display_text
+        name_col = text.ljust(30)
         details = []
         details << description if description && !description.empty?
-        details.concat(capabilities.map { |capability| "[#{capability}]" })
-        details.empty? ? text : "#{text}      #{details.join(" ")}"
+        badge_str = capabilities.map { |c| "[#{c}]" }.join(" ")
+        return text if details.empty? && badge_str.empty?
+
+        suffix = details.empty? ? badge_str : "#{details.join(" ")}  #{badge_str}".rstrip
+        "#{name_col}#{suffix}"
       end
     end
   end
