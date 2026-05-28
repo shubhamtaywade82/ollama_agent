@@ -67,11 +67,13 @@ module OllamaAgent
       def runtime_command_palette
         require_relative "../runtime_command_system/command_palette"
 
-        commands = SLASH_COMMANDS.merge(plugin_slash_command_strings.to_h { |cmd| [cmd, "Plugin command"] })
-        OllamaAgent::RuntimeCommandSystem::CommandPalette.new(
-          commands: commands,
-          session: { agent: @agent }
-        )
+        @runtime_command_palette ||= begin
+          commands = SLASH_COMMANDS.merge(plugin_slash_command_strings.to_h { |cmd| [cmd, "Plugin command"] })
+          OllamaAgent::RuntimeCommandSystem::CommandPalette.new(
+            commands: commands,
+            session: { agent: @agent }
+          )
+        end
       end
 
       def handle_slash(line)
