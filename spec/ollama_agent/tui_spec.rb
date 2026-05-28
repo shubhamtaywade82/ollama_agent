@@ -40,4 +40,42 @@ RSpec.describe OllamaAgent::TUI do
       expect(buf).to include("Assistant")
     end
   end
+
+  describe "history persistence" do
+    require "tmpdir"
+    let(:temp_dir) { Dir.mktmpdir }
+    let(:temp_history_file) { File.join(temp_dir, "repl_history") }
+
+    before do
+      stub_const("OllamaAgent::TUI::HISTORY_FILE", temp_history_file)
+    end
+
+    after do
+      FileUtils.rm_rf(temp_dir)
+    end
+
+    it "loads history from file on initialization" do
+      File.write(temp_history_file, "command1\ncommand2\n")
+      tui = described_class.new(stdout: out, stderr: out)
+      reader = tui.instance_variable_get(:@slash_reader)
+      history = reader.instance_variable_get(:@history)
+      expect(history.to_a).to eq(%w[command1 command2])
+    end
+
+    it "saves history to file after reading a line" do
+      tui = described_class.new(stdout: out, stderr: out)
+      reader = tui.instance_variable_get(:@slash_reader)
+      
+      # Mock the actual terminal read to return user input and update history
+      allow(reader).to receive(:read_line).and_wrap_original do |original_method, *args|
+        reader.add_to_history("new_command")
+        "new_command"
+      end
+      
+      tui.ask_user_line(completion_candidates: ["/help"])
+      
+      expect(File.exist?(temp_history_file)).to be true
+      expect(File.read(temp_history_file).strip).to eq("new_command")
+    end
+  end
 end
