@@ -35,6 +35,30 @@ RSpec.describe OllamaAgent::TuiSlashReader do
     end
   end
 
+  describe "close_completion_menu integration" do
+    it "hides the menu state and resets menu_lines_printed" do
+      out = StringIO.new
+      reader = described_class.new(
+        completion_candidates: [],
+        input: StringIO.new,
+        output: out
+      )
+      palette = instance_double(OllamaAgent::RuntimeCommandSystem::CommandPalette)
+      menu = OllamaAgent::RuntimeCommandSystem::InteractiveMenu.new
+      menu.show([
+        OllamaAgent::RuntimeCommandSystem::Suggestion.new(text: "/model", type: :command)
+      ])
+      allow(palette).to receive(:menu).and_return(menu)
+      reader.instance_variable_set(:@command_palette, palette)
+      reader.instance_variable_set(:@menu_lines_printed, 3)
+
+      reader.send(:close_completion_menu)
+
+      expect(menu.visible?).to be false
+      expect(reader.instance_variable_get(:@menu_lines_printed)).to eq(0)
+    end
+  end
+
   describe "menu draw/erase helpers" do
     let(:out) { StringIO.new }
 

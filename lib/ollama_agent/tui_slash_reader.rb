@@ -51,6 +51,7 @@ module OllamaAgent
           break
         end
 
+        erase_completion_menu if raw && echo && completion_menu_visible?
         clear_display(line, screen_width) if raw && echo
 
         if console.keys[char] == :backspace || code == BACKSPACE
@@ -62,6 +63,8 @@ module OllamaAgent
           line.delete
         elsif console.keys[char].to_s =~ /ctrl_/
           # skip
+        elsif console.keys[char] == :escape
+          close_completion_menu if command_palette_active_for?(line.text)
         elsif console.keys[char] == :up
           if completion_menu_visible?
             apply_selected_suggestion!(line, @command_palette.menu.previous)
@@ -92,6 +95,7 @@ module OllamaAgent
             char = "\n"
             line.move_to_end
           end
+          close_completion_menu if completion_menu_visible? && code != CARRIAGE_RETURN && code != NEWLINE
           line.insert(char)
           buffer = line.text
         end
@@ -118,6 +122,7 @@ module OllamaAgent
           elsif !line.end?
             output.print(cursor.backward(line.text_size - line.cursor))
           end
+          draw_menu_items if completion_menu_visible?
         end
 
         next unless [CARRIAGE_RETURN, NEWLINE].include?(code)
