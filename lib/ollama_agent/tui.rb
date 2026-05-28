@@ -95,8 +95,9 @@ module OllamaAgent
     #
     # @param completion_candidates [Array<String>] e.g. +/help+, +/model+; empty falls back to {TTY::Prompt#ask}.
     # @return [String, nil]
-    def ask_user_line(completion_candidates: [], command_palette: nil)
-      prompt = @pastel.green.bold("❯ ")
+    def ask_user_line(completion_candidates: [], command_palette: nil, prompt_prefix: nil)
+      prefix = prompt_prefix.to_s
+      prompt = "#{prefix}#{@pastel.green.bold("❯ ")}"
       @slash_reader.completion_candidates = Array(completion_candidates).uniq.sort
       @slash_reader.command_palette = command_palette
       line = @slash_reader.read_line(prompt).to_s
