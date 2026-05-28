@@ -58,6 +58,17 @@ module OllamaAgent
 
       private
 
+      def build_session_runtime
+        RuntimeCommandSystem::Session::Runtime.new(agent: @agent)
+      end
+
+      def build_runtime_dispatcher
+        RuntimeCommandSystem::Dispatch::Dispatcher.new.tap do |d|
+          d.register("model",    RuntimeCommandSystem::Dispatch::Handlers::ModelHandler.new)
+          d.register("provider", RuntimeCommandSystem::Dispatch::Handlers::ProviderHandler.new)
+        end
+      end
+
       def read_user_line
         model_badge = "\e[2m[#{@session_runtime.active_model}]\e[0m "
         @tui.ask_user_line(
@@ -161,16 +172,6 @@ module OllamaAgent
 
         s = mem.summary
         "#{s[:short_term_entries]} short-term · #{s[:session_keys]} session keys"
-      end
-      def build_session_runtime
-        RuntimeCommandSystem::Session::Runtime.new(agent: @agent)
-      end
-
-      def build_runtime_dispatcher
-        RuntimeCommandSystem::Dispatch::Dispatcher.new.tap do |d|
-          d.register("model",    RuntimeCommandSystem::Dispatch::Handlers::ModelHandler.new)
-          d.register("provider", RuntimeCommandSystem::Dispatch::Handlers::ProviderHandler.new)
-        end
       end
 
       def wire_runtime_events
