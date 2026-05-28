@@ -52,7 +52,8 @@ module OllamaAgent
       def retryable_with_other_credential?(error)
         error.is_a?(OllamaAgent::RateLimitError)      ||
           error.is_a?(OllamaAgent::QuotaExhaustedError)  ||
-          error.is_a?(OllamaAgent::TemporaryProviderError)
+          error.is_a?(OllamaAgent::TemporaryProviderError) ||
+          error.is_a?(OllamaAgent::SubscriptionRequiredError)
       end
 
       # @param error [StandardError]
@@ -64,10 +65,14 @@ module OllamaAgent
       private_class_method
 
       def self.classify_by_status(status, error)
-        msg = error.message
+        msg = error.message.to_s
         case status
         when 401, 403
-          OllamaAgent::AuthenticationError.new(msg)
+          if msg.match?(/subscription/i)
+            OllamaAgent::SubscriptionRequiredError.new(msg)
+          else
+            OllamaAgent::AuthenticationError.new(msg)
+          end
         when 402
           OllamaAgent::QuotaExhaustedError.new(msg)
         when 429

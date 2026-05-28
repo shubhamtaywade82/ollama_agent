@@ -111,6 +111,21 @@ module OllamaAgent
       n
     end
 
+    # Performs a pre-flight check to see if the model is accessible.
+    # Currently only implemented for Ollama Cloud (checks for 403 Subscription Required).
+    #
+    # @param name [String, nil] defaults to current @model
+    # @return [Boolean] true if accessible or check not applicable
+    def model_accessible?(name = nil)
+      n = name || @model
+      return true unless @client.respond_to?(:cloud?) && @client.cloud?
+      return true unless @client.respond_to?(:subscription_required?)
+
+      !@client.subscription_required?(n)
+    rescue StandardError
+      true # assume accessible if check fails
+    end
+
     # Names from the local Ollama daemon (+/api/tags+ on your +base_url+). Not used by the REPL +/models+ command.
     #
     # @return [Array<String>]

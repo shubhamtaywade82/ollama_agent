@@ -65,12 +65,21 @@ module OllamaAgent
               caps = [:chat]
               caps << :tools if name.include?("qwen") || name.include?("llama") || name.include?("mistral")
               caps << :reasoning if name.include?("deepseek-r1")
+
+              # Heuristic: models with -pro suffix or very large parameter sizes (inferred from name)
+              # or known Level 4 models often require a subscription.
+              sub = name.downcase.include?("-pro") ||
+                    name.downcase.include?(":671b") ||
+                    name.downcase.include?(":1t") ||
+                    name.downcase.include?(":405b")
+
               list << ModelDescriptor.new(
                 name: name,
                 provider: "ollama_cloud",
                 context_size: 128_000,
                 capabilities: caps,
-                status: "available"
+                status: "available",
+                subscription_required: sub
               )
             end
           rescue StandardError
