@@ -78,6 +78,31 @@ module OllamaAgent
         @api_key && !@api_key.to_s.strip.empty?
       end
 
+      # Performs a pre-flight check using the /api/show endpoint.
+      # @param model [String]
+      # @return [Boolean] true if the model specifically requires a subscription
+      def subscription_required?(model)
+        return false unless cloud?
+
+        require "net/http"
+        require "json"
+
+        uri = URI("#{@host}/api/show")
+        req = Net::HTTP::Post.new(uri)
+        req["Authorization"] = "Bearer #{@api_key}" if @api_key
+        req.body = { name: model }.to_json
+        req.content_type = "application/json"
+
+        resp = Net::HTTP.start(uri.host, uri.port,
+                               use_ssl: uri.scheme == "https",
+                               open_timeout: 5, read_timeout: 10) { |h| h.request(req) }
+
+        # Ollama Cloud returns 403 with a "subscription required" message for gated models.
+        resp.code == "403" && resp.body.to_s.match?(/subscription/i)
+      rescue StandardError
+        false
+      end
+
       private
 
       def build_client
@@ -118,12 +143,17 @@ module OllamaAgent
       rescue OllamaAgent::Error
         raise
       rescue StandardError => e
+        msg = e.message.to_s
         # Map Ollama Cloud HTTP errors into the typed hierarchy
-        raise OllamaAgent::AuthenticationError, e.message  if e.message.to_s.match?(/\b(401|403)\b/)
-        raise OllamaAgent::RateLimitError, e.message       if e.message.to_s.match?(/\b429\b/) &&
-                                                               !e.message.downcase.match?(/quota|limit/)
-        raise OllamaAgent::QuotaExhaustedError, e.message  if e.message.to_s.match?(/\b429\b/)
-        raise OllamaAgent::TemporaryProviderError, e.message if e.message.to_s.match?(/\b5\d{2}\b/)
+        if msg.match?(/\b403\b/) && msg.match?(/subscription/i)
+          raise OllamaAgent::SubscriptionRequiredError, msg
+        end
+
+        raise OllamaAgent::AuthenticationError, msg if msg.match?(/\b(401|403)\b/)
+        raise OllamaAgent::RateLimitError, msg       if msg.match?(/\b429\b/) &&
+                                                         !msg.downcase.match?(/quota|limit/)
+        raise OllamaAgent::QuotaExhaustedError, msg  if msg.match?(/\b429\b/)
+        raise OllamaAgent::TemporaryProviderError, msg if msg.match?(/\b5\d{2}\b/)
 
         raise
       end

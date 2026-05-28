@@ -73,9 +73,25 @@ RSpec.describe OllamaAgent::TUI do
       end
       
       tui.ask_user_line(completion_candidates: ["/help"])
-      
+
       expect(File.exist?(temp_history_file)).to be true
       expect(File.read(temp_history_file).strip).to eq("new_command")
+    end
+  end
+
+  describe "#ask_user_line with prompt_prefix" do
+    it "includes prompt_prefix in the string passed to read_line" do
+      captured_prompt = nil
+      slash_reader = instance_double(OllamaAgent::TuiSlashReader)
+      allow(slash_reader).to receive(:completion_candidates=)
+      allow(slash_reader).to receive(:command_palette=)
+      allow(slash_reader).to receive(:read_line) { |prompt| captured_prompt = prompt; "" }
+
+      tui = described_class.new(stdout: StringIO.new)
+      tui.instance_variable_set(:@slash_reader, slash_reader)
+      tui.ask_user_line(prompt_prefix: "[qwen3:32b] ")
+
+      expect(captured_prompt).to include("[qwen3:32b]")
     end
   end
 end

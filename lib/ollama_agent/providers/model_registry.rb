@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "set"
 require_relative "model_descriptor"
 
 module OllamaAgent
@@ -38,14 +39,11 @@ module OllamaAgent
           if local_models.empty?
             begin
               agent.list_local_model_names.each do |name|
-                caps = [:chat]
-                caps << :tools if name.include?("qwen") || name.include?("llama3") || name.include?("mistral")
-                caps << :reasoning if name.include?("deepseek-r1")
                 list << ModelDescriptor.new(
                   name: name,
                   provider: "local",
                   context_size: name.include?("qwen2.5-coder") ? 128_000 : 32_768,
-                  capabilities: caps,
+                  capabilities: infer_capabilities(name),
                   status: "loaded"
                 )
               end
@@ -62,15 +60,13 @@ module OllamaAgent
               # Avoid duplicating if already present
               next if list.any? { |m| m.name == name }
 
-              caps = [:chat]
-              caps << :tools if name.include?("qwen") || name.include?("llama") || name.include?("mistral")
-              caps << :reasoning if name.include?("deepseek-r1")
               list << ModelDescriptor.new(
                 name: name,
                 provider: "ollama_cloud",
                 context_size: 128_000,
-                capabilities: caps,
-                status: "available"
+                capabilities: infer_capabilities(name),
+                status: "available",
+                subscription_required: subscription_required?(name)
               )
             end
           rescue StandardError
@@ -124,19 +120,13 @@ module OllamaAgent
           size_bytes = m["size"] || 0
           size_gb = (size_bytes.to_f / 1_073_741_824).round(2)
 
-          caps = [:chat]
-          family = details["family"].to_s.downcase
-          caps << :tools if m_name.include?("qwen") || m_name.include?("llama3") || m_name.include?("mistral")
-          caps << :vision if family.include?("mllm") || m_name.include?("llava") || m_name.include?("vision")
-          caps << :reasoning if m_name.include?("deepseek-r1")
-
           status = loaded_names.include?(m_name) ? "loaded" : "unloaded"
 
           ModelDescriptor.new(
             name: m_name,
             provider: "local",
             context_size: m_name.include?("qwen2.5-coder") ? 128_000 : 32_768,
-            capabilities: caps,
+            capabilities: infer_capabilities(m_name, details),
             size_gb: size_gb,
             status: status
           )
@@ -144,6 +134,67 @@ module OllamaAgent
       rescue StandardError
         []
       end
+
+      TOOL_CAPABLE_PATTERNS = %w[
+        qwen llama mistral mixtral kimi deepseek command-r firefunction hermes
+        glm minimax nemotron gpt-oss devstral gemma4 gemini
+      ].freeze
+
+      VISION_CAPABLE_PATTERNS = %w[
+        llava vision moondream gemma4 qwen3.5 qwen3-vl kimi-k2.5 kimi-k2.6 gemini-3
+      ].freeze
+
+      THINKING_CAPABLE_PATTERNS = %w[
+        thinking glm minimax nemotron gemma4 gemini deepseek-v qwen3 kimi gpt-oss devstral
+      ].freeze
+
+      def infer_capabilities(name, details = {})
+        n = name.to_s.downcase
+        caps = [:chat]
+
+        caps << :tools if TOOL_CAPABLE_PATTERNS.any? { |p| n.include?(p) }
+
+        family = details["family"].to_s.downcase
+        families = Array(details["families"]).map(&:to_s).map(&:downcase)
+        caps << :vision if family.include?("mllm") ||
+                           families.any? { |f| f.include?("mllm") } ||
+                           VISION_CAPABLE_PATTERNS.any? { |p| n.include?(p) }
+
+        caps << :reasoning if n.include?("deepseek-r1") || n.include?("reasoning") ||
+                              n.match?(/\bo1\b/) || n.match?(/\bo3\b/)
+
+        caps << :thinking if THINKING_CAPABLE_PATTERNS.any? { |p| n.include?(p) }
+
+        caps.uniq
+      end
+
+      # Returns the set of provider names for which an API key is configured in ENV.
+      # "local" is always included (Ollama runs locally by default).
+      def available_providers
+        present = ->(key) { ENV.fetch(key, nil).to_s.strip.then { |v| v unless v.empty? } }
+        providers = Set.new(["local"])
+        providers << "ollama_cloud" if present.call("OLLAMA_API_KEY")
+        providers << "openai"       if present.call("OPENAI_API_KEY")
+        providers << "anthropic"    if present.call("ANTHROPIC_API_KEY")
+        providers << "groq"         if present.call("GROQ_API_KEY") || present.call("GROQ_KEY")
+        providers << "openrouter"   if present.call("OPENROUTER_API_KEY")
+        providers
+      end
+
+      def subscription_required?(name)
+        name = name.to_s.downcase
+        # Heuristic: models with -pro suffix or very large parameter sizes (inferred from name)
+        # or known high-end models often require a subscription on Ollama Cloud.
+        name.include?("-pro") ||
+          name.match?(/(?::|-)67[0-9]b/) || # 671b, 675b
+          name.include?(":1t") ||
+          name.include?(":405b") ||
+          name.include?("mistral-large") ||
+          name.include?("o1-") ||
+          name.include?("o3-")
+      end
+
+      private_class_method :infer_capabilities, :subscription_required?
     end
   end
 end

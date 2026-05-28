@@ -22,12 +22,31 @@ module OllamaAgent
       return [] unless uri
 
       key = api_key_string(api_key)
-      res = http_get(uri, api_key: key, open_timeout: open_timeout, read_timeout: read_timeout)
-      return [] unless res.is_a?(Net::HTTPSuccess)
+      all_names = []
+      page = 1
+      max_pages = 10 # Safety limit
 
-      names_from_tags_json(res.body)
+      loop do
+        page_uri = uri.dup
+        query = URI.decode_www_form(page_uri.query || "") << ["page", page]
+        page_uri.query = URI.encode_www_form(query)
+
+        res = http_get(page_uri, api_key: key, open_timeout: open_timeout, read_timeout: read_timeout)
+        break unless res.is_a?(Net::HTTPSuccess)
+
+        names = names_from_tags_json(res.body)
+        break if names.empty? || (names - all_names).empty? # Stop if no new names
+
+        all_names.concat(names)
+        break if names.size < 10 # Heuristic: if less than full page (assuming page size > 10)
+        
+        page += 1
+        break if page > max_pages
+      end
+
+      all_names.uniq.sort
     rescue StandardError
-      []
+      all_names.uniq.sort
     end
 
     # @param body [String] raw JSON from +/api/tags+
