@@ -14,7 +14,7 @@ module OllamaAgent
         "/clear"    => "Clear short-term context for this session",
         "/config"   => "Show current agent configuration",
         "/model"    => "Show or set chat model (usage: /model [name])",
-        "/models"   => "List available models and capabilities (usage: /models [filter])",
+        "/models"   => "List available models and capabilities (usage: /models [filter|--usable|--tools|--vision])",
         "/provider" => "Show or switch provider (usage: /provider [name])",
         "/index"    => "Summarise the project repository index",
         "/exit"     => "Exit the REPL"
@@ -271,6 +271,9 @@ module OllamaAgent
             models.select! { |m| m.provider == "local" }
           elsif query == "--loaded"
             models.select! { |m| m.status == "loaded" }
+          elsif query == "--usable"
+            usable = OllamaAgent::Providers::ModelRegistry.available_providers
+            models.select! { |m| usable.include?(m.provider) }
           else
             models.select! { |m| m.name.downcase.include?(query) || m.provider.downcase.include?(query) }
           end

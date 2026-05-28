@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "set"
 require_relative "model_descriptor"
 
 module OllamaAgent
@@ -165,6 +166,19 @@ module OllamaAgent
         caps << :thinking if THINKING_CAPABLE_PATTERNS.any? { |p| n.include?(p) }
 
         caps.uniq
+      end
+
+      # Returns the set of provider names for which an API key is configured in ENV.
+      # "local" is always included (Ollama runs locally by default).
+      def available_providers
+        present = ->(key) { ENV.fetch(key, nil).to_s.strip.then { |v| v unless v.empty? } }
+        providers = Set.new(["local"])
+        providers << "ollama_cloud" if present.call("OLLAMA_API_KEY")
+        providers << "openai"       if present.call("OPENAI_API_KEY")
+        providers << "anthropic"    if present.call("ANTHROPIC_API_KEY")
+        providers << "groq"         if present.call("GROQ_API_KEY") || present.call("GROQ_KEY")
+        providers << "openrouter"   if present.call("OPENROUTER_API_KEY")
+        providers
       end
 
       def subscription_required?(name)
