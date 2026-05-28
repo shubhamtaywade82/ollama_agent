@@ -294,7 +294,8 @@ module OllamaAgent
             caps = ["chat"]
             caps << "tools" if m.tools?
             caps << "vision" if m.vision?
-            caps << :reasoning if m.reasoning?
+            caps << "reasoning" if m.reasoning?
+            caps << "thinking" if m.thinking?
 
             size_info = m.size_gb ? " [#{m.size_gb} GB]" : ""
             status_info = m.status == "loaded" ? " \e[90m(loaded)\e[0m" : ""
