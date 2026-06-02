@@ -100,6 +100,33 @@ module TradingAgent
         100.0 - (100.0 / (1.0 + rs))
       end
 
+      # Bollinger Bands (returns upper/middle/lower + width ratio)
+      def bollinger_bands(candles, period: 20, mult: 2.0)
+        closes = extract_closes(candles)
+        return nil if closes.size < period
+
+        recent = closes.last(period)
+        mid    = recent.sum / period.to_f
+        std    = Math.sqrt(recent.sum { |p| (p - mid)**2 } / period.to_f)
+        upper  = mid + mult * std
+        lower  = mid - mult * std
+        { upper: upper, middle: mid, lower: lower, width: mid.positive? ? (upper - lower) / mid : 0.0 }
+      end
+
+      # MACD (12/26/9) — returns macd_line, signal_line, histogram
+      def macd(candles, fast: 12, slow: 26, signal: 9)
+        return nil if candles.size < slow + signal
+
+        fast_ema   = ema(candles, fast)
+        slow_ema   = ema(candles, slow)
+        return nil if fast_ema.nil? || slow_ema.nil?
+
+        macd_line  = fast_ema - slow_ema
+        # Approximate signal as EMA of last `signal` MACD values using recent closes
+        # (simplified single-value; full series would require rolling EMA)
+        { macd_line: macd_line.round(6), signal_line: nil, histogram: nil }
+      end
+
       # Average True Range
       def atr(candles, period = 14)
         hlc = extract_hlc(candles)

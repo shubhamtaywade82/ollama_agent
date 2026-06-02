@@ -23,8 +23,11 @@ module TradingAgent
         { price: 0.0 }
       end
 
-      def fetch_candles(symbol, interval, limit: 100)
-        @session.public_request(path: "/fapi/v1/klines", params: { symbol: symbol.upcase, interval: interval, limit: limit })
+      def fetch_candles(symbol, interval, limit: 100, start_time: nil, end_time: nil)
+        params = { symbol: symbol.upcase, interval: interval, limit: limit }
+        params[:startTime] = start_time if start_time
+        params[:endTime]   = end_time   if end_time
+        @session.public_request(path: "/fapi/v1/klines", params: params)
       rescue StandardError => e
         TradingAgent.logger.error("Failed to fetch futures candles for #{symbol}", error: e.message)
         []
