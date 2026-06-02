@@ -44,6 +44,10 @@ module OllamaAgent
   # The credential is placed on a long cooldown (~1 h); the key is deprioritised.
   class QuotaExhaustedError < Error; end
 
+  # HTTP 403 — the model requires an Ollama Pro/Max subscription.
+  # This is different from AuthenticationError because the key itself might be valid.
+  class SubscriptionRequiredError < Error; end
+
   # HTTP 401 / 403 — the API key is invalid or revoked.
   # The credential is permanently disabled; never retried.
   class AuthenticationError < Error; end

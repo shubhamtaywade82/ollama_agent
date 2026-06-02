@@ -14,7 +14,7 @@ module OllamaAgent
         "/clear"    => "Clear short-term context for this session",
         "/config"   => "Show current agent configuration",
         "/model"    => "Show or set chat model (usage: /model [name])",
-        "/models"   => "List available models and capabilities (usage: /models [filter])",
+        "/models"   => "List available models and capabilities (usage: /models [filter|--usable|--tools|--vision])",
         "/provider" => "Show or switch provider (usage: /provider [name])",
         "/index"    => "Summarise the project repository index",
         "/exit"     => "Exit the REPL"
@@ -62,6 +62,18 @@ module OllamaAgent
 
       def plugin_slash_command_strings
         safe_plugin_command_handlers.map { |h| h[:slash_command].to_s }
+      end
+
+      def runtime_command_palette
+        require_relative "../runtime_command_system/command_palette"
+
+        @runtime_command_palette ||= begin
+          commands = SLASH_COMMANDS.merge(plugin_slash_command_strings.to_h { |cmd| [cmd, "Plugin command"] })
+          OllamaAgent::RuntimeCommandSystem::CommandPalette.new(
+            commands: commands,
+            session: { agent: @agent }
+          )
+        end
       end
 
       def handle_slash(line)
@@ -216,6 +228,11 @@ module OllamaAgent
         descriptor = OllamaAgent::Providers::ModelRegistry.find(subcommand, agent: @agent)
 
         if descriptor
+          if descriptor.subscription_required?
+            @stdout.puts "  \e[33mWarning: Model '#{descriptor.name}' likely requires an Ollama subscription.\e[0m"
+            @stdout.puts "  If you are on the Free tier, you may encounter 403 Forbidden errors."
+          end
+
           if !descriptor.tools?
             @stdout.puts "  \e[33mWarning: Model '#{descriptor.name}' does not list tool calling capabilities.\e[0m"
             @stdout.puts "  Agentic tools (e.g. edit_file, diffs) may not work correctly."
@@ -254,6 +271,9 @@ module OllamaAgent
             models.select! { |m| m.provider == "local" }
           elsif query == "--loaded"
             models.select! { |m| m.status == "loaded" }
+          elsif query == "--usable"
+            usable = OllamaAgent::Providers::ModelRegistry.available_providers
+            models.select! { |m| usable.include?(m.provider) }
           else
             models.select! { |m| m.name.downcase.include?(query) || m.provider.downcase.include?(query) }
           end
@@ -278,12 +298,15 @@ module OllamaAgent
             caps << "tools" if m.tools?
             caps << "vision" if m.vision?
             caps << "reasoning" if m.reasoning?
+            caps << "thinking" if m.thinking?
 
             size_info = m.size_gb ? " [#{m.size_gb} GB]" : ""
             status_info = m.status == "loaded" ? " \e[90m(loaded)\e[0m" : ""
+            pro_info = m.subscription_required? ? " \e[33m(Pro)\e[0m" : ""
 
-            @stdout.puts "    \e[1m#{m.name.ljust(30)}\e[0m | ctx: #{m.context_size.to_s.ljust(6)} | caps: #{caps.join(",")}#{size_info}#{status_info}#{marker}"
-          end
+            @stdout.puts "    \e[1m#{m.name.ljust(30)}\e[0m | ctx: #{m.context_size.to_s.ljust(6)} | caps: #{caps.join(",")}#{size_info}#{status_info}#{pro_info}#{marker}"
+            end
+
         end
         @stdout.puts ""
       end

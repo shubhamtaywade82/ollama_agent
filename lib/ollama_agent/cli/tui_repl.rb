@@ -3,6 +3,11 @@
 require_relative "../tui"
 require_relative "../tui_user_prompt"
 require_relative "repl_shared"
+require_relative "../runtime_command_system/ast"
+require_relative "../runtime_command_system/session/runtime"
+require_relative "../runtime_command_system/dispatch/dispatcher"
+require_relative "../runtime_command_system/dispatch/handlers/model_handler"
+require_relative "../runtime_command_system/dispatch/handlers/provider_handler"
 
 module OllamaAgent
   class CLI
@@ -20,6 +25,9 @@ module OllamaAgent
         @memory = memory
         @budget = budget
         @assistant_hook_installed = false
+        @session_runtime = build_session_runtime
+        @dispatcher      = build_runtime_dispatcher
+        wire_runtime_events
       end
       # rubocop:enable Metrics/ParameterLists
 
@@ -50,19 +58,41 @@ module OllamaAgent
 
       private
 
+      def build_session_runtime
+        RuntimeCommandSystem::Session::Runtime.new(agent: @agent)
+      end
+
+      def build_runtime_dispatcher
+        RuntimeCommandSystem::Dispatch::Dispatcher.new.tap do |d|
+          d.register("model",    RuntimeCommandSystem::Dispatch::Handlers::ModelHandler.new)
+          d.register("provider", RuntimeCommandSystem::Dispatch::Handlers::ProviderHandler.new)
+        end
+      end
+
       def read_user_line
-        @tui.ask_user_line(completion_candidates: slash_completer_candidates)
+        model_badge = "\e[2m[#{@session_runtime.active_model}]\e[0m "
+        @tui.ask_user_line(
+          completion_candidates: slash_completer_candidates,
+          command_palette: runtime_command_palette,
+          prompt_prefix: model_badge
+        )
       rescue Interrupt
         nil
       end
 
       def dispatch_slash(line)
-        if line == "/status"
-          show_context_dashboard
-          return
-        end
+        return show_context_dashboard if line == "/status"
 
-        handle_slash(line)
+        ast = RuntimeCommandSystem::AST::Parser.parse(line)
+        if ast && @dispatcher.handles?(ast.name) && runtime_dispatchable?(ast)
+          @dispatcher.dispatch(ast, session: @session_runtime)
+        else
+          handle_slash(line)
+        end
+      rescue ArgumentError, NotImplementedError => e
+        @tui.print_error("  #{e.message}")
+      rescue OllamaAgent::Error => e
+        @tui.print_error("  Error: #{e.message}")
       end
 
       # rubocop:disable Metrics/MethodLength -- capture hook + errors + ensure
@@ -142,6 +172,31 @@ module OllamaAgent
 
         s = mem.summary
         "#{s[:short_term_entries]} short-term · #{s[:session_keys]} session keys"
+      end
+
+      def wire_runtime_events
+        @session_runtime.events.on(:model_switched) { |payload| on_model_switched(payload) }
+      end
+
+      def on_model_switched(payload)
+        descriptor = payload[:descriptor]
+        meta = descriptor ? "  #{descriptor.provider} • #{descriptor.context_size / 1000}k" : ""
+        caps = descriptor&.capabilities&.-([:chat])&.map { |c| "[#{c}]" }&.join(" ")
+        cap_str = caps && !caps.empty? ? "  #{caps}" : ""
+        @stdout.puts "  ✓ Model: \e[1;32m#{payload[:model]}\e[0m#{meta}#{cap_str}"
+      end
+
+      def session_runtime
+        @session_runtime
+      end
+
+      def runtime_dispatchable?(ast)
+        return false unless ast.argument_context?
+
+        arg = ast.arguments.first&.value.to_s.strip
+        return false if arg.empty? || arg.casecmp("list").zero?
+
+        true
       end
     end
     # rubocop:enable Metrics/ClassLength
