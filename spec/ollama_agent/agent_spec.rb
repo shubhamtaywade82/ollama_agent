@@ -311,9 +311,10 @@ RSpec.describe OllamaAgent::Agent do
       agent = described_class.new(client: instance_double(Ollama::Client), root: root, read_only: true,
                                   confirm_patches: false)
       args = agent.send(:chat_request_args, [])
-      expect(args[:tools].size).to eq(3)
       names = args[:tools].map { |t| t.dig(:function, :name) }
-      expect(names).not_to include("edit_file")
+      expect(names).to contain_exactly("read_file", "search_code", "list_files",
+                                       "list_directory_contents", "calculate")
+      expect(names).not_to include("edit_file", "write_file")
     end
 
     it "uses patch_policy to skip confirmation for auto-approved paths" do

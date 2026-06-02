@@ -10,6 +10,8 @@ module OllamaAgent
       DEFAULT_MAX_ATTEMPTS = RetryPolicy::DEFAULT_MAX_ATTEMPTS
       DEFAULT_BASE_DELAY   = RetryPolicy::DEFAULT_BASE_DELAY
 
+      attr_reader :client, :policy
+
       def initialize(client:, max_attempts: DEFAULT_MAX_ATTEMPTS, hooks: nil, base_delay: DEFAULT_BASE_DELAY)
         @client  = client
         @hooks   = hooks
