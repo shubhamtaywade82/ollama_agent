@@ -38,9 +38,7 @@ module OllamaAgent
     def execute_tool(name, args)
       args = coerce_tool_arguments(args)
 
-      if Tools::Registry.custom_tool?(name)
-        return Tools::Registry.execute_custom(name, args, root: @root, read_only: @read_only)
-      end
+      return Tools::Registry.execute_custom(name, args, root: @root, read_only: @read_only) if Tools::Registry.custom_tool?(name)
 
       case name
       when "read_file"            then execute_read_file(args)

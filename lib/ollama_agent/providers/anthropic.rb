@@ -248,11 +248,10 @@ module OllamaAgent
         when 401, 403 then raise OllamaAgent::AuthenticationError, "Anthropic auth failed (#{status}): #{err_msg}"
         when 402      then raise OllamaAgent::QuotaExhaustedError, "Anthropic quota exceeded: #{err_msg}"
         when 429
-          if err_msg.downcase.match?(/quota|credit|usage limit/)
-            raise OllamaAgent::QuotaExhaustedError, "Anthropic quota exhausted: #{err_msg}"
-          else
-            raise OllamaAgent::RateLimitError, "Anthropic rate limited (429): #{err_msg}"
-          end
+          raise OllamaAgent::QuotaExhaustedError, "Anthropic quota exhausted: #{err_msg}" if err_msg.downcase.match?(/quota|credit|usage limit/)
+
+          raise OllamaAgent::RateLimitError, "Anthropic rate limited (429): #{err_msg}"
+
         when 500..599 then raise OllamaAgent::TemporaryProviderError, "Anthropic server error #{status}: #{err_msg}"
         else               raise OllamaAgent::AnthropicAPIError, "Anthropic #{status}: #{err_msg}"
         end

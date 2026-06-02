@@ -70,9 +70,7 @@ module OllamaAgent
         post_condition_verifier = PostConditionVerifier.new(isolated_validator: validator)
         integration_queue = IntegrationQueue.new(db)
         resolved_hooks = hooks
-        if resolved_hooks.nil? && !logger.nil?
-          resolved_hooks = KernelEventLogger.new(logger: logger, rollback_signals: rollback_signals)
-        end
+        resolved_hooks = KernelEventLogger.new(logger: logger, rollback_signals: rollback_signals) if resolved_hooks.nil? && !logger.nil?
         KernelPipeline.new(
           workspace_root: root,
           database_registry: registry,

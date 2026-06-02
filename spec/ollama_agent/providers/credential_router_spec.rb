@@ -25,10 +25,8 @@ RSpec.describe OllamaAgent::Providers::CredentialRouter do
 
       creds[call_count % creds.size].tap { call_count += 1 }
     end
-    allow(pool).to receive(:any_available?).and_return(creds.any?(&:available?))
-    allow(pool).to receive(:all_status).and_return([])
-    allow(pool).to receive(:aggregate_usage).and_return({})
-    allow(pool).to receive(:near_exhaustion_ids).and_return([])
+    allow(pool).to receive_messages(any_available?: creds.any?(&:available?), all_status: [], aggregate_usage: {},
+                                    near_exhaustion_ids: [])
     pool
   end
 
@@ -37,6 +35,7 @@ RSpec.describe OllamaAgent::Providers::CredentialRouter do
   end
 
   let(:monitor) { instance_double(OllamaAgent::Providers::HealthMonitor) }
+
   before do
     allow(monitor).to receive(:record_success)
     allow(monitor).to receive(:record_failure)
@@ -73,9 +72,9 @@ RSpec.describe OllamaAgent::Providers::CredentialRouter do
       providers_map = { "a" => provider_a, "b" => provider_b }
       pool   = make_pool([cred_a, cred_b])
       router = described_class.new(
-        pool:             pool,
+        pool: pool,
         provider_builder: ->(c) { providers_map[c.id] },
-        health_monitor:   monitor
+        health_monitor: monitor
       )
 
       response = router.chat(messages: [], model: "gpt-4o")
@@ -116,7 +115,7 @@ RSpec.describe OllamaAgent::Providers::CredentialRouter do
   describe "#available?" do
     it "delegates to pool#any_available?" do
       pool   = make_pool([make_cred("k1")])
-      router = described_class.new(pool: pool, provider_builder: ->(_c) { nil }, health_monitor: monitor)
+      router = described_class.new(pool: pool, provider_builder: ->(_c) {}, health_monitor: monitor)
       expect(router.available?).to be true
     end
   end

@@ -4,9 +4,9 @@ require "spec_helper"
 require "ollama_agent/providers/quota_tracker"
 
 RSpec.describe OllamaAgent::Providers::QuotaTracker do
-  let(:limits) { { rpm: 10, tpm: 1000, daily_tokens: 5000, daily_requests: 100 } }
-
   subject(:tracker) { described_class.new(limits: limits) }
+
+  let(:limits) { { rpm: 10, tpm: 1000, daily_tokens: 5000, daily_requests: 100 } }
 
   describe "#record" do
     it "accumulates daily tokens from usage hash" do

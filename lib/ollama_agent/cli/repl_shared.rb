@@ -233,7 +233,7 @@ module OllamaAgent
             @stdout.puts "  If you are on the Free tier, you may encounter 403 Forbidden errors."
           end
 
-          if !descriptor.tools?
+          unless descriptor.tools?
             @stdout.puts "  \e[33mWarning: Model '#{descriptor.name}' does not list tool calling capabilities.\e[0m"
             @stdout.puts "  Agentic tools (e.g. edit_file, diffs) may not work correctly."
           end
@@ -263,15 +263,16 @@ module OllamaAgent
 
         if filter && !filter.strip.empty?
           query = filter.strip.downcase
-          if query == "--vision"
+          case query
+          when "--vision"
             models.select!(&:vision?)
-          elsif query == "--tools"
+          when "--tools"
             models.select!(&:tools?)
-          elsif query == "--local"
+          when "--local"
             models.select! { |m| m.provider == "local" }
-          elsif query == "--loaded"
+          when "--loaded"
             models.select! { |m| m.status == "loaded" }
-          elsif query == "--usable"
+          when "--usable"
             usable = OllamaAgent::Providers::ModelRegistry.available_providers
             models.select! { |m| usable.include?(m.provider) }
           else
@@ -289,7 +290,7 @@ module OllamaAgent
         @stdout.puts "\n\e[1mRegistered Inference Models:\e[0m"
         grouped.each do |provider, list|
           @stdout.puts "\n  \e[1;36m#{provider.upcase}\e[0m"
-          @stdout.puts "  " + "─" * 60
+          @stdout.puts "  #{"─" * 60}"
           list.each do |m|
             is_current = m.name.casecmp(@agent.model.to_s).zero?
             marker = is_current ? " \e[32m● (current)\e[0m" : ""
@@ -305,8 +306,7 @@ module OllamaAgent
             pro_info = m.subscription_required? ? " \e[33m(Pro)\e[0m" : ""
 
             @stdout.puts "    \e[1m#{m.name.ljust(30)}\e[0m | ctx: #{m.context_size.to_s.ljust(6)} | caps: #{caps.join(",")}#{size_info}#{status_info}#{pro_info}#{marker}"
-            end
-
+          end
         end
         @stdout.puts ""
       end

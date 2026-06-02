@@ -88,9 +88,7 @@ module OllamaAgent
         min_len = schema["minLength"]
         max_len = schema["maxLength"]
 
-        if min_len && value.length < min_len
-          @errors << "#{name}: length #{value.length} is less than minLength #{min_len}"
-        end
+        @errors << "#{name}: length #{value.length} is less than minLength #{min_len}" if min_len && value.length < min_len
         return unless max_len && value.length > max_len
 
         @errors << "#{name}: length #{value.length} exceeds maxLength #{max_len}"

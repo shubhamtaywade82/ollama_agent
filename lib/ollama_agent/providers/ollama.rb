@@ -28,7 +28,7 @@ module OllamaAgent
         super(name: "ollama", **)
         @api_key = api_key || ENV.fetch("OLLAMA_API_KEY", nil)
         @host    = host    || ENV.fetch("OLLAMA_BASE_URL", nil) ||
-                              ENV.fetch("OLLAMA_HOST", LOCAL_HOST)
+                   ENV.fetch("OLLAMA_HOST", LOCAL_HOST)
         @timeout = timeout || DEFAULT_TIMEOUT
       end
 
@@ -109,11 +109,11 @@ module OllamaAgent
         require_relative "../ollama_connection"
 
         OllamaAgent::OllamaConnection.retry_wrapped_client(
-          timeout:      @timeout,
+          timeout: @timeout,
           max_attempts: options.fetch(:max_retries, 3),
-          base_url:     @host,
-          api_key:      @api_key,
-          hooks:        nil
+          base_url: @host,
+          api_key: @api_key,
+          hooks: nil
         )
       end
 
@@ -133,8 +133,8 @@ module OllamaAgent
         raise OllamaAgent::Error, "Empty response from Ollama" if msg.nil?
 
         message = {
-          role:       msg.role,
-          content:    msg.content,
+          role: msg.role,
+          content: msg.content,
           tool_calls: normalize_tool_calls(msg.tool_calls)
         }
 
@@ -145,13 +145,11 @@ module OllamaAgent
       rescue StandardError => e
         msg = e.message.to_s
         # Map Ollama Cloud HTTP errors into the typed hierarchy
-        if msg.match?(/\b403\b/) && msg.match?(/subscription/i)
-          raise OllamaAgent::SubscriptionRequiredError, msg
-        end
+        raise OllamaAgent::SubscriptionRequiredError, msg if msg.match?(/\b403\b/) && msg.match?(/subscription/i)
 
         raise OllamaAgent::AuthenticationError, msg if msg.match?(/\b(401|403)\b/)
         raise OllamaAgent::RateLimitError, msg       if msg.match?(/\b429\b/) &&
-                                                         !msg.downcase.match?(/quota|limit/)
+                                                        !msg.downcase.match?(/quota|limit/)
         raise OllamaAgent::QuotaExhaustedError, msg  if msg.match?(/\b429\b/)
         raise OllamaAgent::TemporaryProviderError, msg if msg.match?(/\b5\d{2}\b/)
 

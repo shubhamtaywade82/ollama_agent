@@ -186,9 +186,7 @@ module OllamaAgent
         @stdout.puts "  ✓ Model: \e[1;32m#{payload[:model]}\e[0m#{meta}#{cap_str}"
       end
 
-      def session_runtime
-        @session_runtime
-      end
+      attr_reader :session_runtime
 
       def runtime_dispatchable?(ast)
         return false unless ast.argument_context?

@@ -68,18 +68,15 @@ module OllamaAgent
             @health_monitor.record_success(credential, latency_ms: latency)
 
             return response
-
-          rescue OllamaAgent::Error, StandardError => raw_error
-            typed = ErrorClassifier.classify(raw_error)
+          rescue OllamaAgent::Error, StandardError => e
+            typed = ErrorClassifier.classify(e)
             credential.mark_failure!(typed)
             @health_monitor.record_failure(credential, typed)
 
             # AuthenticationError → permanent disable, bubble up immediately
             raise typed if typed.is_a?(OllamaAgent::AuthenticationError)
 
-            if last_cred && last_cred != credential
-              @health_monitor.record_switch(last_cred, credential, typed.class.name)
-            end
+            @health_monitor.record_switch(last_cred, credential, typed.class.name) if last_cred && last_cred != credential
 
             # If not retryable with another credential, bubble up
             raise typed unless ErrorClassifier.retryable_with_other_credential?(typed)

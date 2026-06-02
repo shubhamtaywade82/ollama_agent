@@ -55,9 +55,7 @@ module OllamaAgent
       def execute(intent:, manifest_id:, mode: "normal")
         intent = normalize_intent(intent)
         kind = intent[:kind].to_s
-        unless SUPPORTED_KINDS.include?(kind)
-          return emit_pipeline_complete(manifest_id, unknown_kind_reply(manifest_id, kind))
-        end
+        return emit_pipeline_complete(manifest_id, unknown_kind_reply(manifest_id, kind)) unless SUPPORTED_KINDS.include?(kind)
 
         ge = guard_delete_rename_paths_if_applicable(intent, kind)
         if ge
@@ -115,9 +113,7 @@ module OllamaAgent
         case kind
         when "atomic_write", "edit_file", "apply_patch"
           materialized = materialize_intent(intent)
-          unless materialized[:ok]
-            return abort_precondition_failed(manifest_id, lock_outcome[:leases], materialized[:error])
-          end
+          return abort_precondition_failed(manifest_id, lock_outcome[:leases], materialized[:error]) unless materialized[:ok]
 
           advance_or_fail(:locked, "locked", manifest_id, lock_outcome[:leases], materialized[:intent], intent_hash,
                           stamp, mode, enqueue_kind: enqueue_kind)
@@ -403,9 +399,7 @@ module OllamaAgent
           else
             apply_atomic_write(intent, intent_hash, manifest_id, stamp, mode, lease[:fencing_token])
           end
-        unless write_outcome == :written
-          return abort_compensated(manifest_id, lease_handles, "mutator #{write_outcome}")
-        end
+        return abort_compensated(manifest_id, lease_handles, "mutator #{write_outcome}") unless write_outcome == :written
 
         verify_commit_tail(manifest_id, lease_handles, stamp, intent, enqueue_kind: enqueue_kind)
       end

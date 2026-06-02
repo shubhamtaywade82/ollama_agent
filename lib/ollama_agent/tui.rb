@@ -227,11 +227,11 @@ module OllamaAgent
 
     def render_credential_status_box(pool_status)
       table = TTY::Table.new(header: [
-        @pastel.bold("Credential"),
-        @pastel.bold("Provider"),
-        @pastel.bold("Status"),
-        @pastel.bold("Quota")
-      ])
+                               @pastel.bold("Credential"),
+                               @pastel.bold("Provider"),
+                               @pastel.bold("Status"),
+                               @pastel.bold("Quota")
+                             ])
 
       pool_status.each do |cred|
         table << [
@@ -293,12 +293,16 @@ module OllamaAgent
     end
 
     def quota_bar(pct)
-      return @pastel.dim("n/a") unless pct && pct.positive?
+      return @pastel.dim("n/a") unless pct&.positive?
 
       filled = (pct * 10).round.clamp(0, 10)
       bar    = ("█" * filled) + ("░" * (10 - filled))
       label  = "#{(pct * 100).round}%"
-      color  = pct >= 0.9 ? :red : pct >= 0.7 ? :yellow : :green
+      color  = if pct >= 0.9
+                 :red
+               else
+                 pct >= 0.7 ? :yellow : :green
+               end
       @pastel.send(color, "#{bar} #{label}")
     end
 

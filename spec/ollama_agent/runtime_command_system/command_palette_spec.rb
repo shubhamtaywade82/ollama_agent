@@ -4,6 +4,8 @@ require "spec_helper"
 require "ollama_agent/runtime_command_system/command_palette"
 
 RSpec.describe OllamaAgent::RuntimeCommandSystem::CommandPalette do
+  subject(:palette) { described_class.new(commands: commands, session: { agent: agent }) }
+
   let(:commands) do
     {
       "/model" => "Switch active model",
@@ -17,24 +19,22 @@ RSpec.describe OllamaAgent::RuntimeCommandSystem::CommandPalette do
 
   before do
     allow(OllamaAgent::Providers::ModelRegistry).to receive(:all).and_return([
-      OllamaAgent::Providers::ModelDescriptor.new(
-        name: "qwen3:32b",
-        provider: "local",
-        context_size: 32_768,
-        capabilities: %i[chat tools],
-        status: "loaded"
-      ),
-      OllamaAgent::Providers::ModelDescriptor.new(
-        name: "deepseek-r1:8b",
-        provider: "local",
-        context_size: 32_768,
-        capabilities: %i[chat reasoning],
-        status: "available"
-      )
-    ])
+                                                                               OllamaAgent::Providers::ModelDescriptor.new(
+                                                                                 name: "qwen3:32b",
+                                                                                 provider: "local",
+                                                                                 context_size: 32_768,
+                                                                                 capabilities: %i[chat tools],
+                                                                                 status: "loaded"
+                                                                               ),
+                                                                               OllamaAgent::Providers::ModelDescriptor.new(
+                                                                                 name: "deepseek-r1:8b",
+                                                                                 provider: "local",
+                                                                                 context_size: 32_768,
+                                                                                 capabilities: %i[chat reasoning],
+                                                                                 status: "available"
+                                                                               )
+                                                                             ])
   end
-
-  subject(:palette) { described_class.new(commands: commands, session: { agent: agent }) }
 
   it "suggests slash commands by prefix" do
     suggestions = palette.suggestions("/mod")

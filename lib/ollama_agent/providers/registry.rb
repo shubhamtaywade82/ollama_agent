@@ -34,21 +34,21 @@ module OllamaAgent
     #   ])
     module Registry
       BUILT_IN = {
-        "ollama"       => Ollama,
+        "ollama" => Ollama,
         "ollama_cloud" => Ollama,
-        "openai"       => OpenAI,
-        "anthropic"    => Anthropic,
+        "openai" => OpenAI,
+        "anthropic" => Anthropic,
         # OpenAI-compatible aliases — use openai provider with custom base_url
-        "groq"         => OpenAI,
-        "together"     => OpenAI,
-        "openrouter"   => OpenAI
+        "groq" => OpenAI,
+        "together" => OpenAI,
+        "openrouter" => OpenAI
       }.freeze
 
       # Default base URLs for external providers
       COMPATIBLE_URLS = {
-        "groq"         => "https://api.groq.com/openai/v1",
-        "together"     => "https://api.together.xyz/v1",
-        "openrouter"   => "https://openrouter.ai/api/v1",
+        "groq" => "https://api.groq.com/openai/v1",
+        "together" => "https://api.together.xyz/v1",
+        "openrouter" => "https://openrouter.ai/api/v1",
         "ollama_cloud" => "https://api.ollama.com"
       }.freeze
 
@@ -104,19 +104,19 @@ module OllamaAgent
           mon   = HealthMonitor.new(hooks: hooks)
 
           CredentialRouter.new(
-            pool:             pool,
+            pool: pool,
             provider_builder: method(:build_provider_for_credential),
-            health_monitor:   mon
+            health_monitor: mon
           )
         end
 
         # Returns a provider that is available right now.
         # Checks Ollama first (free/local), then OpenAI, then Anthropic.
-        def auto_provider(**opts)
+        def auto_provider(**)
           candidates = [
-            BUILT_IN["ollama"].new(**opts),
-            (BUILT_IN["openai"].new(**opts)    if ENV["OPENAI_API_KEY"]),
-            (BUILT_IN["anthropic"].new(**opts) if ENV["ANTHROPIC_API_KEY"])
+            BUILT_IN["ollama"].new(**),
+            (BUILT_IN["openai"].new(**)    if ENV["OPENAI_API_KEY"]),
+            (BUILT_IN["anthropic"].new(**) if ENV["ANTHROPIC_API_KEY"])
           ].compact
 
           Router.new(providers: candidates, strategy: :first_available)
@@ -135,13 +135,13 @@ module OllamaAgent
         def build_credential(cfg)
           cfg = cfg.transform_keys(&:to_sym)
           Credential.new(
-            id:       cfg.fetch(:id),
+            id: cfg.fetch(:id),
             provider: cfg.fetch(:provider),
-            api_key:  cfg[:api_key],
+            api_key: cfg[:api_key],
             base_url: cfg[:base_url] || COMPATIBLE_URLS[cfg[:provider].to_s],
-            weight:   cfg.fetch(:weight, 1),
-            limits:   cfg.fetch(:limits, {}),
-            name:     cfg[:name]
+            weight: cfg.fetch(:weight, 1),
+            limits: cfg.fetch(:limits, {}),
+            name: cfg[:name]
           )
         end
 

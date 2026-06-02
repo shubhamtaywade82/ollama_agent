@@ -54,9 +54,7 @@ RSpec.describe "LockManager deadlock fuzz", :concurrency do
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 30
       threads.each do |th|
         while th.alive?
-          if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
-            raise Timeout::Error, "lock fuzz exceeded 30s wall clock"
-          end
+          raise Timeout::Error, "lock fuzz exceeded 30s wall clock" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
 
           th.join(0.05)
         end

@@ -9,7 +9,7 @@ RSpec.describe OllamaAgent::Providers::ModelDescriptor do
       name: "qwen2.5-coder:14b",
       provider: "local",
       context_size: 32_768,
-      capabilities: [:chat, :tools],
+      capabilities: %i[chat tools],
       size_gb: 9.2,
       status: "loaded"
     )

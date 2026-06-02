@@ -4,6 +4,8 @@ require "spec_helper"
 require "ollama_agent/cli/tui_repl"
 
 RSpec.describe OllamaAgent::CLI::TuiRepl do
+  subject(:repl) { described_class.new(agent: agent, tui: tui, stdout: stdout) }
+
   let(:stdout) { StringIO.new }
   let(:agent) do
     instance_double(
@@ -19,8 +21,6 @@ RSpec.describe OllamaAgent::CLI::TuiRepl do
     allow(OllamaAgent::Providers::ModelRegistry).to receive(:find).and_return(nil)
     allow(agent).to receive(:assign_chat_model!).and_return("deepseek-r1")
   end
-
-  subject(:repl) { described_class.new(agent: agent, tui: tui, stdout: stdout) }
 
   describe "#dispatch_slash routing" do
     it "routes /model <name> through the RuntimeDispatcher (calls assign_chat_model!)" do

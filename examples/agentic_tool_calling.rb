@@ -41,9 +41,9 @@ end
 # ── Build a runner pointed at this repo ──────────────────────────────────────
 
 runner = OllamaAgent::Runner.build(
-  root:      Dir.pwd,
-  model:     MODEL,
-  read_only: true   # these tools are safe in read-only mode; no patches needed
+  root: Dir.pwd,
+  model: MODEL,
+  read_only: true # these tools are safe in read-only mode; no patches needed
 )
 
 puts "OllamaAgent — agentic tool calling demo"

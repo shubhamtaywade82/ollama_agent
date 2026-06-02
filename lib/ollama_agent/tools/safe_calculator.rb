@@ -30,10 +30,10 @@ module OllamaAgent
       # Operator table: precedence, associativity, arity.
       # Unary +/- are prefixed with 'u' to distinguish from binary operators.
       OPERATORS = {
-        "+"  => { precedence: 1, assoc: :left,  arity: 2 },
-        "-"  => { precedence: 1, assoc: :left,  arity: 2 },
-        "*"  => { precedence: 2, assoc: :left,  arity: 2 },
-        "/"  => { precedence: 2, assoc: :left,  arity: 2 },
+        "+" => { precedence: 1, assoc: :left,  arity: 2 },
+        "-" => { precedence: 1, assoc: :left,  arity: 2 },
+        "*" => { precedence: 2, assoc: :left,  arity: 2 },
+        "/" => { precedence: 2, assoc: :left,  arity: 2 },
         "**" => { precedence: 3, assoc: :right, arity: 2 },
         "u+" => { precedence: 4, assoc: :right, arity: 1 },
         "u-" => { precedence: 4, assoc: :right, arity: 1 }

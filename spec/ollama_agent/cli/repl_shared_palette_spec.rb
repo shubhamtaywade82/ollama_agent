@@ -5,6 +5,8 @@ require "ollama_agent/cli/repl_shared"
 require "ollama_agent/runtime_command_system/command_palette"
 
 RSpec.describe "ReplShared#runtime_command_palette" do
+  subject(:obj) { test_class.new(agent) }
+
   let(:test_class) do
     Class.new do
       include OllamaAgent::CLI::ReplShared
@@ -19,7 +21,6 @@ RSpec.describe "ReplShared#runtime_command_palette" do
   end
 
   let(:agent) { instance_double(OllamaAgent::Agent) }
-  subject(:obj) { test_class.new(agent) }
 
   before do
     allow(OllamaAgent::Plugins::Registry).to receive(:all_command_handlers).and_return([])

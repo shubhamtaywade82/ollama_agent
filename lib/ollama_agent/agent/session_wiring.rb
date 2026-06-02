@@ -11,9 +11,7 @@ module OllamaAgent
         prior    = @session_id && @resume ? Session::Store.resume(session_id: @session_id, root: @root) : []
         messages = prior.empty? ? [{ role: "system", content: system_prompt }] : prior
         first = messages.first
-        unless first && (first[:role] == "system" || first["role"] == "system")
-          messages.unshift({ role: "system", content: system_prompt })
-        end
+        messages.unshift({ role: "system", content: system_prompt }) unless first && (first[:role] == "system" || first["role"] == "system")
 
         messages << { role: "user", content: query }
         Session::Store.save(session_id: @session_id, root: @root, message: messages.last) if @session_id
@@ -44,9 +42,7 @@ module OllamaAgent
         ctx = build_tool_context
 
         # Permission check
-        if @permissions && !@permissions.allowed?(name)
-          return "Permission denied: tool '#{name}' is not allowed under the current permission profile (#{@permissions.profile})."
-        end
+        return "Permission denied: tool '#{name}' is not allowed under the current permission profile (#{@permissions.profile})." if @permissions && !@permissions.allowed?(name)
 
         # Policy check
         if @policies

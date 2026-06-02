@@ -70,7 +70,7 @@ module OllamaAgent
       stdout:          $stdout,
       # v2 platform options
       provider:        nil,
-      credentials:     nil,   # Array<Hash> — multi-key credential pool config
+      credentials:     nil, # Array<Hash> — multi-key credential pool config
       permissions:     nil,
       budget:          nil,
       memory:          nil,
@@ -140,9 +140,7 @@ module OllamaAgent
             provider: "ollama_cloud",
             api_key: key
           }
-        end
 
-        (1..5).each do |i|
           key = ENV.fetch("OPENAI_API_KEY_#{i}", nil)
           next if key.nil? || key.strip.empty?
 
@@ -151,9 +149,7 @@ module OllamaAgent
             provider: "openai",
             api_key: key
           }
-        end
 
-        (1..5).each do |i|
           key = ENV.fetch("ANTHROPIC_API_KEY_#{i}", nil)
           next if key.nil? || key.strip.empty?
 
@@ -210,6 +206,5 @@ module OllamaAgent
 
       Streaming::ConsoleStreamer.new.attach(@agent.hooks) if stream
     end
-    # rubocop:enable Metrics/MethodLength, Metrics/ParameterLists
   end
 end

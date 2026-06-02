@@ -90,16 +90,16 @@ module OllamaAgent
         @mutex.synchronize do
           maybe_reset_daily!
           {
-            daily_tokens:        @daily_tokens,
-            daily_tokens_limit:  @limits[:daily_tokens],
-            daily_requests:      @daily_requests,
+            daily_tokens: @daily_tokens,
+            daily_tokens_limit: @limits[:daily_tokens],
+            daily_requests: @daily_requests,
             daily_requests_limit: @limits[:daily_requests],
-            rpm:                 @rpm_window.current_rate,
-            rpm_limit:           @limits[:rpm],
-            tpm:                 @tpm_window.current_rate,
-            tpm_limit:           @limits[:tpm],
-            daily_pct:           daily_pct,
-            resets_at:           @daily_reset_at
+            rpm: @rpm_window.current_rate,
+            rpm_limit: @limits[:rpm],
+            tpm: @tpm_window.current_rate,
+            tpm_limit: @limits[:tpm],
+            daily_pct: daily_pct,
+            resets_at: @daily_reset_at
           }
         end
       end

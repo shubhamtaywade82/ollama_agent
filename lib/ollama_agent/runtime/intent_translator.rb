@@ -128,9 +128,7 @@ module OllamaAgent
 
       def normalize_edits_from_args(args)
         return args[:edits].map { |e| normalize_edit_pair(e) } if args[:edits].is_a?(Array)
-        if args.key?(:search) && args.key?(:replace)
-          return [{ search: args[:search].to_s, replace: args[:replace].to_s }]
-        end
+        return [{ search: args[:search].to_s, replace: args[:replace].to_s }] if args.key?(:search) && args.key?(:replace)
 
         raise ArgumentError, "edit_file requires diff, edits[], or search+replace"
       end

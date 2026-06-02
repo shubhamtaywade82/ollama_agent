@@ -7,8 +7,7 @@ RSpec.describe OllamaAgent::Providers::ModelRegistry do
   let(:agent) { instance_double(OllamaAgent::Agent) }
 
   before do
-    allow(agent).to receive(:list_local_model_names).and_return([])
-    allow(agent).to receive(:list_cloud_model_names).and_return([])
+    allow(agent).to receive_messages(list_local_model_names: [], list_cloud_model_names: [])
     allow(described_class).to receive(:fetch_local_models).and_return([])
   end
 
@@ -22,7 +21,7 @@ RSpec.describe OllamaAgent::Providers::ModelRegistry do
     it "includes local Ollama models when agent is supplied" do
       allow(agent).to receive(:list_local_model_names).and_return(["qwen2.5-coder:14b", "deepseek-r1:8b"])
       list = described_class.all(agent: agent)
-      
+
       qwen = list.find { |m| m.name == "qwen2.5-coder:14b" }
       expect(qwen).not_to be_nil
       expect(qwen.provider).to eq("local")

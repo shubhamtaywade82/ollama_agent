@@ -48,7 +48,11 @@ module OllamaAgent
           if File.directory?(full)
             lines << "  [DIR]  #{name}/"
           else
-            size = (File.size(full) rescue nil)
+            size = begin
+              File.size(full)
+            rescue StandardError
+              nil
+            end
             lines << (size ? "  [FILE] #{name} (#{size} bytes)" : "  [FILE] #{name}")
           end
         end

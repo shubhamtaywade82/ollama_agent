@@ -65,13 +65,13 @@ RSpec.describe OllamaAgent::TUI do
     it "saves history to file after reading a line" do
       tui = described_class.new(stdout: out, stderr: out)
       reader = tui.instance_variable_get(:@slash_reader)
-      
+
       # Mock the actual terminal read to return user input and update history
-      allow(reader).to receive(:read_line).and_wrap_original do |original_method, *args|
+      allow(reader).to receive(:read_line).and_wrap_original do |_original_method, *_args|
         reader.add_to_history("new_command")
         "new_command"
       end
-      
+
       tui.ask_user_line(completion_candidates: ["/help"])
 
       expect(File.exist?(temp_history_file)).to be true
@@ -85,7 +85,10 @@ RSpec.describe OllamaAgent::TUI do
       slash_reader = instance_double(OllamaAgent::TuiSlashReader)
       allow(slash_reader).to receive(:completion_candidates=)
       allow(slash_reader).to receive(:command_palette=)
-      allow(slash_reader).to receive(:read_line) { |prompt| captured_prompt = prompt; "" }
+      allow(slash_reader).to receive(:read_line) { |prompt|
+        captured_prompt = prompt
+        ""
+      }
 
       tui = described_class.new(stdout: StringIO.new)
       tui.instance_variable_set(:@slash_reader, slash_reader)

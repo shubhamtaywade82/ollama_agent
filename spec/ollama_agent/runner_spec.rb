@@ -42,10 +42,10 @@ RSpec.describe OllamaAgent::Runner do
 
     it "auto-detects multiple Ollama Cloud keys from environment" do
       stub_const("ENV", ENV.to_h.merge(
-        "OLLAMA_API_KEY_1" => "key-1",
-        "OLLAMA_API_KEY_2" => "key-2",
-        "OLLAMA_API_KEY_5" => "key-5"
-      ))
+                          "OLLAMA_API_KEY_1" => "key-1",
+                          "OLLAMA_API_KEY_2" => "key-2",
+                          "OLLAMA_API_KEY_5" => "key-5"
+                        ))
       runner = described_class.build(root: tmpdir)
       expect(runner.instance_variable_get(:@credential_router)).to be_a(OllamaAgent::Providers::CredentialRouter)
 

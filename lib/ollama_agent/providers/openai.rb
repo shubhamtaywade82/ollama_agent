@@ -219,11 +219,10 @@ module OllamaAgent
         when 401, 403 then raise OllamaAgent::AuthenticationError, "OpenAI auth failed (#{status}): #{err_msg}"
         when 402      then raise OllamaAgent::QuotaExhaustedError, "OpenAI quota exceeded: #{err_msg}"
         when 429
-          if err_msg.downcase.match?(/quota|limit exceeded|out of credits/)
-            raise OllamaAgent::QuotaExhaustedError, "OpenAI quota exhausted: #{err_msg}"
-          else
-            raise OllamaAgent::RateLimitError, "OpenAI rate limited (429): #{err_msg}"
-          end
+          raise OllamaAgent::QuotaExhaustedError, "OpenAI quota exhausted: #{err_msg}" if err_msg.downcase.match?(/quota|limit exceeded|out of credits/)
+
+          raise OllamaAgent::RateLimitError, "OpenAI rate limited (429): #{err_msg}"
+
         when 500..599 then raise OllamaAgent::TemporaryProviderError, "OpenAI server error #{status}: #{err_msg}"
         else               raise OllamaAgent::Error, "OpenAI error #{status}: #{err_msg}"
         end

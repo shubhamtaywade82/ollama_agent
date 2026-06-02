@@ -21,12 +21,29 @@ RSpec.describe OllamaAgent::Tools::SafeCalculator do
   end
 
   describe "#call — basic arithmetic" do
-    it "adds integers"             do expect(calc("2 + 3")).to eq("5.0") end
-    it "subtracts integers"        do expect(calc("10 - 4")).to eq("6.0") end
-    it "multiplies integers"       do expect(calc("3 * 4")).to eq("12.0") end
-    it "divides integers"          do expect(calc("10 / 4")).to eq("2.5") end
-    it "handles exponentiation"    do expect(calc("2 ** 10")).to eq("1024.0") end
-    it "handles float literals"    do expect(calc("1.5 + 2.5")).to eq("4.0") end
+    it "adds integers" do
+      expect(calc("2 + 3")).to eq("5.0")
+    end
+
+    it "subtracts integers" do
+      expect(calc("10 - 4")).to eq("6.0")
+    end
+
+    it "multiplies integers" do
+      expect(calc("3 * 4")).to eq("12.0")
+    end
+
+    it "divides integers" do
+      expect(calc("10 / 4")).to eq("2.5")
+    end
+
+    it "handles exponentiation" do
+      expect(calc("2 ** 10")).to eq("1024.0")
+    end
+
+    it "handles float literals" do
+      expect(calc("1.5 + 2.5")).to eq("4.0")
+    end
   end
 
   describe "#call — operator precedence" do
@@ -56,8 +73,14 @@ RSpec.describe OllamaAgent::Tools::SafeCalculator do
   end
 
   describe "#call — unary operators" do
-    it "handles unary minus"  do expect(calc("-5 + 10")).to eq("5.0") end
-    it "handles unary plus"   do expect(calc("+5")).to eq("5.0") end
+    it "handles unary minus" do
+      expect(calc("-5 + 10")).to eq("5.0")
+    end
+
+    it "handles unary plus" do
+      expect(calc("+5")).to eq("5.0")
+    end
+
     it "handles unary on sub-expression" do
       expect(calc("-(3 + 2)")).to eq("-5.0")
     end

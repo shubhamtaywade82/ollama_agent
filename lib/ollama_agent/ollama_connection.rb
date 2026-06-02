@@ -34,10 +34,10 @@ module OllamaAgent
         base_url: base_url, timeout: timeout, api_key: api_key
       ))
       Resilience::RetryMiddleware.new(
-        client:       inner,
+        client: inner,
         max_attempts: max_attempts,
-        hooks:        hooks,
-        base_delay:   base_delay || Resilience::RetryMiddleware::DEFAULT_BASE_DELAY
+        hooks: hooks,
+        base_delay: base_delay || Resilience::RetryMiddleware::DEFAULT_BASE_DELAY
       )
     end
 
@@ -56,4 +56,3 @@ module OllamaAgent
     private_class_method :config_for_client
   end
 end
-

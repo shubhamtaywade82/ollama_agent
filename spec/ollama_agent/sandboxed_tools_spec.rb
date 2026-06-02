@@ -81,10 +81,10 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       File.write(File.join(tmpdir, "a", "b", "deep.txt"), "1")
       File.write(File.join(tmpdir, "a", "shallow.txt"), "2")
       out = agent.send(:execute_tool, "list_files", {
-                          "directory" => ".",
-                          "max_entries" => 50,
-                          "max_depth" => 2
-                        })
+                         "directory" => ".",
+                         "max_entries" => 50,
+                         "max_depth" => 2
+                       })
       expect(out).to include("a/shallow.txt")
       expect(out).not_to include("deep.txt")
     end

@@ -39,7 +39,7 @@ module OllamaAgent
 
         all_names.concat(names)
         break if names.size < 10 # Heuristic: if less than full page (assuming page size > 10)
-        
+
         page += 1
         break if page > max_pages
       end

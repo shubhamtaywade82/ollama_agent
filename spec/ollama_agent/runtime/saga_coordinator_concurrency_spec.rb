@@ -67,9 +67,7 @@ RSpec.describe OllamaAgent::Runtime::SagaCoordinator, :concurrency do
       deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60
       threads.each do |th|
         while th.alive?
-          if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
-            raise Timeout::Error, "saga concurrency join exceeded 60s wall clock"
-          end
+          raise Timeout::Error, "saga concurrency join exceeded 60s wall clock" if Process.clock_gettime(Process::CLOCK_MONOTONIC) > deadline
 
           th.join(0.05)
         end

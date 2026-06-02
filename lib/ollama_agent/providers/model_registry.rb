@@ -1,6 +1,5 @@
 # frozen_string_literal: true
 
-require "set"
 require_relative "model_descriptor"
 
 module OllamaAgent
@@ -8,20 +7,28 @@ module OllamaAgent
     module ModelRegistry
       KNOWN_MODELS = [
         # OpenAI
-        ModelDescriptor.new(name: "gpt-4o", provider: "openai", context_size: 128_000, capabilities: [:chat, :tools, :vision], status: "available"),
-        ModelDescriptor.new(name: "gpt-4o-mini", provider: "openai", context_size: 128_000, capabilities: [:chat, :tools, :vision], status: "available"),
-        ModelDescriptor.new(name: "o1-mini", provider: "openai", context_size: 128_000, capabilities: [:chat, :tools, :reasoning], status: "available"),
-        
+        ModelDescriptor.new(name: "gpt-4o", provider: "openai", context_size: 128_000,
+                            capabilities: %i[chat tools vision], status: "available"),
+        ModelDescriptor.new(name: "gpt-4o-mini", provider: "openai", context_size: 128_000,
+                            capabilities: %i[chat tools vision], status: "available"),
+        ModelDescriptor.new(name: "o1-mini", provider: "openai", context_size: 128_000,
+                            capabilities: %i[chat tools reasoning], status: "available"),
+
         # Anthropic
-        ModelDescriptor.new(name: "claude-3-5-sonnet-latest", provider: "anthropic", context_size: 200_000, capabilities: [:chat, :tools, :vision], status: "available"),
-        ModelDescriptor.new(name: "claude-3-5-haiku-latest", provider: "anthropic", context_size: 200_000, capabilities: [:chat, :tools], status: "available"),
-        
+        ModelDescriptor.new(name: "claude-3-5-sonnet-latest", provider: "anthropic", context_size: 200_000,
+                            capabilities: %i[chat tools vision], status: "available"),
+        ModelDescriptor.new(name: "claude-3-5-haiku-latest", provider: "anthropic", context_size: 200_000,
+                            capabilities: %i[chat tools], status: "available"),
+
         # Groq
-        ModelDescriptor.new(name: "llama-3.3-70b-versatile", provider: "groq", context_size: 128_000, capabilities: [:chat, :tools], status: "available"),
-        ModelDescriptor.new(name: "mixtral-8x7b-32768", provider: "groq", context_size: 32_768, capabilities: [:chat, :tools], status: "available"),
-        
+        ModelDescriptor.new(name: "llama-3.3-70b-versatile", provider: "groq", context_size: 128_000,
+                            capabilities: %i[chat tools], status: "available"),
+        ModelDescriptor.new(name: "mixtral-8x7b-32768", provider: "groq", context_size: 32_768,
+                            capabilities: %i[chat tools], status: "available"),
+
         # OpenRouter
-        ModelDescriptor.new(name: "deepseek-r1", provider: "openrouter", context_size: 163_840, capabilities: [:chat, :reasoning], status: "available")
+        ModelDescriptor.new(name: "deepseek-r1", provider: "openrouter", context_size: 163_840,
+                            capabilities: %i[chat reasoning], status: "available")
       ].freeze
 
       module_function

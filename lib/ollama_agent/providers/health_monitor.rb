@@ -35,12 +35,12 @@ module OllamaAgent
       # @param latency_ms [Integer, nil]
       def record_success(credential, latency_ms: nil)
         push Event.new(
-          at:            Time.now,
+          at: Time.now,
           credential_id: credential.id,
-          provider:      credential.provider,
-          kind:          :success,
-          error_class:   nil,
-          latency_ms:    latency_ms
+          provider: credential.provider,
+          kind: :success,
+          error_class: nil,
+          latency_ms: latency_ms
         )
       end
 
@@ -49,12 +49,12 @@ module OllamaAgent
       # @param error      [StandardError]
       def record_failure(credential, error)
         push Event.new(
-          at:            Time.now,
+          at: Time.now,
           credential_id: credential.id,
-          provider:      credential.provider,
-          kind:          :failure,
-          error_class:   error.class.name,
-          latency_ms:    nil
+          provider: credential.provider,
+          kind: :failure,
+          error_class: error.class.name,
+          latency_ms: nil
         )
 
         emit_hook(:on_credential_failure, credential, error) if error.is_a?(OllamaAgent::AuthenticationError)
@@ -66,12 +66,12 @@ module OllamaAgent
       # @param reason [String]
       def record_switch(from, to, reason)
         push Event.new(
-          at:            Time.now,
+          at: Time.now,
           credential_id: "#{from.id}→#{to.id}",
-          provider:      from.provider,
-          kind:          :switch,
-          error_class:   reason,
-          latency_ms:    nil
+          provider: from.provider,
+          kind: :switch,
+          error_class: reason,
+          latency_ms: nil
         )
 
         emit_hook(:on_provider_switch, from, to, reason)

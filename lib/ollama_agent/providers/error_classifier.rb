@@ -17,12 +17,8 @@ module OllamaAgent
     module ErrorClassifier
       # Phrases that signal a long-term quota exhaustion rather than a short
       # rate-limit window. Matched case-insensitively against error.message.
-      QUOTA_PHRASES = %w[
-        quota exceeded daily_limit monthly_limit weekly_limit
-        billing insufficient_quota run\ out\ of\ credits
-        weekly\ usage\ limit monthly\ usage\ limit
-        exceeded\ your\ current\ quota
-        you\ have\ run\ out
+      QUOTA_PHRASES = [
+        "quota", "exceeded", "daily_limit", "monthly_limit", "weekly_limit", "billing", "insufficient_quota", "run out of credits", "weekly usage limit", "monthly usage limit", "exceeded your current quota", "you have run out"
       ].freeze
 
       module_function
@@ -36,7 +32,7 @@ module OllamaAgent
         status = http_status || extract_http_status(error)
 
         return classify_by_status(status, error) if status && !status.zero?
-        return classify_network(error)            if network_error?(error)
+        return classify_network(error) if network_error?(error)
 
         error # pass through — caller should re-raise
       end
@@ -50,8 +46,8 @@ module OllamaAgent
       # @param error [StandardError]
       # @return [Boolean]
       def retryable_with_other_credential?(error)
-        error.is_a?(OllamaAgent::RateLimitError)      ||
-          error.is_a?(OllamaAgent::QuotaExhaustedError)  ||
+        error.is_a?(OllamaAgent::RateLimitError) ||
+          error.is_a?(OllamaAgent::QuotaExhaustedError) ||
           error.is_a?(OllamaAgent::TemporaryProviderError) ||
           error.is_a?(OllamaAgent::SubscriptionRequiredError)
       end
@@ -61,8 +57,6 @@ module OllamaAgent
       def quota_exhaustion_message?(error)
         quota_phrased?(error.message.to_s)
       end
-
-      private_class_method
 
       def self.classify_by_status(status, error)
         msg = error.message.to_s
@@ -76,9 +70,11 @@ module OllamaAgent
         when 402
           OllamaAgent::QuotaExhaustedError.new(msg)
         when 429
-          quota_phrased?(msg) ?
-            OllamaAgent::QuotaExhaustedError.new(msg) :
+          if quota_phrased?(msg)
+            OllamaAgent::QuotaExhaustedError.new(msg)
+          else
             OllamaAgent::RateLimitError.new(msg)
+          end
         when 500..599
           OllamaAgent::TemporaryProviderError.new(msg)
         else

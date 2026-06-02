@@ -5,14 +5,13 @@ require "stringio"
 require "ollama_agent/cli/repl"
 
 RSpec.describe OllamaAgent::CLI::Repl do
-  let(:agent) { instance_double(OllamaAgent::Agent) }
-  let(:stdout) { StringIO.new }
   subject(:repl) { described_class.new(agent: agent, stdout: stdout) }
 
+  let(:agent) { instance_double(OllamaAgent::Agent) }
+  let(:stdout) { StringIO.new }
+
   before do
-    allow(agent).to receive(:model).and_return("gpt-4o")
-    allow(agent).to receive(:list_local_model_names).and_return([])
-    allow(agent).to receive(:list_cloud_model_names).and_return([])
+    allow(agent).to receive_messages(model: "gpt-4o", list_local_model_names: [], list_cloud_model_names: [])
   end
 
   describe "/models command" do

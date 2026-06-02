@@ -5,11 +5,11 @@ require "ollama_agent/runtime_command_system/session/events"
 require "ollama_agent/runtime_command_system/session/runtime"
 
 RSpec.describe OllamaAgent::RuntimeCommandSystem::Session::Runtime do
+  subject(:runtime) { described_class.new(agent: agent) }
+
   let(:agent) do
     instance_double(OllamaAgent::Agent, model: "qwen3:32b", provider_name: "local")
   end
-
-  subject(:runtime) { described_class.new(agent: agent) }
 
   it "delegates active_model to agent" do
     expect(runtime.active_model).to eq("qwen3:32b")

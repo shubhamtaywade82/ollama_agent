@@ -13,57 +13,67 @@ RSpec.describe OllamaAgent::Providers::ErrorClassifier do
     context "with HTTP 401" do
       let(:error)  { OllamaAgent::Error.new("OpenAI auth failed (401): invalid key") }
       let(:status) { 401 }
+
       it { is_expected.to be_a(OllamaAgent::AuthenticationError) }
     end
 
     context "with HTTP 403" do
       let(:error)  { OllamaAgent::Error.new("forbidden") }
       let(:status) { 403 }
+
       it { is_expected.to be_a(OllamaAgent::AuthenticationError) }
     end
 
     context "with HTTP 402" do
       let(:error)  { OllamaAgent::Error.new("payment required") }
       let(:status) { 402 }
+
       it { is_expected.to be_a(OllamaAgent::QuotaExhaustedError) }
     end
 
     context "with HTTP 429 and plain rate-limit message" do
       let(:error)  { OllamaAgent::Error.new("rate limited") }
       let(:status) { 429 }
+
       it { is_expected.to be_a(OllamaAgent::RateLimitError) }
     end
 
     context "with HTTP 429 and quota exhaustion phrasing" do
       let(:error)  { OllamaAgent::Error.new("you have exceeded your current quota, please check your plan") }
       let(:status) { 429 }
+
       it { is_expected.to be_a(OllamaAgent::QuotaExhaustedError) }
     end
 
     context "with HTTP 429 and weekly usage limit" do
       let(:error)  { OllamaAgent::Error.new("weekly usage limit reached") }
       let(:status) { 429 }
+
       it { is_expected.to be_a(OllamaAgent::QuotaExhaustedError) }
     end
 
     context "with HTTP 500" do
       let(:error)  { OllamaAgent::Error.new("internal server error") }
       let(:status) { 500 }
+
       it { is_expected.to be_a(OllamaAgent::TemporaryProviderError) }
     end
 
     context "with Timeout::Error" do
-      let(:error)  { Timeout::Error.new("execution expired") }
+      let(:error) { Timeout::Error.new("execution expired") }
+
       it { is_expected.to be_a(OllamaAgent::TemporaryProviderError) }
     end
 
     context "with Errno::ECONNREFUSED" do
-      let(:error)  { Errno::ECONNREFUSED.new }
+      let(:error) { Errno::ECONNREFUSED.new }
+
       it { is_expected.to be_a(OllamaAgent::TemporaryProviderError) }
     end
 
     context "with unknown error" do
       let(:error) { RuntimeError.new("something weird") }
+
       it "passes through as-is" do
         expect(classify).to be_a(RuntimeError)
       end
@@ -71,6 +81,7 @@ RSpec.describe OllamaAgent::Providers::ErrorClassifier do
 
     context "extracting status from error message" do
       let(:error) { OllamaAgent::Error.new("HTTP 429: too many requests") }
+
       it { is_expected.to be_a(OllamaAgent::RateLimitError) }
     end
   end

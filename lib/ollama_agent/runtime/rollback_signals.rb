@@ -57,24 +57,16 @@ module OllamaAgent
         reasons = []
         t = @thresholds
 
-        if count_event(snap, :replay_determinism_violation) >= t[:replay_determinism_violations_per_min]
-          reasons << "replay_determinism_violation threshold breached"
-        end
+        reasons << "replay_determinism_violation threshold breached" if count_event(snap, :replay_determinism_violation) >= t[:replay_determinism_violations_per_min]
 
-        if count_event(snap, :recovery_duplicate) >= t[:recovery_duplicates_per_min]
-          reasons << "recovery_duplicate threshold breached"
-        end
+        reasons << "recovery_duplicate threshold breached" if count_event(snap, :recovery_duplicate) >= t[:recovery_duplicates_per_min]
 
-        if count_event(snap, :validator_integrity_mismatch) >= t[:validator_integrity_mismatches_per_min]
-          reasons << "validator_integrity_mismatch threshold breached"
-        end
+        reasons << "validator_integrity_mismatch threshold breached" if count_event(snap, :validator_integrity_mismatch) >= t[:validator_integrity_mismatches_per_min]
 
         mf = count_event(snap, :mutation_failure)
         ms = count_event(snap, :mutation_success)
         total = mf + ms
-        if total.positive? && (mf.to_f / total) >= t[:mutation_failure_rate].to_f
-          reasons << "mutation_failure_rate threshold breached"
-        end
+        reasons << "mutation_failure_rate threshold breached" if total.positive? && (mf.to_f / total) >= t[:mutation_failure_rate].to_f
 
         { trigger: reasons.any?, reasons: reasons }
       end

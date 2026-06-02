@@ -191,7 +191,7 @@ module OllamaAgent
         File.rename(absolute, temp)
         track_step(manifest_id, logical_stamp, "renamed_to_trash", "temp" => temp)
         fsync_parent_directory(manifest_id, logical_stamp, parent)
-        File.unlink(temp) if File.exist?(temp)
+        FileUtils.rm_f(temp)
         track_step(manifest_id, logical_stamp, "unlinked_trash")
         fsync_parent_directory(manifest_id, logical_stamp, parent)
       end

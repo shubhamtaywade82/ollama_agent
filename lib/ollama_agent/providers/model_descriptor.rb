@@ -12,7 +12,7 @@ module OllamaAgent
         @provider     = provider.to_s
         @context_size = context_size.to_i
         @capabilities = Array(capabilities).map(&:to_sym)
-        @size_gb      = size_gb ? size_gb.to_f : nil
+        @size_gb      = size_gb&.to_f
         @status       = status.to_s
         @subscription_required = subscription_required
       end

@@ -151,8 +151,8 @@ module OllamaAgent
 
       # Fallback to OLLAMA_BASE_URL if client doesn't expose it
       base_url ||= ENV.fetch("OLLAMA_BASE_URL", nil)
-      
-      # If it's a cloud-like URL, we can try to append /api/tags if needed, 
+
+      # If it's a cloud-like URL, we can try to append /api/tags if needed,
       # but OllamaCloudCatalog.list_model_names handles the mapping.
       catalog_host = base_url ? "#{base_url.to_s.chomp("/")}/api/tags" : nil
 

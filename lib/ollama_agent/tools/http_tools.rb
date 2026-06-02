@@ -74,9 +74,7 @@ module OllamaAgent
 
       def parse_and_validate_url!(url)
         uri = URI.parse(url)
-        unless ALLOWED_SCHEMES.include?(uri.scheme)
-          raise OllamaAgent::Error, "http_get: only #{ALLOWED_SCHEMES.join("/")} URLs are allowed"
-        end
+        raise OllamaAgent::Error, "http_get: only #{ALLOWED_SCHEMES.join("/")} URLs are allowed" unless ALLOWED_SCHEMES.include?(uri.scheme)
 
         uri
       rescue URI::InvalidURIError => e
@@ -84,13 +82,9 @@ module OllamaAgent
       end
 
       def check_host!(host)
-        if @allowed_hosts&.none? { |pat| HttpHostPattern.match?(pat, host) }
-          raise OllamaAgent::Error, "http_get: host #{host} is not on the allowlist"
-        end
+        raise OllamaAgent::Error, "http_get: host #{host} is not on the allowlist" if @allowed_hosts&.none? { |pat| HttpHostPattern.match?(pat, host) }
 
-        if @denied_hosts.any? { |pat| HttpHostPattern.match?(pat, host) }
-          raise OllamaAgent::Error, "http_get: host #{host} is blocked"
-        end
+        raise OllamaAgent::Error, "http_get: host #{host} is blocked" if @denied_hosts.any? { |pat| HttpHostPattern.match?(pat, host) }
 
         # Block private/internal addresses
         return unless private_address?(host)
@@ -151,9 +145,7 @@ module OllamaAgent
 
         return "HTTP #{status}: #{resp.message}" unless (200..299).cover?(status)
 
-        unless ALLOWED_CONTENT_TYPES.any? { |allowed| ct.start_with?(allowed) }
-          return "Blocked: content-type #{ct.inspect} is not a text or JSON type"
-        end
+        return "Blocked: content-type #{ct.inspect} is not a text or JSON type" unless ALLOWED_CONTENT_TYPES.any? { |allowed| ct.start_with?(allowed) }
 
         body = resp.body.to_s.encode("UTF-8", invalid: :replace, undef: :replace)
         body = "#{body.byteslice(0, max_bytes)}\n...[truncated]" if body.bytesize > max_bytes
@@ -194,9 +186,7 @@ module OllamaAgent
         uri = URI.parse(url)
         raise OllamaAgent::Error, "http_post: only https/http URLs" unless %w[http https].include?(uri.scheme)
 
-        if @allowed_hosts&.none? { |pat| HttpHostPattern.match?(pat, uri.host) }
-          raise OllamaAgent::Error, "http_post: host #{uri.host} not on allowlist"
-        end
+        raise OllamaAgent::Error, "http_post: host #{uri.host} not on allowlist" if @allowed_hosts&.none? { |pat| HttpHostPattern.match?(pat, uri.host) }
 
         headers = (args["headers"] || {}).merge("Content-Type" => "application/json")
 

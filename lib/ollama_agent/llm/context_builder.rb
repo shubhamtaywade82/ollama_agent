@@ -32,9 +32,7 @@ module OllamaAgent
 
         merged = DEFAULT_BUDGET.merge(raw.transform_keys(&:to_sym))
         sum = %i[system history focus buffer].sum { |k| merged.fetch(k) }
-        unless (sum - 1.0).abs < 1e-9
-          raise ArgumentError, "budget fractions (system+history+focus+buffer) must sum to 1.0"
-        end
+        raise ArgumentError, "budget fractions (system+history+focus+buffer) must sum to 1.0" unless (sum - 1.0).abs < 1e-9
 
         merged
       end

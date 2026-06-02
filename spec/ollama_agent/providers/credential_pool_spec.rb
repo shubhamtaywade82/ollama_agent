@@ -6,7 +6,7 @@ require "ollama_agent/providers/credential_pool"
 
 RSpec.describe OllamaAgent::Providers::CredentialPool do
   def make_cred(id, available: true, weight: 1)
-    cred = instance_double(
+    instance_double(
       OllamaAgent::Providers::Credential,
       id: id,
       weight: weight,
@@ -15,7 +15,6 @@ RSpec.describe OllamaAgent::Providers::CredentialPool do
       status_summary: { id: id, provider: "openai" },
       quota_tracker: instance_double(OllamaAgent::Providers::QuotaTracker, summary: {})
     )
-    cred
   end
 
   let(:cred_a) { make_cred("a", weight: 2) }

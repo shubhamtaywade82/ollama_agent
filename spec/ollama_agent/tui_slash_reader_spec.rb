@@ -46,8 +46,8 @@ RSpec.describe OllamaAgent::TuiSlashReader do
       palette = instance_double(OllamaAgent::RuntimeCommandSystem::CommandPalette)
       menu = OllamaAgent::RuntimeCommandSystem::InteractiveMenu.new
       menu.show([
-        OllamaAgent::RuntimeCommandSystem::Suggestion.new(text: "/model", type: :command)
-      ])
+                  OllamaAgent::RuntimeCommandSystem::Suggestion.new(text: "/model", type: :command)
+                ])
       allow(palette).to receive(:menu).and_return(menu)
       reader.instance_variable_set(:@command_palette, palette)
       reader.instance_variable_set(:@menu_lines_printed, 3)
@@ -106,8 +106,8 @@ RSpec.describe OllamaAgent::TuiSlashReader do
       palette = instance_double(OllamaAgent::RuntimeCommandSystem::CommandPalette)
       menu = OllamaAgent::RuntimeCommandSystem::InteractiveMenu.new
       menu.show([
-        OllamaAgent::RuntimeCommandSystem::Suggestion.new(text: "/model", type: :command)
-      ])
+                  OllamaAgent::RuntimeCommandSystem::Suggestion.new(text: "/model", type: :command)
+                ])
       allow(palette).to receive(:menu).and_return(menu)
       reader.instance_variable_set(:@command_palette, palette)
       reader.instance_variable_set(:@menu_lines_printed, 3)

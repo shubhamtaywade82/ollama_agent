@@ -74,12 +74,12 @@ module OllamaAgent
       # Useful for the "Usage" TUI panel.
       # @return [Hash]
       def aggregate_usage
-        all  = @credentials.map { |c| c.quota_tracker.summary }
+        all = @credentials.map { |c| c.quota_tracker.summary }
         {
-          total_daily_tokens:    all.sum { |s| s[:daily_tokens] },
-          total_daily_requests:  all.sum { |s| s[:daily_requests] },
-          total_rpm:             all.sum { |s| s[:rpm] },
-          total_tpm:             all.sum { |s| s[:tpm] }
+          total_daily_tokens: all.sum { |s| s[:daily_tokens] },
+          total_daily_requests: all.sum { |s| s[:daily_requests] },
+          total_rpm: all.sum { |s| s[:rpm] },
+          total_tpm: all.sum { |s| s[:tpm] }
         }
       end
 

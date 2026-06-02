@@ -114,9 +114,7 @@ module OllamaAgent
 
       def handle_stream_error_response!(response, attempt, code)
         err_body = drain_response_body(response)
-        unless retryable_status?(code) && attempt < @max_attempts - 1
-          raise AnthropicAPIError, "Anthropic API status=#{response.code} body=#{err_body}"
-        end
+        raise AnthropicAPIError, "Anthropic API status=#{response.code} body=#{err_body}" unless retryable_status?(code) && attempt < @max_attempts - 1
 
         sleep_for_retry!(attempt, response)
       end

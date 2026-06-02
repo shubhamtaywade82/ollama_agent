@@ -27,9 +27,9 @@ module OllamaAgent
     class Credential
       # Cooldown durations by error type
       COOLDOWNS = {
-        OllamaAgent::QuotaExhaustedError    => 3600,  # 1 h  — daily/monthly limit
-        OllamaAgent::RateLimitError         => 60,    # 60 s — RPM/TPM window
-        OllamaAgent::TemporaryProviderError => 15     # 15 s — 5xx / timeout
+        OllamaAgent::QuotaExhaustedError => 3600, # 1 h  — daily/monthly limit
+        OllamaAgent::RateLimitError => 60, # 60 s — RPM/TPM window
+        OllamaAgent::TemporaryProviderError => 15 # 15 s — 5xx / timeout
       }.freeze
 
       DEFAULT_COOLDOWN = 30 # s — unknown errors
@@ -59,7 +59,7 @@ module OllamaAgent
         @mutex          = Mutex.new
         @failures       = 0
         @cooldown_until = nil
-        @disabled       = false  # permanent — set on AuthenticationError
+        @disabled       = false # permanent — set on AuthenticationError
         @last_used_at   = nil
       end
 
@@ -81,7 +81,7 @@ module OllamaAgent
       def mark_failure!(error)
         @mutex.synchronize do
           if error.is_a?(OllamaAgent::AuthenticationError)
-            @disabled = true  # permanent — bad key, never retry
+            @disabled = true # permanent — bad key, never retry
             return
           end
 
@@ -117,17 +117,17 @@ module OllamaAgent
       def status_summary
         @mutex.synchronize do
           {
-            id:               @id,
-            provider:         @provider,
-            name:             @display_name,
-            available:        available_unsafe?,
-            disabled:         @disabled,
-            cooling_down:     cooling_down?,
-            cooldown_secs:    cooldown_remaining_unsafe,
-            failures:         @failures,
-            last_used_at:     @last_used_at,
-            near_exhaustion:  near_exhaustion?,
-            quota:            @quota_tracker.summary
+            id: @id,
+            provider: @provider,
+            name: @display_name,
+            available: available_unsafe?,
+            disabled: @disabled,
+            cooling_down: cooling_down?,
+            cooldown_secs: cooldown_remaining_unsafe,
+            failures: @failures,
+            last_used_at: @last_used_at,
+            near_exhaustion: near_exhaustion?,
+            quota: @quota_tracker.summary
           }
         end
       end
