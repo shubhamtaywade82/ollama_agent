@@ -6,6 +6,12 @@ require_relative "ruby_search_modes"
 module OllamaAgent
   # Prism Ruby index lookup for search_code (included by SandboxedTools).
   module RubyIndexToolSupport
+    @initialization_mutex = Mutex.new
+
+    class << self
+      attr_reader :initialization_mutex
+    end
+
     private
 
     def ruby_search_mode?(mode)
@@ -39,7 +45,11 @@ module OllamaAgent
 
     # Rebuild only when OLLAMA_AGENT_INDEX_REBUILD changes (avoids rebuilding on every call while it stays "1").
     def ruby_index
-      @ruby_index_mutex ||= Mutex.new
+      unless @ruby_index_mutex
+        RubyIndexToolSupport.initialization_mutex.synchronize do
+          @ruby_index_mutex ||= Mutex.new
+        end
+      end
       @ruby_index_mutex.synchronize { synchronized_ruby_index }
     end
 
