@@ -240,6 +240,58 @@ export OLLAMA_AGENT_THINK=medium
 bundle exec ruby exe/ollama_agent ask "Your task"
 ```
 
+#### Multi-Key Provider Credential Orchestration & Failover
+
+To handle rate limits (RPM/TPM window exhaustion), daily quotas, or network timeouts when using Ollama Cloud (or other providers like OpenAI and Anthropic), you can configure a thread-safe, quota-aware **Credential Pool** with automatic reactive failover.
+
+The pool can be configured dynamically via the Ruby API or auto-detected from environment variables.
+
+##### Environment Auto-Detection
+
+If no explicit credentials are passed in, `ollama_agent` automatically scans the environment for keys indexed `1` to `5` and initializes a `CredentialPool`:
+
+* **Ollama Cloud**: Configure keys `OLLAMA_API_KEY_1` through `OLLAMA_API_KEY_5`. When any of these are present, requests are routed to `"https://api.ollama.com"` (aliased as `"ollama_cloud"`).
+* **OpenAI**: Configure keys `OPENAI_API_KEY_1` through `OPENAI_API_KEY_5`.
+* **Anthropic**: Configure keys `ANTHROPIC_API_KEY_1` through `ANTHROPIC_API_KEY_5`.
+
+Example for Ollama Cloud:
+```bash
+export OLLAMA_API_KEY_1="ollama_key_abc123"
+export OLLAMA_API_KEY_2="ollama_key_def456"
+bundle exec ruby exe/ollama_agent ask "Your task"
+```
+
+##### Ruby API Configuration
+
+You can also pass a structured array of credential hashes to `OllamaAgent::Runner.build`:
+
+```ruby
+runner = OllamaAgent::Runner.build(
+  credentials: [
+    {
+      id: "ollama-cloud-primary",
+      provider: "ollama_cloud",
+      api_key: "ollama_...",
+      weight: 2, # weighted round-robin priority (default: 1)
+      limits: { rpm: 10, tpm: 10000, daily_tokens: 1000000 } # automatic quota tracking
+    },
+    {
+      id: "openai-backup",
+      provider: "openai",
+      api_key: "sk-...",
+      weight: 1
+    }
+  ]
+)
+runner.run("Your task")
+```
+
+##### Failover Behavior
+1. **Weighted Round-Robin**: Requests are balanced across healthy and available credentials.
+2. **Quota Tracking**: Daily token/request and RPM/TPM sliding windows are tracked locally.
+3. **Reactive Failover**: If a key encounters a rate limit (`HTTP 429`), temporary provider error (`HTTP 5xx`), or quota exhaustion, it is temporarily cooled down and the request is retried with the next available key.
+4. **Permanent Disabling**: If a key encounters an authentication failure (`HTTP 401` or `HTTP 403`), it is permanently disabled to prevent dead-key hammering.
+
 ### Environment
 
 | Variable | Purpose |

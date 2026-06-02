@@ -44,7 +44,8 @@ module OllamaAgent
     MAX_TURNS = 64
     DEFAULT_HTTP_TIMEOUT = 120
 
-    attr_reader :client, :root, :hooks, :model, :logger,
+    attr_accessor :client
+    attr_reader :root, :hooks, :model, :logger,
                 :session_id, :read_only, :max_tokens, :orchestrator, :provider_name
 
     # @param config [AgentConfig, nil] when set, keyword options are ignored (use {Runner} or build {AgentConfig}).
@@ -110,6 +111,21 @@ module OllamaAgent
       n
     end
 
+    # Performs a pre-flight check to see if the model is accessible.
+    # Currently only implemented for Ollama Cloud (checks for 403 Subscription Required).
+    #
+    # @param name [String, nil] defaults to current @model
+    # @return [Boolean] true if accessible or check not applicable
+    def model_accessible?(name = nil)
+      n = name || @model
+      return true unless @client.respond_to?(:cloud?) && @client.cloud?
+      return true unless @client.respond_to?(:subscription_required?)
+
+      !@client.subscription_required?(n)
+    rescue StandardError
+      true # assume accessible if check fails
+    end
+
     # Names from the local Ollama daemon (+/api/tags+ on your +base_url+). Not used by the REPL +/models+ command.
     #
     # @return [Array<String>]
@@ -123,11 +139,24 @@ module OllamaAgent
       []
     end
 
-    # Cloud catalog from +https://ollama.com/api/tags+ (see {OllamaCloudCatalog}). REPL +/models+ uses this only.
-    #
-    # @return [Array<String>]
     def list_cloud_model_names
-      OllamaCloudCatalog.list_model_names
+      base_url = nil
+      api_key = nil
+
+      if @client.respond_to?(:client) && @client.client.respond_to?(:config)
+        config = @client.client.config
+        base_url = config.base_url
+        api_key = config.api_key
+      end
+
+      # Fallback to OLLAMA_BASE_URL if client doesn't expose it
+      base_url ||= ENV.fetch("OLLAMA_BASE_URL", nil)
+      
+      # If it's a cloud-like URL, we can try to append /api/tags if needed, 
+      # but OllamaCloudCatalog.list_model_names handles the mapping.
+      catalog_host = base_url ? "#{base_url.to_s.chomp("/")}/api/tags" : nil
+
+      OllamaCloudCatalog.list_model_names(base_url: catalog_host, api_key: api_key)
     end
 
     # Subclasses that override chat or tool wiring should keep {#assign_chat_model!} in sync

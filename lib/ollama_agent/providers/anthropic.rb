@@ -240,12 +240,21 @@ module OllamaAgent
       end
 
       def handle_response(resp)
-        parsed = JSON.parse(resp.body)
-        case resp.code.to_i
+        parsed  = JSON.parse(resp.body)
+        status  = resp.code.to_i
+        err_msg = parsed.dig("error", "message").to_s
+        case status
         when 200..299 then parsed
-        when 401 then raise OllamaAgent::Error, "Anthropic: unauthorized — check ANTHROPIC_API_KEY"
-        when 429 then raise OllamaAgent::Error, "Anthropic: rate limited"
-        else          raise OllamaAgent::Error, "Anthropic #{resp.code}: #{parsed.dig("error", "message")}"
+        when 401, 403 then raise OllamaAgent::AuthenticationError, "Anthropic auth failed (#{status}): #{err_msg}"
+        when 402      then raise OllamaAgent::QuotaExhaustedError, "Anthropic quota exceeded: #{err_msg}"
+        when 429
+          if err_msg.downcase.match?(/quota|credit|usage limit/)
+            raise OllamaAgent::QuotaExhaustedError, "Anthropic quota exhausted: #{err_msg}"
+          else
+            raise OllamaAgent::RateLimitError, "Anthropic rate limited (429): #{err_msg}"
+          end
+        when 500..599 then raise OllamaAgent::TemporaryProviderError, "Anthropic server error #{status}: #{err_msg}"
+        else               raise OllamaAgent::AnthropicAPIError, "Anthropic #{status}: #{err_msg}"
         end
       end
     end

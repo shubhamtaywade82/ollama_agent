@@ -47,6 +47,10 @@ module TradingAgent
           print_ticker($1)
         elsif line =~ %r{^/live\s+(\S+)}
           print_live_ticker($1)
+        elsif line =~ %r{^/model\s+(\S+)}
+          change_model($1)
+        elsif line == "/model"
+          puts "Current chat model: \e[1;32m#{@orchestrator.model}\e[0m"
         elsif line.start_with?("/")
           puts "\e[31mUnknown command: #{line}. Type /help for commands.\e[0m"
         else
@@ -110,6 +114,7 @@ module TradingAgent
     def print_banner
       puts "\e[1;36m" + "=" * 60
       puts "   TradingAgent Interactive Chat Shell (v#{TradingAgent::VERSION})"
+      puts "   Model: \e[1;32m#{@orchestrator.model}\e[1;36m"
       puts "   Type \e[1;33m/help\e[1;36m for commands, \e[1;33m/quit\e[1;36m to exit."
       puts "=" * 60 + "\e[0m\n"
     end
@@ -120,6 +125,7 @@ module TradingAgent
       puts "  \e[33m/positions\e[0m or \e[33m/pos\e[0m  - View current open positions"
       puts "  \e[33m/ticker <symbol>\e[0m    - Fetch current price of a symbol (e.g. /ticker BTCUSDT)"
       puts "  \e[33m/live <symbol>\e[0m      - Stream live LTP of a symbol in-place (e.g. /live BTCUSDT)"
+      puts "  \e[33m/model [name]\e[0m       - View or switch the active chat model (e.g. /model qwen2.5:14b)"
       puts "  \e[33m/help\e[0m               - Show this help message"
       puts "  \e[33m/quit\e[0m or \e[33m/exit\e[0m      - Exit the shell"
       puts "  \e[90m<any other text>\e[0m    - Ask the LLM Trading Advisor a question\n\n"
@@ -210,6 +216,14 @@ module TradingAgent
       puts "\n\e[1;36m╔═ Advisor ═══════════════════════════════════════════╗\e[0m"
       puts OllamaAgent::Console.format_assistant(response.to_s)
       puts "\e[1;36m╚═════════════════════════════════════════════════════╝\e[0m\n"
+    end
+
+    def change_model(name)
+      old_model = @orchestrator.model
+      @orchestrator.assign_chat_model!(name)
+      puts "Changed model from \e[1;31m#{old_model}\e[0m to \e[1;32m#{@orchestrator.model}\e[0m"
+    rescue StandardError => e
+      puts "\e[31mFailed to change model: #{e.message}\e[0m"
     end
   end
 end

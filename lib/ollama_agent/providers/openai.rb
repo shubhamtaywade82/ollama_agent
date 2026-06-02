@@ -211,12 +211,21 @@ module OllamaAgent
       end
 
       def handle_response(resp)
-        body = JSON.parse(resp.body)
-        case resp.code.to_i
+        body    = JSON.parse(resp.body)
+        status  = resp.code.to_i
+        err_msg = body.dig("error", "message").to_s
+        case status
         when 200..299 then body
-        when 401 then raise OllamaAgent::Error, "OpenAI: unauthorized — check OPENAI_API_KEY"
-        when 429 then raise OllamaAgent::Error, "OpenAI: rate limited"
-        else          raise OllamaAgent::Error, "OpenAI error #{resp.code}: #{body["error"]&.dig("message")}"
+        when 401, 403 then raise OllamaAgent::AuthenticationError, "OpenAI auth failed (#{status}): #{err_msg}"
+        when 402      then raise OllamaAgent::QuotaExhaustedError, "OpenAI quota exceeded: #{err_msg}"
+        when 429
+          if err_msg.downcase.match?(/quota|limit exceeded|out of credits/)
+            raise OllamaAgent::QuotaExhaustedError, "OpenAI quota exhausted: #{err_msg}"
+          else
+            raise OllamaAgent::RateLimitError, "OpenAI rate limited (429): #{err_msg}"
+          end
+        when 500..599 then raise OllamaAgent::TemporaryProviderError, "OpenAI server error #{status}: #{err_msg}"
+        else               raise OllamaAgent::Error, "OpenAI error #{status}: #{err_msg}"
         end
       end
     end

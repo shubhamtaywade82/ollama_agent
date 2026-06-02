@@ -70,6 +70,7 @@ module OllamaAgent
       stdout:          $stdout,
       # v2 platform options
       provider:        nil,
+      credentials:     nil,   # Array<Hash> — multi-key credential pool config
       permissions:     nil,
       budget:          nil,
       memory:          nil,
@@ -85,7 +86,8 @@ module OllamaAgent
         confirm_patches: confirm_patches, orchestrator: orchestrator,
         think: think, http_timeout: http_timeout,
         stdin: stdin, stdout: stdout,
-        provider: provider, permissions: permissions,
+        provider: provider, credentials: credentials,
+        permissions: permissions,
         budget: budget, memory: memory, trace: trace,
         logger: logger
       )
@@ -98,6 +100,18 @@ module OllamaAgent
       agent.run(query)
     end
 
+    # @return [String] the active model
+    def model
+      @agent.model
+    end
+
+    # Assign a new chat model.
+    # @param name [String]
+    # @return [String]
+    def assign_chat_model!(name)
+      @agent.assign_chat_model!(name)
+    end
+
     protected
 
     # Exposed for spec stubbing only.
@@ -105,15 +119,53 @@ module OllamaAgent
 
     private
 
-    # rubocop:disable Metrics/MethodLength, Metrics/ParameterLists
     def initialize(root:, model:, system_prompt:, stream:, session_id:, resume:,
                    max_tokens:, context_summarize:,
                    max_retries:, audit:, read_only:, skills_enabled:, skill_paths:,
                    confirm_patches:, orchestrator:, think:, http_timeout:,
                    stdin:, stdout:,
-                   provider: nil, permissions: nil, budget: nil, memory: nil, trace: false,
+                   provider: nil, credentials: nil,
+                   permissions: nil, budget: nil, memory: nil, trace: false,
                    logger: nil)
       @session_id = session_id
+
+      if credentials.nil? || credentials.empty?
+        detected = []
+        (1..5).each do |i|
+          key = ENV.fetch("OLLAMA_API_KEY_#{i}", nil)
+          next if key.nil? || key.strip.empty?
+
+          detected << {
+            id: "ollama-cloud-#{i}",
+            provider: "ollama_cloud",
+            api_key: key
+          }
+        end
+
+        (1..5).each do |i|
+          key = ENV.fetch("OPENAI_API_KEY_#{i}", nil)
+          next if key.nil? || key.strip.empty?
+
+          detected << {
+            id: "openai-#{i}",
+            provider: "openai",
+            api_key: key
+          }
+        end
+
+        (1..5).each do |i|
+          key = ENV.fetch("ANTHROPIC_API_KEY_#{i}", nil)
+          next if key.nil? || key.strip.empty?
+
+          detected << {
+            id: "anthropic-#{i}",
+            provider: "anthropic",
+            api_key: key
+          }
+        end
+
+        credentials = detected unless detected.empty?
+      end
 
       trace_logger = trace ? Core::TraceLogger.new(format: :human) : nil
 
@@ -144,6 +196,17 @@ module OllamaAgent
         logger: logger
       )
       @agent = Agent.new(config: config)
+
+      # Build CredentialRouter when multi-key credentials are supplied.
+      # Stored as @credential_router so consumers (e.g. TUI) can query pool_status.
+      if credentials && !credentials.empty?
+        require_relative "providers/registry"
+        @credential_router = Providers::Registry.from_credentials(
+          credentials,
+          hooks: @agent.hooks
+        )
+        @agent.client = @credential_router
+      end
 
       Streaming::ConsoleStreamer.new.attach(@agent.hooks) if stream
     end

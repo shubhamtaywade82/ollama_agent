@@ -5,11 +5,20 @@ module TradingAgent
     class Orchestrator
       def initialize(state, exchange, model: "qwen2.5:14b")
         ToolRegistry.register_all(state, exchange)
+        resolved_model = model || ENV["OLLAMA_AGENT_MODEL"] || ENV["OLLAMA_MODEL"] || ENV["MODEL"] || "qwen2.5:14b"
         @agent = OllamaAgent::Runner.build(
-          model: model,
+          model: resolved_model,
           system_prompt: system_prompt,
           read_only: true
         )
+      end
+
+      def model
+        @agent.model
+      end
+
+      def assign_chat_model!(name)
+        @agent.assign_chat_model!(name)
       end
 
       def analyze_and_plan(market_context)
