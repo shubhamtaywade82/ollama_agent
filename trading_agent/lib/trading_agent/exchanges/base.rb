@@ -11,7 +11,7 @@ module TradingAgent
         raise NotImplementedError
       end
 
-      def fetch_candles(symbol, interval, limit: 100)
+      def fetch_candles(symbol, interval, limit: 100, start_time: nil, end_time: nil)
         raise NotImplementedError
       end
 
