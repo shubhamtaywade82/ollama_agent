@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [1.0.1] - 2026-06-02
+
 ### Added
 
 - **Tool `list_directory_contents`** (`OllamaAgent::Tools::FilesystemExplorer`) — inspect files and subdirectories inside the current workspace. All paths are resolved relative to the project root (`context[:root]` / `OLLAMA_AGENT_ROOT`); traversal outside that boundary (including `../../etc` and absolute paths) is rejected before the filesystem is touched. Returns `[DIR]` / `[FILE]` entries with byte sizes.
@@ -8,12 +10,18 @@
 - `examples/agentic_tool_calling.rb` — runnable demo covering filesystem inspection, arithmetic evaluation, and a combined prompt that chains both tools. Mirrors the KDnuggets *Easy Agentic Tool Calling with Gemma 4* article pattern, adapted to the `OllamaAgent` Ruby runtime.
 - `docs/TOOLS.md` — new **Built-in agentic tools** section documenting `list_directory_contents` and `calculate` with Ruby API examples.
 
+### Removed
+
+- **`trading_agent` extraction**: Removed the nested `trading_agent/` project/gem from the `ollama_agent` repository to a dedicated standalone sibling repository (`trading_agent`).
+
 ### Documentation
 
 - **README:** New **Reasoning / thinking output** section—how to set `think` (including **GPT-OSS** `low`/`medium`/`high`), streaming vs one-shot, display env vars, troubleshooting when **Thinking** is missing, Gemma-style tags, and **`Runner.build`** example. **`OLLAMA_AGENT_STREAM`** and GPT-OSS notes added to the environment table; Ollama Cloud example sets **`OLLAMA_AGENT_THINK`**.
 
 ### Fixed
 
+- **RuboCop and Style Cleanups**: Fixed 424 RuboCop offenses and refined `.rubocop.yml` parameters.
+- **CI/CD Correction**: Removed obsolete nested `trading_agent` job from CI/CD main workflow.
 - **Thinking display:** Coerce non-string `message.thinking` from the API (e.g. array-shaped chunks) before deciding whether reasoning is present (`GemmaThoughtContentParser.merge_into_message_data!` + `ChatStreamThinkingFormat`). After a **streaming** chat completion, run the same merge so content-embedded reasoning tags still split into **Thinking** / **Assistant**.
 
 ## [1.0.0] - 2026-04-11
