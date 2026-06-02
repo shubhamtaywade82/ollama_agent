@@ -112,7 +112,7 @@ module TradingAgent
           account:  {
             equity:        @state.total_equity,
             drawdown_pct:  (@state.current_drawdown_pct * 100).round(2),
-            open_positions: @state.positions.values.size
+            open_positions: @state.open_positions_count
           },
           instructions: "Use fetch_multi_timeframe_context, then analyze_microstructure, " \
                         "then detect_patterns for #{symbol}. Confirm all timeframes align " \

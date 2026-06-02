@@ -64,7 +64,7 @@ module TradingAgent
             account:   {
               equity:        state.total_equity,
               drawdown_pct:  state.current_drawdown_pct,
-              open_positions: state.positions.values.size
+              open_positions: state.open_positions_count
             }
           }.to_json
         end
