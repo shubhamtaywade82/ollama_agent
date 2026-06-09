@@ -42,7 +42,7 @@ module OllamaAgent
     method_option :stream, type: :boolean, default: false,
                            desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
     method_option :audit, type: :boolean, default: false,
-                          desc: "Enable structured audit log under .ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
+                          desc: "Enable structured audit log under ~/.ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
     method_option :max_retries, type: :numeric,
                                 desc: "HTTP retry attempts (0=disable, default 3)"
     method_option :session, type: :string,  desc: "Named session id (saves/resumes conversation)"
@@ -88,7 +88,7 @@ module OllamaAgent
     method_option :stream, type: :boolean, default: false,
                            desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
     method_option :audit, type: :boolean, default: false,
-                          desc: "Enable structured audit log under .ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
+                          desc: "Enable structured audit log under ~/.ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
     method_option :max_retries, type: :numeric,
                                 desc: "HTTP retry attempts (0=disable, default 3)"
     method_option :max_tokens, type: :numeric,
