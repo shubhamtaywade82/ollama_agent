@@ -179,3 +179,4 @@ end
 
 require_relative "ollama_agent/tool_runtime"
 require_relative "ollama_agent/self_improvement"
+require_relative "ollama_agent/tiered_agent"

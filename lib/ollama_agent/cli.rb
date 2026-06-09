@@ -102,6 +102,51 @@ module OllamaAgent
       run_orchestrate!(query)
     end
 
+    desc "tiered GOAL", "Run an 8 GB VRAM-optimised multi-tier autonomous agent (Small→Medium→Large model cascade)"
+    long_desc <<~HELP
+      Executes a goal-driven autonomous loop using three Ollama model tiers:
+
+        Small  (llama3.2:3b-instruct-q8_0)
+          Fast parameter extraction — loaded for Phase 2 argument parsing only.
+
+        Medium (qwen2.5:7b-instruct-q4_K_M)
+          Primary orchestration — used for Phases 1 (planning) and 4 (verification).
+
+        Large  (qwen2.5:14b-instruct-q2_K)
+          Escalation supervisor — loaded only after 3 consecutive failures.
+
+      Models are evicted from VRAM between phases via keep_alive.
+    HELP
+    method_option :max_loops,    type: :numeric, default: 50,
+                                 desc: "Maximum execution cycles (default: 50)"
+    method_option :keep_alive,   type: :string,  default: "10s",
+                                 desc: "VRAM flush keep_alive window (0, 10s, 30s …)"
+    method_option :num_ctx,      type: :numeric, default: 4096,
+                                 desc: "Token context window per inference call"
+    method_option :model_small,  type: :string,  desc: "Override Small-tier model name"
+    method_option :model_medium, type: :string,  desc: "Override Medium-tier model name"
+    method_option :model_large,  type: :string,  desc: "Override Large-tier model name"
+    def tiered(goal)
+      require_relative "tiered_agent"
+      agent = TieredAgent::TieredAutonomousAgent.new(
+        goal:         goal,
+        max_loops:    options[:max_loops],
+        keep_alive:   options[:keep_alive],
+        num_ctx:      options[:num_ctx],
+        model_small:  options[:model_small],
+        model_medium: options[:model_medium],
+        model_large:  options[:model_large]
+      )
+      agent.execute_loop!
+    rescue OllamaAgent::Error => e
+      warn Console.error_line("#{e.class}: #{e.message}")
+      exit 1
+    rescue StandardError => e
+      warn Console.error_line("#{e.class}: #{e.message}")
+      warn e.full_message(order: :top, highlight: false) if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+      exit 1
+    end
+
     desc "sessions", "List saved sessions for the current project root"
     method_option :root, type: :string, desc: "Project root (default: OLLAMA_AGENT_ROOT or cwd)"
     def sessions
