@@ -116,11 +116,19 @@ module OllamaAgent
         if profile_override
           found = HardwareProfile.find(profile_override)
           unless found
-            raise ArgumentError, "Unknown profile #{profile_override.inspect}. " \
-                                 "Valid profiles: #{HardwareProfile.all_names.join(", ")}"
+            valid = (HardwareProfile.all_names + [:cloud]).join(", ")
+            raise ArgumentError, "Unknown profile #{profile_override.inspect}. Valid profiles: #{valid}"
           end
 
           return found
+        end
+
+        # Cloud auto-detection: skip the local VRAM probe entirely when targeting a
+        # remote endpoint. vram_gb_override forces local profile selection even in
+        # cloud mode (useful for testing or hybrid setups).
+        if vram_gb_override.nil? && HardwareProbe.cloud_mode?
+          @cloud_mode = true
+          return HardwareProfile::CLOUD_PROFILE
         end
 
         detected_gb = vram_gb_override || probe_vram
@@ -134,8 +142,14 @@ module OllamaAgent
       end
 
       def print_hardware_banner
-        vram_str = @detected_vram_gb ? "#{format("%.1f", @detected_vram_gb)} GB VRAM" : "VRAM unknown"
-        puts "[Hardware] #{vram_str} → Profile: #{@active_profile.label}"
+        if @cloud_mode
+          puts "[Hardware] Ollama Cloud / remote inference → Profile: #{@active_profile.label}"
+          puts "  Note: Large-tier model (#{@active_profile.model_large}) may need a Pro subscription."
+          puts "        Override with --model-large <free-model> if needed."
+        else
+          vram_str = @detected_vram_gb ? "#{format("%.1f", @detected_vram_gb)} GB VRAM" : "VRAM unknown"
+          puts "[Hardware] #{vram_str} → Profile: #{@active_profile.label}"
+        end
         puts "  Small:   #{@active_profile.model_small}"
         puts "  Medium:  #{@active_profile.model_medium}"
         puts "  Large:   #{@active_profile.model_large}"

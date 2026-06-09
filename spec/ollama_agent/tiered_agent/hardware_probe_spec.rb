@@ -73,7 +73,45 @@ RSpec.describe OllamaAgent::TieredAgent::HardwareProbe do
     end
   end
 
+  describe ".cloud_mode?" do
+    around do |ex|
+      orig_cloud  = ENV.delete("OLLAMA_CLOUD")
+      orig_url    = ENV.delete("OLLAMA_BASE_URL")
+      ex.run
+    ensure
+      orig_cloud ? ENV["OLLAMA_CLOUD"]    = orig_cloud : ENV.delete("OLLAMA_CLOUD")
+      orig_url   ? ENV["OLLAMA_BASE_URL"] = orig_url   : ENV.delete("OLLAMA_BASE_URL")
+    end
+
+    it "returns true when OLLAMA_CLOUD=1" do
+      ENV["OLLAMA_CLOUD"] = "1"
+      expect(described_class.cloud_mode?).to be true
+    end
+
+    it "returns true when OLLAMA_BASE_URL contains ollama.com" do
+      ENV["OLLAMA_BASE_URL"] = "https://api.ollama.com"
+      expect(described_class.cloud_mode?).to be true
+    end
+
+    it "returns false when OLLAMA_BASE_URL is a local address" do
+      ENV["OLLAMA_BASE_URL"] = "http://localhost:11434"
+      expect(described_class.cloud_mode?).to be false
+    end
+
+    it "returns false when neither env var is set" do
+      expect(described_class.cloud_mode?).to be false
+    end
+
+    it "returns false when OLLAMA_CLOUD=0" do
+      ENV["OLLAMA_CLOUD"]    = "0"
+      ENV["OLLAMA_BASE_URL"] = "http://localhost:11434"
+      expect(described_class.cloud_mode?).to be false
+    end
+  end
+
   describe ".summary" do
+    before { allow(described_class).to receive(:cloud_mode?).and_return(false) }
+
     it "includes GB when detected" do
       allow(described_class).to receive(:detect_vram_gb).and_return(16.0)
       expect(described_class.summary).to include("16.0 GB")

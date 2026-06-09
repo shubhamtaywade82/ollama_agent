@@ -31,10 +31,29 @@ module OllamaAgent
       # Returns a human-readable summary string (never raises).
       # @return [String]
       def self.summary
+        return "Ollama Cloud mode (remote inference)" if cloud_mode?
+
         gb = detect_vram_gb
         gb ? "#{format("%.1f", gb)} GB VRAM detected" : "No GPU detected (CPU-only mode)"
       rescue StandardError
         "VRAM detection unavailable"
+      end
+
+      # True when the Ollama client is configured to target a remote cloud endpoint.
+      #
+      # Detection order (first match wins):
+      #   1. OLLAMA_CLOUD=1          — explicit opt-in
+      #   2. OLLAMA_BASE_URL contains "ollama.com" — official Ollama Cloud endpoint
+      #
+      # A non-empty OLLAMA_API_KEY alone is *not* sufficient because self-hosted
+      # Ollama instances may also require authentication.
+      #
+      # @return [Boolean]
+      def self.cloud_mode?
+        return true if ENV.fetch("OLLAMA_CLOUD", "0") == "1"
+
+        base_url = ENV.fetch("OLLAMA_BASE_URL", "").strip
+        base_url.include?("ollama.com")
       end
 
       # --- platform probes (module-level private) ---

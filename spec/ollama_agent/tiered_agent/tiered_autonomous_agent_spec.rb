@@ -15,7 +15,7 @@ RSpec.describe OllamaAgent::TieredAgent::TieredAutonomousAgent do
   # Suppress VRAM probe and banner output in tests unless explicitly needed.
   before do
     allow(OllamaAgent::OllamaConnection).to receive(:retry_wrapped_client).and_return(fake_client)
-    allow(OllamaAgent::TieredAgent::HardwareProbe).to receive(:detect_vram_gb).and_return(nil)
+    allow(OllamaAgent::TieredAgent::HardwareProbe).to receive_messages(detect_vram_gb: nil, cloud_mode?: false)
     allow($stdout).to receive(:puts)
   end
 

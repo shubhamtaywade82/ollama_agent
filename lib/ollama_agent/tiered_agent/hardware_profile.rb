@@ -110,7 +110,30 @@ module OllamaAgent
         )
       ].freeze
 
-      PROFILE_MAP = PROFILES.to_h { |p| [p.name, p] }.freeze
+      # ---------------------------------------------------------------------------
+      # Cloud profile — used when inference runs on Ollama Cloud (api.ollama.com)
+      # or any remote Ollama endpoint.
+      #
+      # Local VRAM is irrelevant; the remote server manages its own memory.
+      # keep_alive is set to "-1" so the remote server never force-evicts the model
+      # mid-session (it handles lifecycle independently).
+      # Models listed here are available on Ollama Cloud's free tier.  The Large
+      # slot uses llama3.3:70b which may require a Pro subscription; override it
+      # with --model-large if you only have free-tier access.
+      # ---------------------------------------------------------------------------
+      CLOUD_PROFILE = Profile.new(
+        name: :cloud,
+        label: "Cloud (Remote)",
+        minimum_vram_gb: 0,
+        description: "Ollama Cloud / remote — free-tier models, no local VRAM constraint",
+        model_small: "llama3.2:3b",
+        model_medium: "llama3.1:8b",
+        model_large: "llama3.3:70b",
+        keep_alive: "-1",
+        num_ctx: 32_768
+      ).freeze
+
+      PROFILE_MAP = PROFILES.to_h { |p| [p.name, p] }.merge(cloud: CLOUD_PROFILE).freeze
 
       # Returns the best-fit profile for the given VRAM amount.
       # Walks profiles from most capable downward; returns the first one whose
