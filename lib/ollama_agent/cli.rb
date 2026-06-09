@@ -156,15 +156,15 @@ module OllamaAgent
       require_relative "tiered_agent"
       effective_profile = resolve_tiered_profile
       agent = TieredAgent::TieredAutonomousAgent.new(
-        goal:         goal,
-        max_loops:    options[:max_loops],
-        profile:      effective_profile,
-        vram_gb:      options[:vram_gb],
-        keep_alive:   options[:keep_alive],
-        num_ctx:      options[:num_ctx],
-        model_small:  options[:model_small],
+        goal: goal,
+        max_loops: options[:max_loops],
+        profile: effective_profile,
+        vram_gb: options[:vram_gb],
+        keep_alive: options[:keep_alive],
+        num_ctx: options[:num_ctx],
+        model_small: options[:model_small],
         model_medium: options[:model_medium],
-        model_large:  options[:model_large]
+        model_large: options[:model_large]
       )
       agent.execute_loop!
     rescue ArgumentError => e

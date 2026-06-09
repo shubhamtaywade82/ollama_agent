@@ -37,7 +37,7 @@ module OllamaAgent
 
       data["results"]
         .reject { |r| r["accessible"] }
-        .each_with_object({}) { |r, h| h[r["name"]] = r["reason"] }
+        .to_h { |r| [r["name"], r["reason"]] }
     end
 
     # @return [Boolean]
@@ -101,7 +101,7 @@ module OllamaAgent
       FileUtils.mkdir_p(File.dirname(path))
       payload = {
         "probed_at" => Time.now.utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "results"   => results.map { |r| { "name" => r[:name], "accessible" => r[:accessible], "reason" => r[:reason] } }
+        "results" => results.map { |r| { "name" => r[:name], "accessible" => r[:accessible], "reason" => r[:reason] } }
       }
       File.write(path, JSON.generate(payload), encoding: Encoding::UTF_8)
     rescue StandardError

@@ -316,9 +316,7 @@ module OllamaAgent
           end
         end
 
-        unless OllamaAgent::CloudAccessibilityCache.fresh?
-          @stdout.puts "  \e[33m[cloud] Accessibility not probed — run /models --probe to filter to accessible models only.\e[0m"
-        end
+        @stdout.puts "  \e[33m[cloud] Accessibility not probed — run /models --probe to filter to accessible models only.\e[0m" unless OllamaAgent::CloudAccessibilityCache.fresh?
         @stdout.puts ""
       end
 
@@ -331,7 +329,11 @@ module OllamaAgent
           return
         end
 
-        names = @agent.list_cloud_model_names rescue []
+        names = begin
+          @agent.list_cloud_model_names
+        rescue StandardError
+          []
+        end
         if names.empty?
           @stdout.puts "  \e[33mNo cloud models found to probe.\e[0m"
           return
@@ -343,7 +345,7 @@ module OllamaAgent
           api_key: api_key,
           base_url: base_url,
           model_names: names,
-          on_progress: ->(done, total) {
+          on_progress: lambda { |done, total|
             done_count = done
             @stdout.print("\r  Progress: #{done}/#{total}") if @stdout.respond_to?(:print)
           }
