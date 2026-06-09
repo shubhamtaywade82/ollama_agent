@@ -7,12 +7,12 @@ require_relative "schema_migrator"
 
 module OllamaAgent
   module Runtime
-    # Opens kernel SQLite databases under ~/.ollama_agent/kernel/ and applies idempotent migrations.
+    # Opens kernel SQLite databases under +root_dir+/.ollama_agent/kernel/ and applies idempotent migrations.
     class DatabaseRegistry
       # @param root_dir [String] workspace root
       def initialize(root_dir:)
         @root_dir = root_dir
-        @kernel_dir = File.join(OllamaAgent.data_dir, "kernel")
+        @kernel_dir = File.join(root_dir, ".ollama_agent", "kernel")
         @open_mutex = Mutex.new
         @event_store = nil
         @runtime = nil

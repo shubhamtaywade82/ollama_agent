@@ -33,7 +33,7 @@ module OllamaAgent
         registry = DatabaseRegistry.new(root_dir: root)
         db = registry.runtime
         fence = FencingAllocator.new(db)
-        kernel_dir = File.join(OllamaAgent.data_dir, "kernel")
+        kernel_dir = File.join(root, ".ollama_agent", "kernel")
         blob_store = BlobStore.new(kernel_dir: kernel_dir)
         wal = WAL.new(EventStore.new(registry.event_store))
         atomic_mutator = AtomicMutator.new(

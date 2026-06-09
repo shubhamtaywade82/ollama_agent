@@ -7,7 +7,17 @@ require_relative "../../../lib/ollama_agent/session/session"
 require_relative "../../../lib/ollama_agent/session/store"
 
 RSpec.describe OllamaAgent::Session::Store do
-  let(:root) { Dir.mktmpdir }
+  let(:root)     { Dir.mktmpdir }
+  let(:data_dir) { Dir.mktmpdir }
+
+  around do |example|
+    orig = ENV.fetch("OLLAMA_AGENT_DATA_DIR", nil)
+    ENV["OLLAMA_AGENT_DATA_DIR"] = data_dir
+    example.run
+  ensure
+    ENV["OLLAMA_AGENT_DATA_DIR"] = orig
+    FileUtils.remove_entry(data_dir)
+  end
 
   after { FileUtils.remove_entry(root) }
 
@@ -62,8 +72,9 @@ RSpec.describe OllamaAgent::Session::Store do
   end
 
   describe ".sessions_dir" do
-    it "returns path under .ollama_agent/sessions/" do
-      expect(described_class.sessions_dir(root)).to end_with(".ollama_agent/sessions")
+    it "returns path under the data dir sessions/" do
+      expect(described_class.sessions_dir).to end_with("sessions")
+      expect(described_class.sessions_dir).to start_with(data_dir)
     end
   end
 end
