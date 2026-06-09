@@ -2,25 +2,16 @@
 
 module OllamaAgent
   module TieredAgent
-    # Defines the three model tiers used by the 8 GB VRAM swap architecture.
+    # Named model constants for the three execution tiers.
     #
-    # Only one tier is resident in GPU memory at a time; models are evicted via
-    # keep_alive=0 / short TTL before the next phase loads a different tier.
+    # These are the *default* (minimal / 8 GB) model names used as fallbacks
+    # when no {HardwareProfile} has been selected. All production code should
+    # resolve models through {HardwareProfile.for_vram} or an explicit profile;
+    # these constants exist for backwards-compatibility and testing.
     module ModelTier
-      # ~3.2 GB VRAM — fast parameter extraction and regex-style token processing.
-      SMALL  = "llama3.2:3b-instruct-q8_0"
-
-      # ~4.7 GB VRAM — primary orchestration, planning, and verification.
-      MEDIUM = "qwen2.5:7b-instruct-q4_K_M"
-
-      # ~5.8 GB weights + RAM spillover — escalation supervisor and deep-reasoning.
-      LARGE  = "qwen2.5:14b-instruct-q2_K"
-
-      VRAM_FOOTPRINT = {
-        SMALL => "~3.2 GB",
-        MEDIUM => "~4.7 GB",
-        LARGE => "~5.8 GB (remainder spills to RAM)"
-      }.freeze
+      SMALL  = HardwareProfile::PROFILE_MAP[:minimal].model_small
+      MEDIUM = HardwareProfile::PROFILE_MAP[:minimal].model_medium
+      LARGE  = HardwareProfile::PROFILE_MAP[:minimal].model_large
 
       ALL = [SMALL, MEDIUM, LARGE].freeze
     end

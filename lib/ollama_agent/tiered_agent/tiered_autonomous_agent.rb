@@ -5,45 +5,62 @@ require "json"
 
 module OllamaAgent
   module TieredAgent
-    # Orchestrates a fully autonomous multi-tier execution loop on 8 GB VRAM hardware.
+    # Orchestrates a fully autonomous multi-tier execution loop that adapts its
+    # model selection and context budget to the available GPU hardware.
     #
-    # The loop executes in five sequential phases per cycle:
+    # Startup sequence:
+    #   1. Probe VRAM (nvidia-smi / rocm-smi / Apple sysctl) — or use explicit override
+    #   2. Select a {HardwareProfile} matching the detected VRAM
+    #   3. Print the active profile summary
+    #   4. Run the 5-phase loop until goal resolved / loop limit / unrecoverable error
     #
-    #   1. PLANNING       – Medium (7B) model reads compressed state → selects next tool
-    #   2. EXTRACTION     – Small  (3B) model parses tool arguments from natural language
-    #   3. EXECUTION      – Ruby runtime invokes the sandboxed system action directly
-    #   4. VERIFICATION   – Medium (7B) model cross-checks output against expectations
-    #   5. ESCALATION     – Large (14B+) model intervenes after ESCALATION_THRESHOLD failures
+    # The five loop phases (sequential, one model tier in VRAM at a time):
     #
-    # Models are sequentially evicted from VRAM via the keep_alive option before the
-    # next tier loads, staying within the 7.2 GB usable ceiling of an 8 GB GPU.
+    #   1. PLANNING     – Medium model reads compressed state → selects next tool
+    #   2. EXTRACTION   – Small model parses tool arguments from natural language
+    #   3. EXECUTION    – Ruby runtime invokes the sandboxed system action directly
+    #   4. VERIFICATION – Medium model cross-checks output against expectations
+    #   5. ESCALATION   – Large model intervenes after ESCALATION_THRESHOLD failures
+    #
     class TieredAutonomousAgent
-      DEFAULT_MAX_LOOPS         = 50
-      ESCALATION_THRESHOLD      = 3
+      DEFAULT_MAX_LOOPS    = 50
+      ESCALATION_THRESHOLD = 3
 
-      # @param goal        [String]  objective for the autonomous agent to achieve
-      # @param max_loops   [Integer] hard ceiling on execution cycles (default 50)
-      # @param keep_alive  [String]  VRAM flush TTL passed to Ollama (default "10s")
-      # @param num_ctx     [Integer] context window token cap per inference call (default 4096)
-      # @param model_small  [String, nil] override the Small-tier model name
-      # @param model_medium [String, nil] override the Medium-tier model name
-      # @param model_large  [String, nil] override the Large-tier model name
+      # @param goal         [String]       objective for the agent to achieve
+      # @param max_loops    [Integer]      hard ceiling on execution cycles
+      # @param vram_gb      [Numeric, nil] explicit VRAM override; nil → auto-detect
+      # @param profile      [Symbol, nil]  explicit profile override (e.g. :performance);
+      #                                    takes precedence over vram_gb / auto-detection
+      # @param keep_alive   [String, nil]  VRAM flush TTL — overrides the profile default
+      # @param num_ctx      [Integer, nil] context window cap — overrides the profile default
+      # @param model_small  [String, nil]  Small-tier model name override
+      # @param model_medium [String, nil]  Medium-tier model name override
+      # @param model_large  [String, nil]  Large-tier model name override
       def initialize(goal:,
                      max_loops:    DEFAULT_MAX_LOOPS,
-                     keep_alive:   VramOptions::DEFAULT_KEEP_ALIVE,
-                     num_ctx:      VramOptions::DEFAULT_NUM_CTX,
+                     vram_gb:      nil,
+                     profile:      nil,
+                     keep_alive:   nil,
+                     num_ctx:      nil,
                      model_small:  nil,
                      model_medium: nil,
                      model_large:  nil)
-        @goal       = goal
-        @max_loops  = max_loops.to_i.clamp(1, 500)
+        @goal      = goal
+        @max_loops = max_loops.to_i.clamp(1, 500)
 
-        vram_opts = VramOptions.build(keep_alive: keep_alive, num_ctx: num_ctx)
+        @active_profile = resolve_profile(profile, vram_gb)
+        print_hardware_banner
+
+        effective_keep_alive = keep_alive || @active_profile.keep_alive
+        effective_num_ctx    = num_ctx    || @active_profile.num_ctx
+
+        vram_opts = VramOptions.build(keep_alive: effective_keep_alive, num_ctx: effective_num_ctx)
+
         model_overrides = {
-          small: model_small,
-          medium: model_medium,
-          large: model_large
-        }.compact
+          small: model_small || @active_profile.model_small,
+          medium: model_medium || @active_profile.model_medium,
+          large: model_large || @active_profile.model_large
+        }
 
         @client        = build_client
         @phase_runner  = PhaseRunner.new(client: @client, vram_options: vram_opts,
@@ -51,12 +68,14 @@ module OllamaAgent
         @tool_executor = ToolExecutor.new
         @state_log     = StateLog.new
 
-        @loop_count = 0
+        @loop_count           = 0
         @consecutive_failures = 0
       end
 
-      # Runs the tiered execution loop until the goal is resolved, the loop limit
-      # is reached, or an unrecoverable error occurs.
+      # Runs the tiered execution loop until the goal is resolved, the loop
+      # limit is reached, or an unrecoverable error occurs.
+      #
+      # @return [:success, :max_loops_reached]
       def execute_loop!
         while @loop_count < @max_loops
           @loop_count += 1
@@ -71,12 +90,11 @@ module OllamaAgent
             return :success
           end
 
-          args              = run_extraction_phase(plan["tool_call"], plan["tool_instructions"])
-          execution_output  = @tool_executor.execute(plan["tool_call"], args)
-          verification      = run_verification_phase(plan["tool_call"], args, execution_output)
+          args             = run_extraction_phase(plan["tool_call"], plan["tool_instructions"])
+          execution_output = @tool_executor.execute(plan["tool_call"], args)
+          verification     = run_verification_phase(plan["tool_call"], args, execution_output)
 
           update_state(plan, verification)
-
           trigger_escalation_if_needed
         end
 
@@ -84,7 +102,49 @@ module OllamaAgent
         :max_loops_reached
       end
 
+      # The profile selected at initialisation time (exposed for inspection / tests).
+      # @return [HardwareProfile::Profile]
+      attr_reader :active_profile
+
       private
+
+      # ---------------------------------------------------------------------------
+      # Profile resolution
+      # ---------------------------------------------------------------------------
+
+      def resolve_profile(profile_override, vram_gb_override)
+        if profile_override
+          found = HardwareProfile.find(profile_override)
+          unless found
+            raise ArgumentError, "Unknown profile #{profile_override.inspect}. " \
+                                 "Valid profiles: #{HardwareProfile.all_names.join(", ")}"
+          end
+
+          return found
+        end
+
+        detected_gb = vram_gb_override || probe_vram
+        HardwareProfile.for_vram(detected_gb)
+      end
+
+      def probe_vram
+        gb = HardwareProbe.detect_vram_gb
+        @detected_vram_gb = gb
+        gb
+      end
+
+      def print_hardware_banner
+        vram_str = @detected_vram_gb ? "#{format("%.1f", @detected_vram_gb)} GB VRAM" : "VRAM unknown"
+        puts "[Hardware] #{vram_str} → Profile: #{@active_profile.label}"
+        puts "  Small:   #{@active_profile.model_small}"
+        puts "  Medium:  #{@active_profile.model_medium}"
+        puts "  Large:   #{@active_profile.model_large}"
+        puts "  Context: #{@active_profile.num_ctx} tokens, keep_alive: #{@active_profile.keep_alive}"
+      end
+
+      # ---------------------------------------------------------------------------
+      # Execution phases
+      # ---------------------------------------------------------------------------
 
       def run_planning_phase
         @phase_runner.run_planning(goal: @goal, state_log: @state_log)
@@ -113,7 +173,7 @@ module OllamaAgent
         return if @consecutive_failures < ESCALATION_THRESHOLD
 
         puts "\n[Escalation] #{ESCALATION_THRESHOLD} consecutive failures — " \
-             "loading Large model supervisor (CPU spillover mode)..."
+             "loading Large-tier supervisor (#{@active_profile.model_large})..."
 
         recommendation = @phase_runner.run_escalation(goal: @goal, state_log: @state_log)
         puts "[Supervisor] #{recommendation}"
@@ -121,6 +181,10 @@ module OllamaAgent
         @state_log.append_supervisor_intervention(recommendation)
         @consecutive_failures = 0
       end
+
+      # ---------------------------------------------------------------------------
+      # Client
+      # ---------------------------------------------------------------------------
 
       def build_client
         require "ollama_client"

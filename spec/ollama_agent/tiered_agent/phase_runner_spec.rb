@@ -3,13 +3,13 @@
 require "spec_helper"
 
 RSpec.describe OllamaAgent::TieredAgent::PhaseRunner do
+  subject(:runner) { described_class.new(client: client, vram_options: vram_options) }
+
   let(:vram_options) { OllamaAgent::TieredAgent::VramOptions.build }
   let(:client)       { instance_double("Ollama::Client") }
   let(:message)      { instance_double("Ollama::Message") }
   let(:response)     { instance_double("Ollama::Response", message: message) }
   let(:state_log)    { OllamaAgent::TieredAgent::StateLog.new }
-
-  subject(:runner) { described_class.new(client: client, vram_options: vram_options) }
 
   def stub_chat_with_json(json_hash)
     allow(message).to receive(:content).and_return(JSON.generate(json_hash))

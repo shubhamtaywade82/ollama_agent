@@ -102,27 +102,35 @@ module OllamaAgent
       run_orchestrate!(query)
     end
 
-    desc "tiered GOAL", "Run an 8 GB VRAM-optimised multi-tier autonomous agent (Small→Medium→Large model cascade)"
+    desc "tiered GOAL", "Run an adaptive multi-tier autonomous agent (auto-selects models for your GPU)"
     long_desc <<~HELP
-      Executes a goal-driven autonomous loop using three Ollama model tiers:
+      Runs a goal-driven autonomous loop with three sequential model tiers.
+      At startup the agent probes GPU VRAM (nvidia-smi / rocm-smi / Apple sysctl)
+      and selects the appropriate hardware profile automatically.
 
-        Small  (llama3.2:3b-instruct-q8_0)
-          Fast parameter extraction — loaded for Phase 2 argument parsing only.
+      Hardware profiles (ascending VRAM):
+        minimal     ≤8  GB  — 3B / 7B-q4  / 14B-q2  cascade,  4 k context
+        standard    10+ GB  — 3B / 14B-q4 / 32B-q2  cascade,  8 k context
+        performance 14+ GB  — 7B / 14B-q4 / 32B-q4  cascade, 16 k context
+        high        22+ GB  — 7B / 32B-q4 / 72B-q2  cascade, 32 k context
+        ultra       30+ GB  — 14B/ 32B-q4 / 72B-q4  cascade, 32 k context
+        maximum     44+ GB  — 14B/ 72B-q4 / 72B-q8  cascade, 64 k context
 
-        Medium (qwen2.5:7b-instruct-q4_K_M)
-          Primary orchestration — used for Phases 1 (planning) and 4 (verification).
-
-        Large  (qwen2.5:14b-instruct-q2_K)
-          Escalation supervisor — loaded only after 3 consecutive failures.
-
-      Models are evicted from VRAM between phases via keep_alive.
+      Override examples:
+        --profile performance        # force a specific profile
+        --vram-gb 12                 # treat machine as 12 GB regardless of detection
+        --model-large qwen2.5:72b    # swap only the Large-tier model
     HELP
     method_option :max_loops,    type: :numeric, default: 50,
                                  desc: "Maximum execution cycles (default: 50)"
-    method_option :keep_alive,   type: :string,  default: "10s",
-                                 desc: "VRAM flush keep_alive window (0, 10s, 30s …)"
-    method_option :num_ctx,      type: :numeric, default: 4096,
-                                 desc: "Token context window per inference call"
+    method_option :profile,      type: :string,
+                                 desc: "Explicit hardware profile: minimal|standard|performance|high|ultra|maximum"
+    method_option :vram_gb,      type: :numeric,
+                                 desc: "Override detected VRAM in GB (e.g. 12, 16, 24)"
+    method_option :keep_alive,   type: :string,
+                                 desc: "Override VRAM flush TTL (e.g. 0, 10s, 60s)"
+    method_option :num_ctx,      type: :numeric,
+                                 desc: "Override context window token count"
     method_option :model_small,  type: :string,  desc: "Override Small-tier model name"
     method_option :model_medium, type: :string,  desc: "Override Medium-tier model name"
     method_option :model_large,  type: :string,  desc: "Override Large-tier model name"
@@ -131,6 +139,8 @@ module OllamaAgent
       agent = TieredAgent::TieredAutonomousAgent.new(
         goal:         goal,
         max_loops:    options[:max_loops],
+        profile:      options[:profile]&.to_sym,
+        vram_gb:      options[:vram_gb],
         keep_alive:   options[:keep_alive],
         num_ctx:      options[:num_ctx],
         model_small:  options[:model_small],
@@ -138,6 +148,9 @@ module OllamaAgent
         model_large:  options[:model_large]
       )
       agent.execute_loop!
+    rescue ArgumentError => e
+      warn Console.error_line(e.message)
+      exit 1
     rescue OllamaAgent::Error => e
       warn Console.error_line("#{e.class}: #{e.message}")
       exit 1
