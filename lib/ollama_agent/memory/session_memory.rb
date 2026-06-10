@@ -67,7 +67,7 @@ module OllamaAgent
       private
 
       def memory_dir
-        File.join(@root, ".ollama_agent", "memory")
+        File.join(OllamaAgent.data_dir, "memory")
       end
 
       def memory_path

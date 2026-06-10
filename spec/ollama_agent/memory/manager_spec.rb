@@ -6,7 +6,17 @@ require "tmpdir"
 RSpec.describe OllamaAgent::Memory::Manager do
   subject(:manager) { described_class.new(root: tmp_root, session_id: "test_session") }
 
-  let(:tmp_root) { Dir.mktmpdir("ollama_agent_memory_spec") }
+  let(:tmp_root)  { Dir.mktmpdir("ollama_agent_memory_spec") }
+  let(:data_dir)  { Dir.mktmpdir("ollama_agent_memory_data") }
+
+  around do |example|
+    orig = ENV.fetch("OLLAMA_AGENT_DATA_DIR", nil)
+    ENV["OLLAMA_AGENT_DATA_DIR"] = data_dir
+    example.run
+  ensure
+    ENV["OLLAMA_AGENT_DATA_DIR"] = orig
+    FileUtils.remove_entry(data_dir)
+  end
 
   after { FileUtils.rm_rf(tmp_root) }
 

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "model_descriptor"
+require_relative "../cloud_accessibility_cache"
 
 module OllamaAgent
   module Providers
@@ -60,12 +61,13 @@ module OllamaAgent
             list.concat(local_models)
           end
 
-          # Fetch cloud models
+          # Fetch cloud models, filtered to accessible ones when cache is available
           begin
             cloud_names = agent.list_cloud_model_names
+            accessible  = CloudAccessibilityCache.accessible_names # nil = no cache
             cloud_names.each do |name|
-              # Avoid duplicating if already present
               next if list.any? { |m| m.name == name }
+              next if accessible && !accessible.include?(name)
 
               list << ModelDescriptor.new(
                 name: name,

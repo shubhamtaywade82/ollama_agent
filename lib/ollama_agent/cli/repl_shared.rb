@@ -259,6 +259,13 @@ module OllamaAgent
 
       def print_model_list(filter = nil)
         require_relative "../providers/model_registry"
+        require_relative "../cloud_accessibility_cache"
+
+        if filter&.strip&.downcase == "--probe"
+          run_cloud_probe
+          filter = nil
+        end
+
         models = OllamaAgent::Providers::ModelRegistry.all(agent: @agent)
 
         if filter && !filter.strip.empty?
@@ -308,7 +315,42 @@ module OllamaAgent
             @stdout.puts "    \e[1m#{m.name.ljust(30)}\e[0m | ctx: #{m.context_size.to_s.ljust(6)} | caps: #{caps.join(",")}#{size_info}#{status_info}#{pro_info}#{marker}"
           end
         end
+
+        @stdout.puts "  \e[33m[cloud] Accessibility not probed — run /models --probe to filter to accessible models only.\e[0m" unless OllamaAgent::CloudAccessibilityCache.fresh?
         @stdout.puts ""
+      end
+
+      def run_cloud_probe
+        api_key  = ENV.fetch("OLLAMA_API_KEY", nil).to_s.strip
+        base_url = ENV.fetch("OLLAMA_BASE_URL", "https://ollama.com")
+
+        if api_key.empty?
+          @stdout.puts "  \e[31mOLLAMA_API_KEY not set — cannot probe cloud models.\e[0m"
+          return
+        end
+
+        names = begin
+          @agent.list_cloud_model_names
+        rescue StandardError
+          []
+        end
+        if names.empty?
+          @stdout.puts "  \e[33mNo cloud models found to probe.\e[0m"
+          return
+        end
+
+        @stdout.puts "  Probing #{names.size} cloud model(s)..."
+        done_count = 0
+        OllamaAgent::CloudAccessibilityCache.probe!(
+          api_key: api_key,
+          base_url: base_url,
+          model_names: names,
+          on_progress: lambda { |done, total|
+            done_count = done
+            @stdout.print("\r  Progress: #{done}/#{total}") if @stdout.respond_to?(:print)
+          }
+        )
+        @stdout.puts "\r  Probe complete. #{done_count} models checked. Cache saved."
       end
 
       def handle_index

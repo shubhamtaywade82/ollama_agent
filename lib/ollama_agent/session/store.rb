@@ -6,13 +6,13 @@ require_relative "session"
 
 module OllamaAgent
   module Session
-    # NDJSON-based session persistence under <root>/.ollama_agent/sessions/.
+    # NDJSON-based session persistence under ~/.ollama_agent/sessions/.
     # Each call to .save appends one JSON line — crash-safe by design.
     module Store
       module_function
 
-      def sessions_dir(root)
-        File.join(root, ".ollama_agent", "sessions")
+      def sessions_dir(_root = nil)
+        File.join(OllamaAgent.data_dir, "sessions")
       end
 
       # Append one message to a session file.

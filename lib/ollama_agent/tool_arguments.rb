@@ -3,8 +3,6 @@
 module OllamaAgent
   # Normalizes tool call argument hashes (nested "parameters", symbol keys).
   module ToolArguments
-    private
-
     def coerce_tool_arguments(args)
       return {} if args.nil?
 
@@ -30,6 +28,8 @@ module OllamaAgent
     def blank_tool_value?(value)
       value.nil? || value.to_s.strip.empty?
     end
+
+    private
 
     def missing_tool_argument(tool, arg_name)
       "Missing required argument #{arg_name.inspect} for #{tool}."

@@ -163,6 +163,10 @@ module OllamaAgent
     File.expand_path("..", __dir__)
   end
 
+  def self.data_dir
+    File.expand_path(ENV.fetch("OLLAMA_AGENT_DATA_DIR", File.join(Dir.home, ".ollama_agent")))
+  end
+
   # Convenience: build a runner with the recommended defaults.
   #
   # @example
@@ -179,3 +183,4 @@ end
 
 require_relative "ollama_agent/tool_runtime"
 require_relative "ollama_agent/self_improvement"
+require_relative "ollama_agent/tiered_agent"

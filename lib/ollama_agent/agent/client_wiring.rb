@@ -60,7 +60,7 @@ module OllamaAgent
         custom = ENV.fetch("OLLAMA_AGENT_AUDIT_LOG_PATH", nil)
         return custom if custom && !custom.to_s.strip.empty?
 
-        File.join(@root, ".ollama_agent", "logs")
+        File.join(OllamaAgent.data_dir, "logs")
       end
 
       def attach_audit_logger

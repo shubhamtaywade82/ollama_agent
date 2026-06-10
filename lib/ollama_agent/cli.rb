@@ -42,7 +42,7 @@ module OllamaAgent
     method_option :stream, type: :boolean, default: false,
                            desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
     method_option :audit, type: :boolean, default: false,
-                          desc: "Enable structured audit log under .ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
+                          desc: "Enable structured audit log under ~/.ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
     method_option :max_retries, type: :numeric,
                                 desc: "HTTP retry attempts (0=disable, default 3)"
     method_option :session, type: :string,  desc: "Named session id (saves/resumes conversation)"
@@ -88,7 +88,7 @@ module OllamaAgent
     method_option :stream, type: :boolean, default: false,
                            desc: "Stream tokens to terminal as they arrive (OLLAMA_AGENT_STREAM=1)"
     method_option :audit, type: :boolean, default: false,
-                          desc: "Enable structured audit log under .ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
+                          desc: "Enable structured audit log under ~/.ollama_agent/logs/ (OLLAMA_AGENT_AUDIT=1)"
     method_option :max_retries, type: :numeric,
                                 desc: "HTTP retry attempts (0=disable, default 3)"
     method_option :max_tokens, type: :numeric,
@@ -100,6 +100,83 @@ module OllamaAgent
       apply_session_interactive_tui_flags!(query)
       validate_tui_options!
       run_orchestrate!(query)
+    end
+
+    desc "tiered GOAL", "Run an adaptive multi-tier autonomous agent (auto-selects models for your GPU or cloud)"
+    long_desc <<~HELP
+      Runs a goal-driven autonomous loop with three sequential model tiers.
+
+      LOCAL MODE (default)
+        At startup the agent probes GPU VRAM (nvidia-smi / rocm-smi / Apple sysctl)
+        and selects the hardware profile that best fits your GPU:
+
+          minimal     ≤8  GB  — 3B / 7B-q4  / 14B-q2  cascade,  4 k context
+          standard    10+ GB  — 3B / 14B-q4 / 32B-q2  cascade,  8 k context
+          performance 14+ GB  — 7B / 14B-q4 / 32B-q4  cascade, 16 k context
+          high        22+ GB  — 7B / 32B-q4 / 72B-q2  cascade, 32 k context
+          ultra       30+ GB  — 14B/ 32B-q4 / 72B-q4  cascade, 32 k context
+          maximum     44+ GB  — 14B/ 72B-q4 / 72B-q8  cascade, 64 k context
+
+      CLOUD MODE (Ollama Cloud or any remote Ollama endpoint)
+        The VRAM probe is skipped — the remote server manages its own memory.
+        Free-tier models are used by default (llama3.2:3b / llama3.1:8b / llama3.3:70b).
+        The Large-tier model may require an Ollama Pro subscription; override it with
+        --model-large llama3.1:8b or any other freely available model if needed.
+
+        Auto-detected when OLLAMA_BASE_URL contains "ollama.com" or OLLAMA_CLOUD=1.
+        Also triggered by --cloud / --profile cloud.
+
+        Quick start:
+          export OLLAMA_BASE_URL=https://api.ollama.com
+          export OLLAMA_API_KEY=ollama_...
+          ollama_agent tiered "Your goal"
+
+      MODEL OVERRIDE EXAMPLES
+        --cloud                          # force cloud profile (free-tier models)
+        --profile performance            # force a specific local profile
+        --vram-gb 12                     # treat machine as 12 GB regardless of detection
+        --model-large llama3.1:8b        # swap only the Large-tier model (free-tier safe)
+    HELP
+    method_option :max_loops,    type: :numeric, default: 50,
+                                 desc: "Maximum execution cycles (default: 50)"
+    method_option :cloud,        type: :boolean, default: false,
+                                 desc: "Use Ollama Cloud profile (free-tier models, no local VRAM probe)"
+    method_option :profile,      type: :string,
+                                 desc: "Explicit profile: minimal|standard|performance|high|ultra|maximum|cloud"
+    method_option :vram_gb,      type: :numeric,
+                                 desc: "Override detected VRAM in GB (e.g. 12, 16, 24)"
+    method_option :keep_alive,   type: :string,
+                                 desc: "Override keep_alive TTL (e.g. 0, 10s, -1 for cloud)"
+    method_option :num_ctx,      type: :numeric,
+                                 desc: "Override context window token count"
+    method_option :model_small,  type: :string,  desc: "Override Small-tier model name"
+    method_option :model_medium, type: :string,  desc: "Override Medium-tier model name"
+    method_option :model_large,  type: :string,  desc: "Override Large-tier model name"
+    def tiered(goal)
+      require_relative "tiered_agent"
+      effective_profile = resolve_tiered_profile
+      agent = TieredAgent::TieredAutonomousAgent.new(
+        goal: goal,
+        max_loops: options[:max_loops],
+        profile: effective_profile,
+        vram_gb: options[:vram_gb],
+        keep_alive: options[:keep_alive],
+        num_ctx: options[:num_ctx],
+        model_small: options[:model_small],
+        model_medium: options[:model_medium],
+        model_large: options[:model_large]
+      )
+      agent.execute_loop!
+    rescue ArgumentError => e
+      warn Console.error_line(e.message)
+      exit 1
+    rescue OllamaAgent::Error => e
+      warn Console.error_line("#{e.class}: #{e.message}")
+      exit 1
+    rescue StandardError => e
+      warn Console.error_line("#{e.class}: #{e.message}")
+      warn e.full_message(order: :top, highlight: false) if ENV["OLLAMA_AGENT_DEBUG"] == "1"
+      exit 1
     end
 
     desc "sessions", "List saved sessions for the current project root"
@@ -204,6 +281,12 @@ module OllamaAgent
     end
 
     private
+
+    def resolve_tiered_profile
+      return :cloud if options[:cloud]
+
+      options[:profile]&.to_sym
+    end
 
     def run_ask!(query)
       if session_tui?

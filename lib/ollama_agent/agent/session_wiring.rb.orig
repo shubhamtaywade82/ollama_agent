@@ -22,8 +22,6 @@ module OllamaAgent
         append_tool_results(messages, tool_calls)
       end
 
-      private
-
       def append_tool_results(messages, tool_calls)
         tool_calls.each do |tool_call|
           name = tool_call.name

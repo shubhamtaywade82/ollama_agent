@@ -80,6 +80,12 @@ Lint/RedundantCopDisableDirective:
 RSpec/StubbedMock:
   Enabled: false
 
+RSpec/MultipleMemoizedHelpers:
+  Max: 10
+
+RSpec/VerifiedDoubleReference:
+  Enabled: false
+
 Metrics/ParameterLists:
   Max: 100
 
