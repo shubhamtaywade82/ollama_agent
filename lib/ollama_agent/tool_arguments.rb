@@ -3,7 +3,6 @@
 module OllamaAgent
   # Normalizes tool call argument hashes (nested "parameters", symbol keys).
   module ToolArguments
-
     def coerce_tool_arguments(args)
       return {} if args.nil?
 
