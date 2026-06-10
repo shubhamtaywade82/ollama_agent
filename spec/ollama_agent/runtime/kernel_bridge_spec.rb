@@ -52,7 +52,7 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
     let(:tool_calls) { [{ "name" => "read_file", "arguments" => { "path" => "README.md" } }] }
 
     context "when kernel flag is disabled" do
-      before { allow(agent).to receive(:send) }
+      before { allow(agent).to receive(:dispatch_tool_results) }
 
       it "uses legacy append behavior without emitting kernel event" do
         ENV["OLLAMA_AGENT_KERNEL"] = "false"
@@ -60,7 +60,7 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
 
         bridge.append_tool_results(messages: messages, tool_calls: tool_calls)
 
-        expect(agent).to have_received(:send).with(:append_tool_results, messages, tool_calls)
+        expect(agent).to have_received(:dispatch_tool_results).with(messages, tool_calls)
         expect(hooks).not_to have_received(:emit)
       end
 
@@ -74,7 +74,7 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
             root: root,
             read_only: false
           )
-          allow(local_agent).to receive(:send).with(:append_tool_results, anything, anything)
+          allow(local_agent).to receive(:dispatch_tool_results).with(anything, anything)
           bridge = described_class.new(local_agent)
           write_call = [{
             "name" => "write_file",

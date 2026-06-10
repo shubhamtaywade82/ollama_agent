@@ -32,8 +32,6 @@ module OllamaAgent
     include RubyIndexToolSupport
     include ToolArguments
 
-    private
-
     # rubocop:disable Metrics/MethodLength, Metrics/CyclomaticComplexity
     def execute_tool(name, args)
       args = coerce_tool_arguments(args)
