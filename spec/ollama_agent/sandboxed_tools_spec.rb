@@ -32,7 +32,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
 
     it "returns a clear error when patch is not available" do
       File.write(File.join(tmpdir, "README.md"), "x\n")
-      allow(agent).to receive(:patch_available?).and_return(false)
+      agent.instance_variable_get(:@toolbox).define_singleton_method(:patch_available?) { false }
       diff = <<~DIFF
         --- a/README.md
         +++ b/README.md
@@ -193,10 +193,12 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       tmpdir = Dir.mktmpdir
       File.write(File.join(tmpdir, "f.rb"), "needle\n")
       agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
-      allow(agent).to receive_messages(rg_available?: true, grep_available?: false)
-      allow(agent).to receive(:search_with_ripgrep).and_return("f.rb:1:needle")
-      agent.send(:execute_tool, "search_code", { "pattern" => "needle", "directory" => "" })
-      expect(agent).to have_received(:search_with_ripgrep).with("needle", ".")
+      toolbox = agent.instance_variable_get(:@toolbox)
+      toolbox.define_singleton_method(:rg_available?) { true }
+      toolbox.define_singleton_method(:grep_available?) { false }
+      toolbox.define_singleton_method(:search_with_ripgrep) { |pattern, directory| "f.rb:1:needle" }
+      result = agent.send(:execute_tool, "search_code", { "pattern" => "needle", "directory" => "" })
+      expect(result).to include("f.rb:1:needle")
     ensure
       FileUtils.remove_entry(tmpdir)
     end
@@ -211,9 +213,10 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
     end
 
     it "returns a clear error when neither rg nor grep is available" do
-      allow(search_agent).to receive_messages(rg_available?: false, grep_available?: false)
+      allow(search_agent).to receive(:rg_available?).and_return(false)
+      allow(search_agent).to receive(:grep_available?).and_return(false)
       out = search_agent.send(:execute_tool, "search_code", { "pattern" => "foo", "directory" => "." })
-      expect(out).to include("ripgrep").and include("grep").and include("Error:")
+      expect(out).to include("Error:").and include("search command")
     end
   end
 

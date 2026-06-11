@@ -24,16 +24,36 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
     end
   end
 
+  def build_kernel_bridge(agent_double, pipeline: nil)
+    described_class.new(
+      session_manager: agent_double,
+      toolbox: agent_double,
+      hooks: agent_double.hooks,
+      loop_detector: nil,
+      memory_manager: nil,
+      config: agent_double,
+      logger: agent_double.logger,
+      permissions: OllamaAgent::Runtime::Permissions.new(profile: :full),
+      policies: OllamaAgent::Runtime::Policies.new,
+      pipeline: pipeline
+    )
+  end
+
   let(:hooks) { instance_double(OllamaAgent::Streaming::Hooks, emit: nil) }
   let(:logger) { instance_double(Logger, info: nil, warn: nil, error: nil) }
   let(:agent_workspace) { Dir.mktmpdir("kernel-bridge-agent") }
+  let(:runtime) { double(read_only: false, confirm_patches: false) }
   let(:agent) do
     double(
       hooks: hooks,
       logger: logger,
       root: agent_workspace,
       read_only: false,
-      current_turn: 2
+      current_turn: 2,
+      runtime: runtime,
+      tool_message: { role: "tool", name: "test", content: "ok" },
+      save_message_to_session: nil,
+      execute: "executed"
     )
   end
 
@@ -56,7 +76,7 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
 
       it "uses legacy append behavior without emitting kernel event" do
         ENV["OLLAMA_AGENT_KERNEL"] = "false"
-        bridge = described_class.new(agent)
+        bridge = build_kernel_bridge(agent)
 
         bridge.append_tool_results(messages: messages, tool_calls: tool_calls)
 
@@ -67,15 +87,18 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
       it "does not create kernel SQLite files (no saga persistence)" do
         Dir.mktmpdir("kernel-bridge-off") do |root|
           ENV["OLLAMA_AGENT_KERNEL"] = "false"
-          local_agent = instance_double(
-            OllamaAgent::Agent,
+          local_agent = double(
             hooks: hooks,
             logger: logger,
             root: root,
-            read_only: false
+            read_only: false,
+            runtime: double(read_only: false),
+            tool_message: { role: "tool", name: "test", content: "ok" },
+            save_message_to_session: nil,
+            execute: "executed"
           )
           allow(local_agent).to receive(:dispatch_tool_results).with(anything, anything)
-          bridge = described_class.new(local_agent)
+          bridge = build_kernel_bridge(local_agent)
           write_call = [{
             "name" => "write_file",
             "arguments" => { "path" => "lib/x.rb", "content" => "1" }
@@ -98,18 +121,13 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
           permissions: OllamaAgent::Runtime::Permissions.new(profile: :full),
           policies: OllamaAgent::Runtime::Policies.new
         )
-
-        iv = { :@current_turn => 2, :@confirm_patches => false, :@loop_detector => nil, :@memory_manager => nil }
-        allow(agent).to receive(:instance_variable_get) { |k| iv[k] }
+        allow(agent).to receive(:execute).and_return("read-ok")
+        allow(agent).to receive(:tool_message) do |tc, result|
+          { role: "tool", name: tc.name, content: result.to_s }
+        end
+        allow(agent).to receive(:save_message_to_session)
         allow(agent).to receive(:send) do |method, *args|
           case method
-          when :platform_guarded_tool_call
-            "read-ok"
-          when :tool_message
-            tc = args[0]
-            { role: "tool", name: tc.name, content: args[1].to_s }
-          when :save_message_to_session
-            nil
           when :blank_tool_value?
             args.first.to_s.strip.empty?
           end
@@ -118,7 +136,7 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
 
       it "emits kernel telemetry and routes non-pipeline tools through the guarded path" do
         ENV["OLLAMA_AGENT_KERNEL"] = "true"
-        bridge = described_class.new(agent)
+        bridge = build_kernel_bridge(agent)
 
         bridge.append_tool_results(messages: messages, tool_calls: tool_calls)
 
@@ -127,7 +145,7 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
           hash_including(enabled: true, tool_call_count: 1, pipeline_tools: kind_of(Array))
         )
         expect(agent).not_to have_received(:send).with(:append_tool_results, anything, anything)
-        expect(agent).to have_received(:send).with(:platform_guarded_tool_call, "read_file", kind_of(Hash))
+        expect(agent).to have_received(:execute).with("read_file", kind_of(Hash), context: kind_of(Hash))
       end
 
       # rubocop:disable RSpec/ExampleLength -- explicit pipeline + Agent send stubs
@@ -135,7 +153,7 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
         ENV["OLLAMA_AGENT_KERNEL"] = "true"
         pl_out = { result: :ok, state: "committed", manifest_id: "m1" }
         pipeline = instance_double(OllamaAgent::Runtime::KernelPipeline, execute: pl_out)
-        bridge = described_class.new(agent, pipeline: pipeline)
+        bridge = build_kernel_bridge(agent, pipeline: pipeline)
         calls = [{ "name" => "write_file", "arguments" => { "path" => "lib/x.rb", "content" => "1" } }]
 
         allow(agent).to receive(:send) do |method, *args|
@@ -175,7 +193,7 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
         ENV["OLLAMA_AGENT_KERNEL"] = "true"
         pl_out = { result: :ok, state: "committed", manifest_id: "m2" }
         pipeline = instance_double(OllamaAgent::Runtime::KernelPipeline, execute: pl_out)
-        bridge = described_class.new(agent, pipeline: pipeline)
+        bridge = build_kernel_bridge(agent, pipeline: pipeline)
         calls = [{
           "name" => "edit_file",
           "arguments" => { "path" => "lib/e.rb", "search" => "a", "replace" => "b" }
@@ -221,7 +239,7 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
         ENV["OLLAMA_AGENT_KERNEL"] = "true"
         pl_out = { result: :ok, state: "committed", manifest_id: "m3" }
         pipeline = instance_double(OllamaAgent::Runtime::KernelPipeline, execute: pl_out)
-        bridge = described_class.new(agent, pipeline: pipeline)
+        bridge = build_kernel_bridge(agent, pipeline: pipeline)
         diff = <<~DIFF
           diff --git a/lib/p.rb b/lib/p.rb
           --- a/lib/p.rb
@@ -283,7 +301,7 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
 
         pl_out = { result: :ok, state: "committed", manifest_id: "m1" }
         pipeline = instance_double(OllamaAgent::Runtime::KernelPipeline, execute: pl_out)
-        bridge = described_class.new(agent, pipeline: pipeline)
+        bridge = build_kernel_bridge(agent, pipeline: pipeline)
         calls = [{ "name" => "write_file", "arguments" => { "path" => "lib/x.rb", "content" => "1" } }]
 
         allow(agent).to receive(:send) do |method, *args|
@@ -333,7 +351,11 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
             hooks: hooks,
             logger: logger,
             root: root,
-            read_only: false
+            read_only: false,
+            runtime: double(read_only: false, confirm_patches: false),
+            tool_message: { role: "tool", name: "test", content: "ok" },
+            save_message_to_session: nil,
+            execute: "executed"
           )
           allow(local_agent).to receive_messages(
             permissions: OllamaAgent::Runtime::Permissions.new(profile: :full),
@@ -363,7 +385,7 @@ RSpec.describe OllamaAgent::Runtime::KernelBridge do
             end
           end
 
-          bridge = described_class.new(local_agent, pipeline: pipeline)
+          bridge = build_kernel_bridge(local_agent, pipeline: pipeline)
           manifest_id = nil
           allow(pipeline).to receive(:execute).and_wrap_original do |m, **kwargs|
             manifest_id = kwargs[:manifest_id]
