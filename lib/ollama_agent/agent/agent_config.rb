@@ -31,30 +31,43 @@ module OllamaAgent
                      memory_manager: nil, trace_logger: nil, approval_gate: nil)
         @model = model
         @root = root
-        @confirm_patches = confirm_patches
-        @http_timeout = http_timeout
-        @think = think
-        @read_only = read_only
-        @patch_policy = patch_policy
-        @system_prompt = system_prompt
-        @skill_paths = skill_paths
-        @skills_enabled = skills_enabled
-        @skills_include = skills_include
-        @skills_exclude = skills_exclude
-        @external_skills_enabled = external_skills_enabled
-        @orchestrator = orchestrator
-        @confirm_delegation = confirm_delegation
-        @max_retries = max_retries
-        @audit = audit
-        @session_id = session_id
-        @resume = resume
-        @max_tokens = max_tokens
-        @context_summarize = context_summarize
-        @stdin = stdin
-        @stdout = stdout
-        @user_prompt = user_prompt
-        @logger = logger
-        # v2 platform options
+
+        # Compose sub-configs
+        @runtime = Config::RuntimeConfig.new(
+          confirm_patches: confirm_patches,
+          read_only: read_only,
+          patch_policy: patch_policy,
+          system_prompt: system_prompt,
+          http_timeout: http_timeout,
+          think: think,
+          orchestrator: orchestrator,
+          confirm_delegation: confirm_delegation,
+          max_retries: max_retries,
+          audit: audit,
+          provider: provider,
+          provider_name: provider_name
+        )
+
+        @skills = Config::SkillConfig.new(
+          skill_paths: skill_paths,
+          skills_enabled: skills_enabled,
+          skills_include: skills_include,
+          skills_exclude: skills_exclude,
+          external_skills_enabled: external_skills_enabled
+        )
+
+        @session = Config::SessionConfig.new(
+          session_id: session_id,
+          resume: resume,
+          max_tokens: max_tokens,
+          context_summarize: context_summarize,
+          stdin: stdin,
+          stdout: stdout,
+          user_prompt: user_prompt,
+          logger: logger
+        )
+
+        # v2 platform options stored directly on AgentConfig
         @provider       = provider
         @provider_name  = provider_name
         @budget         = budget
@@ -66,8 +79,39 @@ module OllamaAgent
       end
       # rubocop:enable Metrics/MethodLength, Metrics/ParameterLists, Metrics/AbcSize
 
+      # Backward-compat delegation to sub-configs
+      def runtime = @runtime
+      def skills = @skills
+      def session = @session
+
+      def confirm_patches = @runtime.confirm_patches
+      def http_timeout = @runtime.http_timeout
+      def think = @runtime.think
+      def read_only = @runtime.read_only
+      def patch_policy = @runtime.patch_policy
+      def system_prompt = @runtime.system_prompt
+      def orchestrator = @runtime.orchestrator
+      def confirm_delegation = @runtime.resolved_confirm_delegation
+      def max_retries = @runtime.max_retries
+      def audit = @runtime.audit
+
+      def skill_paths = @skills.skill_paths
+      def skills_enabled = @skills.skills_enabled
+      def skills_include = @skills.skills_include
+      def skills_exclude = @skills.skills_exclude
+      def external_skills_enabled = @skills.external_skills_enabled
+
+      def session_id = @session.session_id
+      def resume = @session.resume
+      def max_tokens = @session.max_tokens
+      def context_summarize = @session.context_summarize
+      def stdin = @session.stdin
+      def stdout = @session.stdout
+      def user_prompt = @session.user_prompt
+      def logger = @session.logger
+
       def resolved_confirm_delegation
-        @confirm_delegation.nil? || @confirm_delegation
+        @runtime.resolved_confirm_delegation
       end
     end
   end

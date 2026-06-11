@@ -22,6 +22,9 @@ require_relative "model_env"
 require_relative "ollama_cloud_catalog"
 require_relative "agent_root_resolver"
 require_relative "agent/agent_config"
+require_relative "client_manager"
+require_relative "prompt_builder"
+require_relative "model_manager"
 require_relative "agent/client_wiring"
 require_relative "agent/prompt_wiring"
 require_relative "agent/session_wiring"
@@ -45,8 +48,21 @@ module OllamaAgent
     DEFAULT_HTTP_TIMEOUT = 120
 
     attr_accessor :client
-    attr_reader :root, :hooks, :model, :logger,
-                :session_id, :read_only, :max_tokens, :orchestrator, :provider_name
+    attr_reader :config
+    attr_reader :root, :hooks, :model, :logger, :policies
+
+    # Backward-compat attr_reader shims delegating to config
+    def read_only = @config.runtime.read_only
+    def max_tokens = @config.session.max_tokens
+    def orchestrator = @config.runtime.orchestrator
+    def provider_name
+      # Keep @provider_name ivar for backward compat with tests using instance_variable_get
+      @provider_name ||= @config.runtime.provider_name
+    end
+    def session_id = @config.session.session_id
+
+    # Backward-compat: expose as attr_reader for tests using instance_variable_get
+    attr_reader :permissions
 
     # @param config [AgentConfig, nil] when set, keyword options are ignored (use {Runner} or build {AgentConfig}).
     # rubocop:disable Metrics/ParameterLists
@@ -81,106 +97,108 @@ module OllamaAgent
         user_prompt: user_prompt,
         logger: logger
       )
-      apply_agent_config(cfg)
-      @user_prompt = cfg.user_prompt || UserPrompt.new(stdin: cfg.stdin, stdout: cfg.stdout)
-      @context_manager = Context::Manager.new(max_tokens: @max_tokens, context_summarize: @context_summarize)
+      @config = cfg
+      @model = cfg.model || default_model
+      @root = AgentRootResolver.resolve(cfg.root)
+      @logger = cfg.session.logger || build_default_logger
       @hooks = Streaming::Hooks.new
+
+      # Collaborators initialized after @hooks is available
+      @client_manager = ClientManager.new(config: @config, hooks: @hooks)
+      @prompt_builder = PromptBuilder.new(config: @config)
+
+      # Ivars for SandboxedTools backward compat (module accesses @root, @read_only, @confirm_patches, @patch_policy)
+      @confirm_patches = cfg.confirm_patches
+      @read_only = cfg.read_only
+      @patch_policy = cfg.patch_policy
+
+      # Keep @provider_name and @permissions as ivars for backward compat with tests using instance_variable_get
+      @provider_name = cfg.provider_name
+      @permissions = cfg.permissions
+
+      @user_prompt = cfg.user_prompt || UserPrompt.new(stdin: cfg.stdin, stdout: cfg.stdout)
+      @context_manager = Context::Manager.new(max_tokens: cfg.session.max_tokens, context_summarize: cfg.session.context_summarize)
+
+      strict = EnvConfig.strict_env?
+      @max_turns = EnvConfig.fetch_int("OLLAMA_AGENT_MAX_TURNS", MAX_TURNS, strict: strict)
+      @budget = cfg.budget || Core::Budget.new(max_steps: @max_turns, max_tokens: cfg.session.max_tokens)
+      @loop_detector = Core::LoopDetector.new
+      @trace_logger = cfg.trace_logger
+      @memory_manager = cfg.memory_manager
+      @policies = cfg.policies
+      @approval_gate = cfg.approval_gate
+
+      @toolbox = Toolbox.new(config: @config, logger: @logger)
+      @session_manager = SessionManager.new(
+        config: @config,
+        hooks: @hooks,
+        toolbox: @toolbox,
+        loop_detector: @loop_detector,
+        trace_logger: @trace_logger,
+        budget: @budget,
+        permissions: @permissions,
+        policies: @policies,
+        memory_manager: @memory_manager
+      )
+
+      @chat_coordinator = ChatCoordinator.new(
+        client: nil, # will be set after client is initialized
+        model_manager: nil, # will be set after model_manager is initialized
+        config: @config,
+        hooks: @hooks
+      )
+      @kernel_bridge = Runtime::KernelBridge.new(
+        session_manager: @session_manager,
+        toolbox: @toolbox,
+        hooks: @hooks,
+        loop_detector: @loop_detector,
+        memory_manager: @memory_manager,
+        config: @config,
+        logger: @logger,
+        permissions: @permissions,
+        policies: @policies
+      )
+
       attach_audit_logger if resolved_audit_enabled
-      @client = client || build_default_client
+      @client = client || @client_manager.build_default_client
+      @model_manager = ModelManager.new(client: @client, default_model: @model)
+      @model = @model_manager.model
+
+      # Update chat_coordinator with actual client and model_manager now that they exist
+      @chat_coordinator.instance_variable_set(:@client, @client)
+      @chat_coordinator.instance_variable_set(:@model_manager, @model_manager)
     end
     # rubocop:enable Metrics/MethodLength
     # rubocop:enable Metrics/ParameterLists
 
+    # Model access delegated to ModelManager
+    def model = @model_manager.model
+
+    def assign_chat_model!(name) = @model_manager.assign_chat_model!(name)
+    def model_accessible?(name = nil) = @model_manager.model_accessible?(name)
+    def list_local_model_names = @model_manager.list_local_model_names
+    def list_cloud_model_names = @model_manager.list_cloud_model_names
+
     def run(query)
-      Console.reset_thinking_session!
       messages = build_messages_for_run(query)
-      TurnLoop.new(self).run(messages)
-    end
-
-    # Switch the chat model for subsequent {#run} calls (same session, same client).
-    # Accepts Ollama local tags (e.g. +llama3.2+) or cloud catalog names (e.g. +glm-5.1+).
-    #
-    # @param name [String]
-    # @return [String] the normalized model id
-    # @raise [OllamaAgent::EmptyModelNameError] when +name+ is blank
-    def assign_chat_model!(name)
-      n = name.to_s.strip
-      raise EmptyModelNameError, "Model name cannot be empty" if n.empty?
-
-      @model = n
-      n
-    end
-
-    # Performs a pre-flight check to see if the model is accessible.
-    # Currently only implemented for Ollama Cloud (checks for 403 Subscription Required).
-    #
-    # @param name [String, nil] defaults to current @model
-    # @return [Boolean] true if accessible or check not applicable
-    def model_accessible?(name = nil)
-      n = name || @model
-      return true unless @client.respond_to?(:cloud?) && @client.cloud?
-      return true unless @client.respond_to?(:subscription_required?)
-
-      !@client.subscription_required?(n)
-    rescue StandardError
-      true # assume accessible if check fails
-    end
-
-    # Names from the local Ollama daemon (+/api/tags+ on your +base_url+). Not used by the REPL +/models+ command.
-    #
-    # @return [Array<String>]
-    def list_local_model_names
-      return [] unless @client.respond_to?(:list_model_names)
-
-      @client.list_model_names
-    rescue StandardError => e
-      logger.warn("list_local_model_names failed (#{e.class}: #{e.message})")
-      logger.debug(e.full_message) if ENV["OLLAMA_AGENT_DEBUG"] == "1"
-      []
-    end
-
-    def list_cloud_model_names
-      base_url = nil
-      api_key = nil
-
-      if @client.respond_to?(:client) && @client.client.respond_to?(:config)
-        config = @client.client.config
-        base_url = config.base_url
-        api_key = config.api_key
-      end
-
-      # Fallback to OLLAMA_BASE_URL if client doesn't expose it
-      base_url ||= ENV.fetch("OLLAMA_BASE_URL", nil)
-
-      # If it's a cloud-like URL, we can try to append /api/tags if needed,
-      # but OllamaCloudCatalog.list_model_names handles the mapping.
-      catalog_host = base_url ? "#{base_url.to_s.chomp("/")}/api/tags" : nil
-
-      OllamaCloudCatalog.list_model_names(base_url: catalog_host, api_key: api_key)
+      TurnLoop.new(
+        max_turns: @max_turns,
+        budget: @budget,
+        loop_detector: @loop_detector,
+        trace_logger: @trace_logger,
+        context_manager: @context_manager,
+        chat_coordinator: @chat_coordinator,
+        hooks: @hooks,
+        logger: @logger,
+        kernel_bridge: @kernel_bridge,
+        session_manager: @session_manager
+      ).run(messages)
     end
 
     # Subclasses that override chat or tool wiring should keep {#assign_chat_model!} in sync
     # if they depend on +@model+ matching the HTTP client catalog.
 
     private
-
-    def chat_coordinator
-      @chat_coordinator ||= ChatCoordinator.new(self)
-    end
-
-    def apply_agent_config(cfg)
-      assign_model_and_root!(cfg)
-      assign_runtime_flags!(cfg)
-      assign_skill_options!(cfg)
-      assign_session_and_limits!(cfg)
-      assign_platform_subsystems!(cfg)
-    end
-
-    def assign_model_and_root!(cfg)
-      @model = cfg.model || default_model
-      @root = AgentRootResolver.resolve(cfg.root)
-      @logger = cfg.logger || build_default_logger
-    end
 
     def build_default_logger
       Logger.new($stderr, progname: "ollama_agent").tap do |log|
@@ -199,86 +217,8 @@ module OllamaAgent
       end
     end
 
-    # rubocop:disable Metrics/MethodLength -- one-line ivar copies from AgentConfig
-    def assign_runtime_flags!(cfg)
-      @confirm_patches = cfg.confirm_patches
-      @read_only = cfg.read_only
-      @patch_policy = cfg.patch_policy
-      @system_prompt = cfg.system_prompt
-      @http_timeout_override = cfg.http_timeout
-      @think = cfg.think
-      @orchestrator = cfg.orchestrator
-      @confirm_delegation = cfg.resolved_confirm_delegation
-      @max_retries = cfg.max_retries
-      @audit = cfg.audit
-      @provider = cfg.provider
-      @provider_name = cfg.provider_name
-    end
-    # rubocop:enable Metrics/MethodLength
-
-    def assign_skill_options!(cfg)
-      @skill_paths = cfg.skill_paths
-      @skills_enabled = cfg.skills_enabled
-      @skills_include = cfg.skills_include
-      @skills_exclude = cfg.skills_exclude
-      @external_skills_enabled = cfg.external_skills_enabled
-    end
-
-    def assign_session_and_limits!(cfg)
-      @session_id = cfg.session_id
-      @resume = cfg.resume
-      @max_tokens = cfg.max_tokens
-      @context_summarize = cfg.context_summarize
-      strict = EnvConfig.strict_env?
-      @max_turns = EnvConfig.fetch_int("OLLAMA_AGENT_MAX_TURNS", MAX_TURNS, strict: strict)
-    end
-
-    def assign_platform_subsystems!(cfg)
-      @budget        = cfg.budget || Core::Budget.new(max_steps: @max_turns, max_tokens: @max_tokens)
-      @loop_detector = Core::LoopDetector.new
-      @trace_logger  = cfg.trace_logger
-      @memory_manager = cfg.memory_manager
-      @permissions   = cfg.permissions
-      @policies      = cfg.policies
-      @approval_gate = cfg.approval_gate
-    end
-
-    def trimmed_messages_for_chat(messages)
-      @context_manager.trim(messages)
-    end
-
-    def persist_assistant_turn(messages, message)
-      messages << message.to_h
-      save_message_to_session(message.to_h)
-    end
-
-    def emit_turn_complete(messages)
-      @hooks.emit(:on_complete, { messages: messages, turns: @current_turn })
-    end
-
-    def warn_max_turns_if_needed
-      return unless ENV["OLLAMA_AGENT_DEBUG"] == "1" && @current_turn >= @max_turns
-
-      logger.warn("maximum tool rounds (#{@max_turns}) reached")
-    end
-
-    def current_turn
-      @current_turn || 0
-    end
-
-    def tool_calls_from(message)
-      calls = message.tool_calls || []
-      return calls unless calls.empty? && ToolContentParser.enabled?
-
-      ToolContentParser.synthetic_calls(message.content)
-    end
-
     def chat_request_args(messages)
-      chat_coordinator.request_args(messages)
-    end
-
-    def resolve_think
-      ThinkParam.resolve(@think)
+      @chat_coordinator.request_args(messages)
     end
 
     def default_model

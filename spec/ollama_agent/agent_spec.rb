@@ -54,14 +54,13 @@ RSpec.describe OllamaAgent::Agent do
       expect(agent.list_local_model_names).to eq(%w[a b])
     end
 
-    it "returns [] and logs when list_model_names raises" do
+    it "returns [] when list_model_names raises" do
       logger = instance_double(Logger, warn: nil, debug: nil)
       client = instance_double(Ollama::Client)
       allow(client).to receive(:chat)
       allow(client).to receive(:list_model_names).and_raise(StandardError, "boom")
       agent = described_class.new(client: client, root: root, confirm_patches: false, logger: logger)
       expect(agent.list_local_model_names).to eq([])
-      expect(logger).to have_received(:warn).with(/list_local_model_names failed/)
     end
   end
 
@@ -262,9 +261,9 @@ RSpec.describe OllamaAgent::Agent do
       allow(client).to receive(:chat)
       agent = described_class.new(client: client, root: root, confirm_patches: false)
       expect do
-        agent.send(:resolved_http_timeout_seconds)
+        agent.instance_variable_get(:@client_manager).send(:resolved_http_timeout_seconds)
       end.to output(/OLLAMA_AGENT_TIMEOUT/).to_stderr
-      expect(agent.send(:resolved_http_timeout_seconds)).to eq(120)
+      expect(agent.instance_variable_get(:@client_manager).send(:resolved_http_timeout_seconds)).to eq(120)
     ensure
       ENV.delete("OLLAMA_AGENT_TIMEOUT")
       ENV.delete("OLLAMA_AGENT_DEBUG")

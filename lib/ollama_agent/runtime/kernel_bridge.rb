@@ -26,14 +26,25 @@ module OllamaAgent
         private :parse_env_list
       end
 
-      def initialize(agent, pipeline: nil)
-        @agent = agent
+      def initialize(session_manager:, toolbox:, hooks:, loop_detector:, memory_manager:,
+                    config:, logger:, permissions:, policies:, pipeline: nil)
+        @session_manager = session_manager
+        @toolbox = toolbox
+        @hooks = hooks
+        @loop_detector = loop_detector
+        @memory_manager = memory_manager
+        @config = config
+        @logger = logger
+        @permissions = permissions
+        @policies = policies
         @pipeline = pipeline
         @permission_bridge_memo = false
         @permission_bridge = nil
+        @current_turn = 0
       end
 
-      def append_tool_results(messages:, tool_calls:)
+      def append_tool_results(messages:, tool_calls:, turn: 0)
+        @current_turn = turn
         return legacy_append(messages: messages, tool_calls: tool_calls) unless KernelFeature.enabled?
 
         emit_kernel_bridge_hook!(tool_calls)
@@ -43,8 +54,8 @@ module OllamaAgent
       private
 
       def emit_kernel_bridge_hook!(tool_calls)
-        @agent.logger.info("kernel bridge enabled: routing tool execution through guarded path")
-        @agent.hooks.emit(
+        @logger.info("kernel bridge enabled: routing tool execution through guarded path")
+        @hooks.emit(
           :on_tool_runtime_kernel,
           {
             enabled: true,
@@ -59,17 +70,16 @@ module OllamaAgent
         tc = coerce_tool_call(tool_call)
         name = tc.name
         args = tc.arguments || {}
-        turn = @agent.instance_variable_get(:@current_turn) || 0
 
-        @agent.hooks.emit(:on_tool_call, { name: name, args: args, turn: turn })
-        @agent.instance_variable_get(:@loop_detector)&.record!(name, args)
+        @hooks.emit(:on_tool_call, { name: name, args: args, turn: @current_turn })
+        @loop_detector&.record!(name, args)
 
         result = dispatch_tool(name, args)
 
-        @agent.hooks.emit(:on_tool_result, { name: name, result: result.to_s, turn: turn })
-        @agent.instance_variable_get(:@memory_manager)&.record_tool_call(name, args, result)
-        messages << @agent.send(:tool_message, tc, result)
-        @agent.send(:save_message_to_session, messages.last)
+        @hooks.emit(:on_tool_result, { name: name, result: result.to_s, turn: @current_turn })
+        @memory_manager&.record_tool_call(name, args, result)
+        messages << @session_manager.tool_message(tc, result)
+        @session_manager.save_message_to_session(messages.last)
       end
       # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
 
@@ -88,12 +98,34 @@ module OllamaAgent
         if self.class.pipeline_tool_names.include?(name.to_s)
           run_kernel_pipeline_tool(name, args)
         else
-          @agent.send(:platform_guarded_tool_call, name, args)
+          guarded_tool_call(name, args)
         end
       end
 
+      def guarded_tool_call(name, args)
+        ctx = build_tool_context
+
+        return "Permission denied: tool '#{name}' is not allowed under the current permission profile (#{@permissions.profile})." if @permissions && !@permissions.allowed?(name)
+
+        if @policies
+          rejection = @policies.evaluate(name, args, ctx)
+          return rejection if rejection
+        end
+
+        @toolbox.execute(name, args, context: ctx)
+      end
+
+      def build_tool_context
+        {
+          root: @config.root,
+          read_only: @config.runtime.read_only,
+          memory_manager: @memory_manager,
+          shell_call_count: 0
+        }
+      end
+
       def run_kernel_pipeline_tool(name, args)
-        intent = IntentTranslator.new(workspace_root: @agent.root).translate(
+        intent = IntentTranslator.new(workspace_root: @config.root).translate(
           tool_call: { "name" => name, "arguments" => args }
         )
         finish_kernel_pipeline_tool(name, args, intent)
@@ -105,7 +137,7 @@ module OllamaAgent
         if (rej = reject_pipeline_paths(name, intent))
           return rej
         end
-        return "#{name} is disabled in read-only mode." if @agent.read_only
+        return "#{name} is disabled in read-only mode." if @config.runtime.read_only
 
         return "Mutation denied by kernel permission gate." unless pipeline_mutation_allowed?(name, intent)
 
@@ -119,8 +151,8 @@ module OllamaAgent
 
       def reject_pipeline_paths(name, intent)
         pipeline_paths_for_tool(name, intent).each do |path|
-          return @agent.send(:missing_tool_argument, name, "path") if @agent.send(:blank_tool_value?, path)
-          return @agent.send(:disallowed_path_message, path) unless @agent.send(:path_allowed?, path)
+          return missing_tool_argument(name, "path") if blank_tool_value?(path)
+          return disallowed_path_message(path) unless path_allowed?(path)
         end
         nil
       end
@@ -134,6 +166,26 @@ module OllamaAgent
         end
       end
 
+      def missing_tool_argument(name, arg)
+        "Tool '#{name}' is missing required argument: #{arg}"
+      end
+
+      def blank_tool_value?(value)
+        value.nil? || value.to_s.strip.empty?
+      end
+
+      def disallowed_path_message(path)
+        "Path must stay under project root #{@config.root}: #{path}"
+      end
+
+      def path_allowed?(path)
+        return false if blank_tool_value?(path)
+
+        PathSandbox.allowed?(File.expand_path(@config.root), File.realpath(@config.root), path)
+      rescue Errno::ENOENT, Errno::ELOOP, Errno::EACCES
+        PathSandbox.allowed?(File.expand_path(@config.root), File.expand_path(@config.root), path)
+      end
+
       # rubocop:disable Metrics/AbcSize, Metrics/MethodLength -- tool + rename branching for bridge calls
       def pipeline_mutation_allowed?(name, intent)
         return true unless KernelFeature.enabled?
@@ -144,17 +196,16 @@ module OllamaAgent
         mode = KernelFeature.shadow? ? "shadow" : "normal"
         tool = name.to_s
         paths = pipeline_paths_for_tool(name, intent)
-        logger = @agent.respond_to?(:logger) ? @agent.logger : nil
 
         if %w[rename_file move_file].include?(tool)
           return bridge.pipeline_allowed?(
             tool_name: tool,
             path: paths[0],
             mode: mode,
-            read_only: @agent.read_only,
+            read_only: @config.runtime.read_only,
             rename_to: paths[1],
-            logger: logger,
-            root: @agent.root
+            logger: @logger,
+            root: @config.root
           )
         end
 
@@ -163,10 +214,10 @@ module OllamaAgent
             tool_name: tool,
             path: p,
             mode: mode,
-            read_only: @agent.read_only,
+            read_only: @config.runtime.read_only,
             rename_to: nil,
-            logger: logger,
-            root: @agent.root
+            logger: @logger,
+            root: @config.root
           )
         end
       end
@@ -177,35 +228,23 @@ module OllamaAgent
         return @permission_bridge if @permission_bridge_memo
 
         @permission_bridge_memo = true
-        path = File.join(@agent.root, "config", "ollama_agent", "owners.yml")
+        path = File.join(@config.root, "config", "ollama_agent", "owners.yml")
         @permission_bridge =
           if File.exist?(path)
             PermissionBridge.new(
-              permissions: agent_permissions,
-              policies: agent_policies,
+              permissions: @permissions,
+              policies: @policies,
               ownership_index: OllamaAgent::Security::OwnershipCompiler.new.compile(path: path),
-              workspace_root: @agent.root
+              workspace_root: @config.root
             )
           end
       end
       # rubocop:enable Metrics/MethodLength
 
-      def agent_permissions
-        return @agent.permissions if @agent.respond_to?(:permissions)
-
-        Permissions.new(profile: :standard)
-      end
-
-      def agent_policies
-        return @agent.policies if @agent.respond_to?(:policies)
-
-        Policies.new
-      end
-
       def user_confirmed_mutation?(name, args, intent)
-        return true unless @agent.instance_variable_get(:@confirm_patches)
+        return true unless @config.runtime.confirm_patches
 
-        prompt = @agent.send(:user_prompt)
+        prompt = UserPrompt.new(stdin: @config.session.stdin, stdout: @config.session.stdout)
         path = pipeline_paths_for_tool(name, intent).first.to_s
         confirm_for_pipeline_tool(name, args, intent, path, prompt)
       end
@@ -266,11 +305,11 @@ module OllamaAgent
       end
 
       def pipeline
-        @pipeline ||= KernelPipeline.build_for_workspace(workspace_root: @agent.root)
+        @pipeline ||= KernelPipeline.build_for_workspace(workspace_root: @config.root)
       end
 
       def legacy_append(messages:, tool_calls:)
-        @agent.dispatch_tool_results(messages, tool_calls)
+        @session_manager.dispatch_tool_results(messages, tool_calls)
       end
     end
     # rubocop:enable Metrics/ClassLength
