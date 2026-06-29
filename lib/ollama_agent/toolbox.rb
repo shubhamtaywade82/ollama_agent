@@ -34,7 +34,7 @@ module OllamaAgent
     prepend RubyIndexToolSupport
     prepend ToolArguments
 
-    def initialize(config:, logger:)
+    def initialize(config:, logger:, user_prompt: nil)
       @config = config
       @logger = logger
       @root = config.root
@@ -42,6 +42,7 @@ module OllamaAgent
       @read_only = config.read_only
       @confirm_patches = config.confirm_patches
       @patch_policy = config.patch_policy
+      @user_prompt = user_prompt
     end
 
     def execute(name, args, context:)
@@ -167,7 +168,7 @@ module OllamaAgent
     end
 
     def user_prompt
-      @user_prompt ||= UserPrompt.new
+      @user_prompt || UserPrompt.new
     end
 
     def disallowed_path_message(path)

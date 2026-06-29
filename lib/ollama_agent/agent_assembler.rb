@@ -46,7 +46,7 @@ module OllamaAgent
         max_tokens: config.session.max_tokens,
         context_summarize: config.session.context_summarize
       )
-      toolbox = Toolbox.new(config: config, logger: logger)
+      toolbox = Toolbox.new(config: config, logger: logger, user_prompt: user_prompt_instance)
       session_manager = SessionManager.new(
         config: config,
         hooks: hooks,
