@@ -43,10 +43,10 @@ module OllamaAgent
 
         exact = records.select { |r| r[:name] == symbol }
         record = exact.first || records.first
-        return "No definition found for #{symbol.inspect}" unless record
+        return ({ error: "No definition found for #{symbol.inspect}" }) unless record
 
-        file = record[:file]
-        line = record[:line]
+        file = File.expand_path(record[:path], root)
+        line = record[:start_line]
         rel  = file.delete_prefix("#{root}/")
 
         source = File.readlines(file)
@@ -103,8 +103,6 @@ module OllamaAgent
         reqs = src.scan(/require(?:_relative)?\s+['"](.*?)['"]/).flatten
         imports = src.scan(/import\s+(?:\w+\s+from\s+)?['"](.*?)['"]/).flatten
         requires = reqs + imports
-
-        return "No dependencies found" if requires.empty?
 
         {
           file: args["file"],
