@@ -145,6 +145,11 @@ require_relative "ollama_agent/tools/memory_extended_tools"
 require_relative "ollama_agent/tools/llm_tools"
 require_relative "ollama_agent/tools/infra_tools"
 require_relative "ollama_agent/tools/system_tools"
+require_relative "ollama_agent/tools/crypto_tools"
+require_relative "ollama_agent/tools/binance_auth_tools"
+require_relative "ollama_agent/tools/smc_tools"
+require_relative "ollama_agent/tools/coindcx_auth_tools"
+require_relative "ollama_agent/tools/realtime_tools"
 
 # ── deterministic skill system (JSON-contract pipelines) ─────────────────────
 require_relative "ollama_agent/skills/json_extractor"
