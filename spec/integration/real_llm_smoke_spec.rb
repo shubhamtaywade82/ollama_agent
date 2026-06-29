@@ -23,7 +23,7 @@ RSpec.describe "real Ollama end-to-end smoke", :real_llm do
         YAML
       end
 
-      agent = OllamaAgent::Agent.new(
+      agent = OllamaAgent::Agent.build(
         root: root,
         confirm_patches: false,
         http_timeout: 300

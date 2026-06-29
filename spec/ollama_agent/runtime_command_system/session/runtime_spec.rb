@@ -8,7 +8,7 @@ RSpec.describe OllamaAgent::RuntimeCommandSystem::Session::Runtime do
   subject(:runtime) { described_class.new(agent: agent) }
 
   let(:agent) do
-    instance_double(OllamaAgent::Agent, model: "qwen3:32b", provider_name: "local")
+    double(OllamaAgent::Agent, model: "qwen3:32b", provider_name: "local")
   end
 
   it "delegates active_model to agent" do

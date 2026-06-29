@@ -40,7 +40,7 @@ RSpec.describe OllamaAgent::RubyIndex do
         orig.call(**kwargs)
       end
 
-      agent = OllamaAgent::Agent.new(root: fixture_root, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(root: fixture_root, confirm_patches: false)
       threads = 8.times.map { Thread.new { agent.send(:ruby_index) } }
       threads.each(&:join)
 

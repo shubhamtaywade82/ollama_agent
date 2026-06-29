@@ -64,10 +64,19 @@ module OllamaAgent
           # Fetch cloud models, filtered to accessible ones when cache is available
           begin
             cloud_names = agent.list_cloud_model_names
-            accessible  = CloudAccessibilityCache.accessible_names # nil = no cache
+            accessible  = CloudAccessibilityCache.accessible_names   # Set<String> or nil
+            reasons     = CloudAccessibilityCache.inaccessibility_reasons # Hash or nil
             cloud_names.each do |name|
               next if list.any? { |m| m.name == name }
               next if accessible && !accessible.include?(name)
+
+              subscription = if reasons && reasons.key?(name)
+                               true # explicitly probed and failed
+                             elsif accessible
+                               false # explicitly probed and succeeded
+                             else
+                               subscription_required?(name)
+                             end
 
               list << ModelDescriptor.new(
                 name: name,
@@ -75,7 +84,7 @@ module OllamaAgent
                 context_size: 128_000,
                 capabilities: infer_capabilities(name),
                 status: "available",
-                subscription_required: subscription_required?(name)
+                subscription_required: subscription
               )
             end
           rescue StandardError
@@ -194,13 +203,17 @@ module OllamaAgent
         name = name.to_s.downcase
         # Heuristic: models with -pro suffix or very large parameter sizes (inferred from name)
         # or known high-end models often require a subscription on Ollama Cloud.
+        # Verified against live /api/chat probes — update as Ollama Cloud changes.
         name.include?("-pro") ||
           name.match?(/(?::|-)67[0-9]b/) || # 671b, 675b
           name.include?(":1t") ||
           name.include?(":405b") ||
           name.include?("mistral-large") ||
           name.include?("o1-") ||
-          name.include?("o3-")
+          name.include?("o3-") ||
+          name.include?("deepseek-v3.2") ||
+          name.include?("deepseek-v4-flash") ||
+          name.include?("kimi-k2.7-code")
       end
 
       private_class_method :infer_capabilities, :subscription_required?

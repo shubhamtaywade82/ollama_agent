@@ -370,7 +370,7 @@ module OllamaAgent
 
     # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- stream + context kwargs exceed limits
     def run_mode_analysis
-      agent = Agent.new(
+      agent = Agent.build(
         model: options[:model],
         root: resolved_root_for_self_review,
         read_only: true,
@@ -388,7 +388,7 @@ module OllamaAgent
     # rubocop:enable Metrics/MethodLength, Metrics/AbcSize
 
     def run_mode_interactive
-      agent = Agent.new(**interactive_agent_keywords)
+      agent = Agent.build(**interactive_agent_keywords)
       attach_console_streamer(agent) if stream_enabled?
       preamble = ruby_mastery_preamble(resolved_root_for_self_review)
       SelfImprovement::Analyzer.new(agent).run(SelfImprovement::Analyzer::INTERACTIVE_PROMPT, preamble: preamble)
@@ -491,7 +491,7 @@ module OllamaAgent
     def build_agent(user_prompt: nil, attach_stream: true)
       orch  = orchestrator_mode?
       perms = resolved_permissions
-      agent = Agent.new(
+      agent = Agent.build(
         model: options[:model],
         root: resolved_root_for_self_review,
         read_only: options[:read_only],
@@ -541,7 +541,7 @@ module OllamaAgent
 
     # rubocop:disable Metrics/MethodLength, Metrics/AbcSize -- mirrors build_agent; stream attachment adds one line
     def build_orchestrator_agent(user_prompt: nil, attach_stream: true)
-      agent = Agent.new(
+      agent = Agent.build(
         model: options[:model],
         root: resolved_root_for_self_review,
         read_only: options[:read_only],

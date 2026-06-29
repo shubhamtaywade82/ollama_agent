@@ -91,7 +91,7 @@ module OllamaAgent
 
       def run_agent_session(sandbox_root, source_root:, ruby_mastery: true, **kwargs)
         stream = kwargs.delete(:stream) { false }
-        agent = Agent.new(root: sandbox_root, **kwargs)
+        agent = Agent.build(root: sandbox_root, **kwargs)
         Streaming::ConsoleStreamer.new.attach(agent.hooks) if stream
         agent.run(improve_user_prompt(source_root, ruby_mastery))
       end

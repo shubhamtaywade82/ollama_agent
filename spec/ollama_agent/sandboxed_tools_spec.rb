@@ -13,7 +13,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
 
   describe "#execute_tool" do
     let(:tmpdir) { Dir.mktmpdir }
-    let(:agent) { OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false) }
+    let(:agent) { OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false) }
 
     after do
       FileUtils.remove_entry(tmpdir)
@@ -25,7 +25,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
     end
 
     it "rejects edit_file when the agent is read-only" do
-      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false, read_only: true)
+      agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false, read_only: true)
       result = agent.send(:execute_tool, "edit_file", { "path" => "x.rb", "diff" => "---\n" })
       expect(result).to include("read-only")
     end
@@ -55,7 +55,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
         -hi
         +eval("x")
       DIFF
-      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
       result = agent.send(:execute_tool, "edit_file", { "path" => "README.md", "diff" => diff })
       expect(result).to include("forbidden")
     end
@@ -91,7 +91,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
 
     context "when using write_file" do
       it "creates a new file under the project root" do
-        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+        agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
         result = agent.send(:execute_tool, "write_file", { "path" => "new.rb", "content" => "# hello\n" })
         expect(result).to eq("Written: new.rb")
         expect(File.read(File.join(tmpdir, "new.rb"))).to eq("# hello\n")
@@ -99,31 +99,31 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
 
       it "overwrites an existing file" do
         File.write(File.join(tmpdir, "existing.rb"), "old\n")
-        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+        agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
         agent.send(:execute_tool, "write_file", { "path" => "existing.rb", "content" => "new\n" })
         expect(File.read(File.join(tmpdir, "existing.rb"))).to eq("new\n")
       end
 
       it "rejects paths outside the project root" do
-        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+        agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
         result = agent.send(:execute_tool, "write_file", { "path" => "../../etc/passwd", "content" => "x" })
         expect(result).to include("project root")
       end
 
       it "is disabled in read-only mode" do
-        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false, read_only: true)
+        agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false, read_only: true)
         result = agent.send(:execute_tool, "write_file", { "path" => "f.rb", "content" => "x" })
         expect(result).to include("read-only")
       end
 
       it "returns an error when path argument is missing" do
-        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+        agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
         result = agent.send(:execute_tool, "write_file", { "content" => "x" })
         expect(result).to include("Missing required").and include("path")
       end
 
       it "returns an error when content argument is missing" do
-        agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+        agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
         result = agent.send(:execute_tool, "write_file", { "path" => "f.rb" })
         expect(result).to include("Missing required").and include("content")
       end
@@ -134,7 +134,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
     it "returns only the requested line range when start_line and end_line are set" do
       tmpdir = Dir.mktmpdir
       File.write(File.join(tmpdir, "slice.rb"), "a\nb\nc\nd\n")
-      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
       out = agent.send(:read_file, "slice.rb", start_line: 2, end_line: 3)
       expect(out).to eq("b\nc\n")
     ensure
@@ -145,7 +145,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       tmpdir = Dir.mktmpdir
       ENV["OLLAMA_AGENT_MAX_READ_FILE_BYTES"] = "10"
       File.write(File.join(tmpdir, "big.txt"), "x" * 20)
-      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
       out = agent.send(:read_file, "big.txt")
       expect(out).to include("file too large").and include("10").and include("start_line")
     ensure
@@ -157,7 +157,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       tmpdir = Dir.mktmpdir
       ENV["OLLAMA_AGENT_MAX_READ_FILE_BYTES"] = "10"
       File.write(File.join(tmpdir, "edge.txt"), "x" * 10)
-      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
       expect(agent.send(:read_file, "edge.txt")).to eq("x" * 10)
     ensure
       ENV.delete("OLLAMA_AGENT_MAX_READ_FILE_BYTES")
@@ -168,7 +168,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       tmpdir = Dir.mktmpdir
       ENV["OLLAMA_AGENT_MAX_READ_FILE_BYTES"] = "10"
       File.write(File.join(tmpdir, "over.txt"), "x" * 11)
-      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
       expect(agent.send(:read_file, "over.txt")).to include("file too large")
     ensure
       ENV.delete("OLLAMA_AGENT_MAX_READ_FILE_BYTES")
@@ -180,7 +180,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       outside = Dir.mktmpdir
       File.write(File.join(outside, "secret.txt"), "nope")
       File.symlink(outside, File.join(tmpdir, "bad"))
-      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
       expect(agent.send(:read_file, "bad/secret.txt")).to include("project root")
     ensure
       FileUtils.remove_entry(tmpdir)
@@ -192,7 +192,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
     it "treats empty string directory like the project root" do
       tmpdir = Dir.mktmpdir
       File.write(File.join(tmpdir, "f.rb"), "needle\n")
-      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false)
       toolbox = agent.instance_variable_get(:@toolbox)
       toolbox.define_singleton_method(:rg_available?) { true }
       toolbox.define_singleton_method(:grep_available?) { false }
@@ -206,7 +206,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
 
   describe "search_code (text mode)" do
     let(:search_tmp) { Dir.mktmpdir }
-    let(:search_agent) { OllamaAgent::Agent.new(root: search_tmp, confirm_patches: false) }
+    let(:search_agent) { OllamaAgent::Agent.build(root: search_tmp, confirm_patches: false) }
 
     after do
       FileUtils.remove_entry(search_tmp)
@@ -226,7 +226,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
     it "builds the Ruby index once while OLLAMA_AGENT_INDEX_REBUILD stays set" do
       allow(OllamaAgent::RubyIndex).to receive(:build).and_call_original
       ENV["OLLAMA_AGENT_INDEX_REBUILD"] = "1"
-      agent = OllamaAgent::Agent.new(root: fixture_root, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(root: fixture_root, confirm_patches: false)
       agent.send(:execute_tool, "search_code", { "pattern" => "a", "mode" => "method" })
       agent.send(:execute_tool, "search_code", { "pattern" => "b", "mode" => "method" })
       expect(OllamaAgent::RubyIndex).to have_received(:build).once
@@ -235,7 +235,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
     end
 
     it "returns formatted method rows for mode method" do
-      agent = OllamaAgent::Agent.new(root: fixture_root, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(root: fixture_root, confirm_patches: false)
       out = agent.send(:execute_tool, "search_code", { "pattern" => "instance_method", "mode" => "method" })
       expect(out).to include("instance_method")
       expect(out).to include("nested.rb")
@@ -249,7 +249,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       tmpdir = Dir.mktmpdir
       File.write(File.join(tmpdir, "README.md"), "Hello\n")
 
-      agent = OllamaAgent::Agent.new(root: tmpdir, confirm_patches: true)
+      agent = OllamaAgent::Agent.build(root: tmpdir, confirm_patches: true)
       diff = <<~DIFF
         --- a/README.md
         +++ b/README.md

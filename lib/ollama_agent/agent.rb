@@ -1,20 +1,19 @@
 # frozen_string_literal: true
 
 require "logger"
+require "forwardable"
 
 require_relative "agent_prompt"
 require_relative "prompt_skills"
 require_relative "console"
 require_relative "ollama_connection"
 require_relative "tools_schema"
-require_relative "sandboxed_tools"
 require_relative "think_param"
 require_relative "gemma_thought_content_parser"
 require_relative "timeout_param"
 require_relative "tool_content_parser"
 require_relative "streaming/hooks"
 require_relative "resilience/retry_middleware"
-require_relative "resilience/audit_logger"
 require_relative "context/manager"
 require_relative "session/store"
 require_relative "env_config"
@@ -25,9 +24,6 @@ require_relative "agent/agent_config"
 require_relative "client_manager"
 require_relative "prompt_builder"
 require_relative "model_manager"
-require_relative "agent/client_wiring"
-require_relative "agent/prompt_wiring"
-require_relative "agent/session_wiring"
 require_relative "agent/chat_coordinator"
 require_relative "agent/turn_loop"
 require_relative "core/budget"
@@ -37,147 +33,87 @@ require_relative "core/trace_logger"
 module OllamaAgent
   # Runs a tool-calling loop against Ollama: read files, search, apply unified diffs.
   # Public entry: {#run}. Other instance methods are internal to the agent loop.
-  # rubocop:disable Metrics/ClassLength -- facade coordinates includes, config, and chat helpers
   class Agent
-    include SandboxedTools
-    include ClientWiring
-    include PromptWiring
-    include SessionWiring
-
     MAX_TURNS = 64
     DEFAULT_HTTP_TIMEOUT = 120
 
+    extend Forwardable
+
     attr_accessor :client
-    attr_reader :config
-    attr_reader :root, :hooks, :model, :logger, :policies
+    attr_reader :config, :root, :hooks, :logger, :policies, :permissions
 
-    # Backward-compat attr_reader shims delegating to config
-    def read_only = @config.runtime.read_only
-    def max_tokens = @config.session.max_tokens
-    def orchestrator = @config.runtime.orchestrator
-    def provider_name
-      # Keep @provider_name ivar for backward compat with tests using instance_variable_get
-      @provider_name ||= @config.runtime.provider_name
+    # Backward-compatible new: when only config is given → Assembler.
+    # When config + collaborators are given → normal constructor.
+    # When no config given (old keyword style) → Assembler with those keywords.
+    def self.new(config: nil, **kw)
+      if config && kw.empty?
+        AgentAssembler.build(config: config)
+      elsif !config && kw.any?
+        AgentAssembler.build(**kw)
+      else
+        super
+      end
     end
-    def session_id = @config.session.session_id
 
-    # Backward-compat: expose as attr_reader for tests using instance_variable_get
-    attr_reader :permissions
-
-    # @param config [AgentConfig, nil] when set, keyword options are ignored (use {Runner} or build {AgentConfig}).
-    # rubocop:disable Metrics/ParameterLists
-    # rubocop:disable Metrics/MethodLength
-    def initialize(client: nil, config: nil, model: nil, root: nil, confirm_patches: true, http_timeout: nil,
-                   think: nil,
-                   read_only: false, patch_policy: nil,
-                   system_prompt: nil,
-                   skill_paths: nil, skills_enabled: nil, skills_include: nil, skills_exclude: nil,
-                   external_skills_enabled: nil,
-                   orchestrator: false, confirm_delegation: nil,
-                   max_retries: nil, audit: nil,
-                   session_id: nil, resume: false,
-                   max_tokens: nil, context_summarize: nil,
-                   stdin: $stdin, stdout: $stdout,
-                   provider: nil, provider_name: nil, budget: nil,
-                   permissions: nil, policies: nil,
-                   memory_manager: nil, trace_logger: nil, approval_gate: nil, user_prompt: nil,
-                   logger: nil)
-      cfg = config || AgentConfig.new(
-        model: model, root: root, confirm_patches: confirm_patches, http_timeout: http_timeout, think: think,
-        read_only: read_only, patch_policy: patch_policy,
-        system_prompt: system_prompt,
-        skill_paths: skill_paths, skills_enabled: skills_enabled, skills_include: skills_include,
-        skills_exclude: skills_exclude, external_skills_enabled: external_skills_enabled,
-        orchestrator: orchestrator, confirm_delegation: confirm_delegation,
-        max_retries: max_retries, audit: audit, session_id: session_id, resume: resume,
-        max_tokens: max_tokens, context_summarize: context_summarize, stdin: stdin, stdout: stdout,
-        provider: provider, provider_name: provider_name, budget: budget,
-        permissions: permissions, policies: policies,
-        memory_manager: memory_manager, trace_logger: trace_logger, approval_gate: approval_gate,
-        user_prompt: user_prompt,
-        logger: logger
-      )
-      @config = cfg
-      @model = cfg.model || default_model
-      @root = AgentRootResolver.resolve(cfg.root)
-      @logger = cfg.session.logger || build_default_logger
-      @hooks = Streaming::Hooks.new
-
-      # Collaborators initialized after @hooks is available
-      @client_manager = ClientManager.new(config: @config, hooks: @hooks)
-      @prompt_builder = PromptBuilder.new(config: @config)
-
-      # Ivars for SandboxedTools backward compat (module accesses @root, @read_only, @confirm_patches, @patch_policy)
-      @confirm_patches = cfg.confirm_patches
-      @read_only = cfg.read_only
-      @patch_policy = cfg.patch_policy
-
-      # Keep @provider_name and @permissions as ivars for backward compat with tests using instance_variable_get
-      @provider_name = cfg.provider_name
-      @permissions = cfg.permissions
-
-      @user_prompt = cfg.user_prompt || UserPrompt.new(stdin: cfg.stdin, stdout: cfg.stdout)
-      @context_manager = Context::Manager.new(max_tokens: cfg.session.max_tokens, context_summarize: cfg.session.context_summarize)
-
-      strict = EnvConfig.strict_env?
-      @max_turns = EnvConfig.fetch_int("OLLAMA_AGENT_MAX_TURNS", MAX_TURNS, strict: strict)
-      @budget = cfg.budget || Core::Budget.new(max_steps: @max_turns, max_tokens: cfg.session.max_tokens)
-      @loop_detector = Core::LoopDetector.new
-      @trace_logger = cfg.trace_logger
-      @memory_manager = cfg.memory_manager
-      @policies = cfg.policies
-      @approval_gate = cfg.approval_gate
-
-      @toolbox = Toolbox.new(config: @config, logger: @logger)
-      @session_manager = SessionManager.new(
-        config: @config,
-        hooks: @hooks,
-        toolbox: @toolbox,
-        loop_detector: @loop_detector,
-        trace_logger: @trace_logger,
-        budget: @budget,
-        permissions: @permissions,
-        policies: @policies,
-        memory_manager: @memory_manager
-      )
-
-      @chat_coordinator = ChatCoordinator.new(
-        client: nil, # will be set after client is initialized
-        model_manager: nil, # will be set after model_manager is initialized
-        config: @config,
-        hooks: @hooks
-      )
-      @kernel_bridge = Runtime::KernelBridge.new(
-        session_manager: @session_manager,
-        toolbox: @toolbox,
-        hooks: @hooks,
-        loop_detector: @loop_detector,
-        memory_manager: @memory_manager,
-        config: @config,
-        logger: @logger,
-        permissions: @permissions,
-        policies: @policies
-      )
-
-      attach_audit_logger if resolved_audit_enabled
-      @client = client || @client_manager.build_default_client
-      @model_manager = ModelManager.new(client: @client, default_model: @model)
-      @model = @model_manager.model
-
-      # Update chat_coordinator with actual client and model_manager now that they exist
-      @chat_coordinator.instance_variable_set(:@client, @client)
-      @chat_coordinator.instance_variable_set(:@model_manager, @model_manager)
+    # Public convenience constructor — delegates to AgentAssembler.
+    def self.build(**kw)
+      AgentAssembler.build(**kw)
     end
-    # rubocop:enable Metrics/MethodLength
-    # rubocop:enable Metrics/ParameterLists
+
+    # Clean constructor — only accepts config + pre-built collaborators.
+    def initialize(
+      config:, client:, model_manager:,
+      client_manager:, prompt_builder:,
+      hooks:, logger:, user_prompt:,
+      context_manager:, toolbox:,
+      session_manager:, chat_coordinator:,
+      kernel_bridge:, budget:, loop_detector:,
+      trace_logger:, memory_manager:,
+      policies:, permissions:,
+      approval_gate:, max_turns:
+    )
+      @config = config
+      @client = client
+      @model_manager = model_manager
+      @client_manager = client_manager
+      @prompt_builder = prompt_builder
+      @hooks = hooks
+      @logger = logger
+      @user_prompt = user_prompt
+      @context_manager = context_manager
+      @toolbox = toolbox
+      @session_manager = session_manager
+      @chat_coordinator = chat_coordinator
+      @kernel_bridge = kernel_bridge
+      @budget = budget
+      @loop_detector = loop_detector
+      @trace_logger = trace_logger
+      @memory_manager = memory_manager
+      @policies = policies
+      @permissions = permissions
+      @approval_gate = approval_gate
+      @max_turns = max_turns
+      @root = config.root || AgentRootResolver.resolve(config.root)
+    end
 
     # Model access delegated to ModelManager
-    def model = @model_manager.model
+    def_delegators :@model_manager,
+      :model, :assign_chat_model!, :model_accessible?,
+      :list_local_model_names, :list_cloud_model_names
 
-    def assign_chat_model!(name) = @model_manager.assign_chat_model!(name)
-    def model_accessible?(name = nil) = @model_manager.model_accessible?(name)
-    def list_local_model_names = @model_manager.list_local_model_names
-    def list_cloud_model_names = @model_manager.list_cloud_model_names
+    # Tool access delegated to Toolbox (replaces SandboxedTools include)
+    def_delegators :@toolbox,
+      :read_file, :write_file, :edit_file, :apply_patch,
+      :search, :index_ruby, :ruby_index, :read_directory, :repo_list, :grep_symbol,
+      :list_files, :search_code, :search_with_ripgrep,
+      :missing_tool_argument, :blank_tool_value?, :path_allowed?,
+      :resolve_path, :disallowed_path_message, :coerce_tool_arguments,
+      :tool_arg, :integer_or, :user_confirms_patch?
+
+    # Prompt access delegated to PromptBuilder
+    def_delegators :@prompt_builder, :system_prompt
+
+    def_delegators :@chat_coordinator, :request_args
 
     def run(query)
       messages = build_messages_for_run(query)
@@ -195,35 +131,20 @@ module OllamaAgent
       ).run(messages)
     end
 
-    # Subclasses that override chat or tool wiring should keep {#assign_chat_model!} in sync
-    # if they depend on +@model+ matching the HTTP client catalog.
-
     private
 
-    def build_default_logger
-      Logger.new($stderr, progname: "ollama_agent").tap do |log|
-        log.level = logger_level_from_env
-      end
+    def execute_tool(name, args)
+      context = {
+        root: @root,
+        read_only: @config.runtime.read_only,
+        memory_manager: @memory_manager,
+        shell_call_count: 0
+      }
+      @toolbox.execute(name, args, context: context)
     end
 
-    def logger_level_from_env
-      case ENV.fetch("OLLAMA_AGENT_LOG_LEVEL", "").strip.downcase
-      when "debug" then Logger::DEBUG
-      when "info" then Logger::INFO
-      when "warn" then Logger::WARN
-      when "error" then Logger::ERROR
-      else
-        ENV["OLLAMA_AGENT_DEBUG"] == "1" ? Logger::DEBUG : Logger::WARN
-      end
-    end
-
-    def chat_request_args(messages)
-      @chat_coordinator.request_args(messages)
-    end
-
-    def default_model
-      ModelEnv.default_chat_model
+    def build_messages_for_run(query)
+      @session_manager.build_messages_for_run(query)
     end
   end
-  # rubocop:enable Metrics/ClassLength
 end

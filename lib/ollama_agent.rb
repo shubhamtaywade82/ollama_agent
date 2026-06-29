@@ -154,6 +154,7 @@ require_relative "ollama_agent/model_manager"
 require_relative "ollama_agent/session_manager"
 require_relative "ollama_agent/toolbox"
 require_relative "ollama_agent/agent"
+require_relative "ollama_agent/agent_assembler"
 require_relative "ollama_agent/runner"
 require_relative "ollama_agent/cli"
 

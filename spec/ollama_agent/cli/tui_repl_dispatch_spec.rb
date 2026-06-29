@@ -8,7 +8,7 @@ RSpec.describe OllamaAgent::CLI::TuiRepl do
 
   let(:stdout) { StringIO.new }
   let(:agent) do
-    instance_double(
+    double(
       OllamaAgent::Agent,
       model: "qwen3:32b",
       provider_name: "local"

@@ -87,8 +87,8 @@ RSpec.describe OllamaAgent::Agent do
         provider_name: "anthropic",
         permissions: perms
       )
-      expect(agent.instance_variable_get(:@provider_name)).to eq("anthropic")
-      expect(agent.instance_variable_get(:@permissions)).to eq(perms)
+      expect(agent.config.runtime.provider_name).to eq("anthropic")
+      expect(agent.config.permissions).to eq(perms)
     end
   end
 
@@ -309,7 +309,7 @@ RSpec.describe OllamaAgent::Agent do
     it "omits edit_file from tools when read_only is true" do
       agent = described_class.new(client: instance_double(Ollama::Client), root: root, read_only: true,
                                   confirm_patches: false)
-      args = agent.send(:chat_request_args, [])
+      args = agent.send(:request_args, [])
       names = args[:tools].map { |t| t.dig(:function, :name) }
       expect(names).to contain_exactly("read_file", "search_code", "list_files",
                                        "list_directory_contents", "calculate")
