@@ -90,7 +90,7 @@ RSpec.describe OllamaAgent::Tools::RunBenchmark do
 
     it "runs a valid script" do
       File.write(File.join(tmpdir, "bench.rb"), "puts 42")
-      result = tool.call({ "path" => "bench.rb" }, context: context)
+      result = tool.call({ "ruby" => "ruby", "path" => "bench.rb" }, context: context)
       expect(result[:output]).to include("42")
     end
   end
@@ -110,8 +110,8 @@ RSpec.describe OllamaAgent::Tools::RunCoverage do
   end
 
   describe "#call" do
-    it "returns a hash" do
-      result = tool.call({}, context: context)
+    it "returns a hash without coverage data when none exists" do
+      result = tool.call({ "framework" => "minitest" }, context: context)
       expect(result).to be_a(Hash)
       expect(result).to have_key(:framework)
     end
