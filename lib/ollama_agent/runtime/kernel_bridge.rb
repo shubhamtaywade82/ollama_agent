@@ -27,7 +27,7 @@ module OllamaAgent
       end
 
       def initialize(session_manager:, toolbox:, hooks:, loop_detector:, memory_manager:,
-                    config:, logger:, permissions:, policies:, pipeline: nil)
+                     config:, logger:, permissions:, policies:, pipeline: nil)
         @session_manager = session_manager
         @toolbox = toolbox
         @hooks = hooks

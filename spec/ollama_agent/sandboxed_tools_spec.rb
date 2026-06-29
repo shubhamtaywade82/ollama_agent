@@ -196,7 +196,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
       toolbox = agent.instance_variable_get(:@toolbox)
       toolbox.define_singleton_method(:rg_available?) { true }
       toolbox.define_singleton_method(:grep_available?) { false }
-      toolbox.define_singleton_method(:search_with_ripgrep) { |pattern, directory| "f.rb:1:needle" }
+      toolbox.define_singleton_method(:search_with_ripgrep) { |_pattern, _directory| "f.rb:1:needle" }
       result = agent.send(:execute_tool, "search_code", { "pattern" => "needle", "directory" => "" })
       expect(result).to include("f.rb:1:needle")
     ensure
@@ -213,8 +213,7 @@ RSpec.describe "OllamaAgent::SandboxedTools" do
     end
 
     it "returns a clear error when neither rg nor grep is available" do
-      allow(search_agent).to receive(:rg_available?).and_return(false)
-      allow(search_agent).to receive(:grep_available?).and_return(false)
+      allow(search_agent).to receive_messages(rg_available?: false, grep_available?: false)
       out = search_agent.send(:execute_tool, "search_code", { "pattern" => "foo", "directory" => "." })
       expect(out).to include("Error:").and include("search command")
     end

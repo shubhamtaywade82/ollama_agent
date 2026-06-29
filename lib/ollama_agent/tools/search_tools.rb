@@ -39,10 +39,10 @@ module OllamaAgent
 
         return "No symbols found matching #{pattern.inspect}" if rows.empty?
 
-        rows.map { |r|
+        rows.map do |r|
           f = r[:file].delete_prefix("#{root}/")
           "#{r[:kind]} #{r[:name]} at #{f}:#{r[:line]}"
-        }.join("\n")
+        end.join("\n")
       end
     end
 
@@ -73,7 +73,7 @@ module OllamaAgent
                 `grep -rn -- #{Shellwords.shellescape(sym)} #{Shellwords.shellescape(File.expand_path(dir, root))}`.lines
               end
 
-        refs = out.reject { |l| l =~ /^\d+:\s*(def |class |module |\s*#\s*)/ }
+        refs = out.grep_v(/^\d+:\s*(def |class |module |\s*#\s*)/)
                   .map(&:strip)
         return "No references found for #{sym.inspect}" if refs.empty?
 
@@ -110,10 +110,10 @@ module OllamaAgent
         results = find_nodes(tree.value, query)
         return "No AST nodes matching #{query.inspect} found" if results.empty?
 
-        results.map { |loc|
-          lines = src.lines[loc.start_line - 1..loc.end_line - 1]
+        results.map do |loc|
+          lines = src.lines[(loc.start_line - 1)..(loc.end_line - 1)]
           "#{args["file"]}:#{loc.start_line}-#{loc.end_line}\n#{lines.join.chomp}"
-        }.join("\n---\n")
+        end.join("\n---\n")
       rescue LoadError
         "Error: prism gem not available"
       rescue StandardError => e

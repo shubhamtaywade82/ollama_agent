@@ -25,7 +25,7 @@ module OllamaAgent
       def call(args, context: {})
         return "github_comment is disabled in read-only mode" if context[:read_only]
 
-        token = ENV["GITHUB_TOKEN"]
+        token = ENV.fetch("GITHUB_TOKEN", nil)
         return "Error: GITHUB_TOKEN not set" unless token && !token.empty?
 
         repo  = args["repo"]
@@ -79,7 +79,7 @@ module OllamaAgent
 
         text = resp.body.encode("UTF-8", invalid: :replace, undef: :replace)
         text = text.gsub(/<[^>]+>/, " ").gsub(/\s+/, " ").strip
-        text = text[0, max] + "\n...[truncated]" if text.size > max
+        text = "#{text[0, max]}\n...[truncated]" if text.size > max
         { content: text, status: resp.code.to_i, url: url }
       rescue StandardError => e
         { error: e.message }

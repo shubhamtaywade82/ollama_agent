@@ -65,8 +65,7 @@ module OllamaAgent
         end
       end
 
-      attr_reader :name, :description, :input_schema, :output_schema, :risk_level, :requires_approval
-      attr_reader :read_only_safe
+      attr_reader :name, :description, :input_schema, :output_schema, :risk_level, :requires_approval, :read_only_safe
 
       def initialize
         @name               = self.class.tool_name

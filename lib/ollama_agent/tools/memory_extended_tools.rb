@@ -31,9 +31,9 @@ module OllamaAgent
         entries = memory.search(query, namespace: namespace)
         return "No memories found matching #{query.inspect}" if entries.empty?
 
-        entries.first(top_k).map { |k, v|
+        entries.first(top_k).map do |k, v|
           "#{k}: #{v.to_s[0, 120]}"
-        }.join("\n")
+        end.join("\n")
       end
     end
 
@@ -54,16 +54,20 @@ module OllamaAgent
         memory = context[:memory_manager]
         return "session_summary: no memory manager in context" unless memory
 
-        n     = [args["n"]&.to_i || 15, 50].min
+        n = [args["n"]&.to_i || 15, 50].min
         recent = memory.recent_context(n)
 
         return "No recent activity to summarize" if recent.empty?
 
-        lines = recent.map.with_index { |entry, i|
-          prefix = entry[:type] == :tool_call ? "[CALL]" : entry[:type] == :tool_result ? "[RESULT]" : "[OBS]"
+        lines = recent.map.with_index do |entry, i|
+          prefix = if entry[:type] == :tool_call
+                     "[CALL]"
+                   else
+                     entry[:type] == :tool_result ? "[RESULT]" : "[OBS]"
+                   end
           text = entry[:content].is_a?(Hash) ? entry[:content].inspect : entry[:content].to_s
           "#{i + 1}. #{prefix} #{text[0, 200]}"
-        }
+        end
 
         {
           entries: lines.size,

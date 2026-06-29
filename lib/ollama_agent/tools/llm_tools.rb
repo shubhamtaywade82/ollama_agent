@@ -37,9 +37,7 @@ module OllamaAgent
           options: { temperature: 0.3 }
         }
 
-        if schema
-          body[:format] = schema
-        end
+        body[:format] = schema if schema
 
         host = ENV.fetch("OLLAMA_HOST", "http://localhost:11434")
         uri  = URI("#{host}/api/generate")
@@ -49,7 +47,7 @@ module OllamaAgent
         req.body = JSON.generate(body)
 
         resp = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                                     read_timeout: 120, open_timeout: 10) { |h| h.request(req) }
+                                                   read_timeout: 120, open_timeout: 10) { |h| h.request(req) }
 
         return "HTTP #{resp.code}: #{resp.message}" unless resp.is_a?(Net::HTTPSuccess)
 
@@ -92,8 +90,8 @@ module OllamaAgent
         code         = args["code"].to_s
         instructions = args["instructions"].to_s
 
-        ext   = detect_language(code)
-        prompt = REVIEW_PROMPT % [instructions, ext, code]
+        ext = detect_language(code)
+        prompt = format(REVIEW_PROMPT, instructions, ext, code)
 
         model = context[:model] || ENV["OLLAMA_AGENT_MODEL"] || "qwen2.5-coder:7b"
         host  = ENV.fetch("OLLAMA_HOST", "http://localhost:11434")
@@ -102,23 +100,23 @@ module OllamaAgent
         req  = Net::HTTP::Post.new(uri)
         req["Content-Type"] = "application/json"
         req.body = JSON.generate({
-          model: model,
-          prompt: prompt,
-          stream: false,
-          options: { temperature: 0.2 },
-          format: {
-            type: "object",
-            properties: {
-              issues: { type: "array", items: { type: "string" } },
-              suggestions: { type: "array", items: { type: "string" } },
-              verdict: { type: "string", enum: ["approve", "request_changes"] }
-            },
-            required: %w[issues suggestions verdict]
-          }
-        })
+                                   model: model,
+                                   prompt: prompt,
+                                   stream: false,
+                                   options: { temperature: 0.2 },
+                                   format: {
+                                     type: "object",
+                                     properties: {
+                                       issues: { type: "array", items: { type: "string" } },
+                                       suggestions: { type: "array", items: { type: "string" } },
+                                       verdict: { type: "string", enum: %w[approve request_changes] }
+                                     },
+                                     required: %w[issues suggestions verdict]
+                                   }
+                                 })
 
         resp = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                                     read_timeout: 120, open_timeout: 10) { |h| h.request(req) }
+                                                   read_timeout: 120, open_timeout: 10) { |h| h.request(req) }
 
         return "HTTP #{resp.code}" unless resp.is_a?(Net::HTTPSuccess)
 
@@ -131,11 +129,12 @@ module OllamaAgent
       private
 
       def detect_language(code)
-        if code.match?(/^\s*(def |class |module |require|Rails\.|ActiveRecord)/)
+        case code
+        when /^\s*(def |class |module |require|Rails\.|ActiveRecord)/
           "ruby"
-        elsif code.match?(/^\s*(import |export |function |const |interface |type )/)
+        when /^\s*(import |export |function |const |interface |type )/
           "typescript"
-        elsif code.match?(/^\s*(import |def |class |from )/)
+        when /^\s*(import |def |class |from )/
           "python"
         else
           ""
@@ -164,12 +163,12 @@ module OllamaAgent
         host = ENV.fetch("OLLAMA_HOST", "http://localhost:11434")
         uri  = URI("#{host}/api/embeddings")
 
-        req  = Net::HTTP::Post.new(uri)
+        req = Net::HTTP::Post.new(uri)
         req["Content-Type"] = "application/json"
         req.body = JSON.generate({ model: model, prompt: text })
 
         resp = Net::HTTP.start(uri.host, uri.port, use_ssl: uri.scheme == "https",
-                                                     read_timeout: 30, open_timeout: 10) { |h| h.request(req) }
+                                                   read_timeout: 30, open_timeout: 10) { |h| h.request(req) }
 
         return "HTTP #{resp.code}" unless resp.is_a?(Net::HTTPSuccess)
 

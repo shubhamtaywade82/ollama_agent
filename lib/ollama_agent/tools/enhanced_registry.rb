@@ -34,9 +34,7 @@ module OllamaAgent
         def check_approval!(tool, context)
           return unless tool.requires_approval
 
-          unless context[:approval_gate]
-            raise OllamaAgent::Error, "#{tool.name} requires approval but no approval_gate in context"
-          end
+          raise OllamaAgent::Error, "#{tool.name} requires approval but no approval_gate in context" unless context[:approval_gate]
 
           context[:approval_gate].call(tool.name, tool.description)
         end

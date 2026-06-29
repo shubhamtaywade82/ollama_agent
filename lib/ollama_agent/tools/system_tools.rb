@@ -23,7 +23,11 @@ module OllamaAgent
       def call(args, context: {})
         root = context[:root] || Dir.pwd
 
-        branch = `git -C #{Shellwords.shellescape(root)} rev-parse --abbrev-ref HEAD 2>/dev/null`.strip rescue "unknown"
+        branch = begin
+          `git -C #{Shellwords.shellescape(root)} rev-parse --abbrev-ref HEAD 2>/dev/null`.strip
+        rescue StandardError
+          "unknown"
+        end
 
         entry = {
           ts: Time.now.iso8601,
@@ -66,9 +70,7 @@ module OllamaAgent
         $stdout.print qtype == "yes_no" ? "[y/n] " : "> "
         answer = $stdin.gets.to_s.chomp
 
-        if qtype == "yes_no"
-          return { answer: answer, approved: answer.match?(/\A\s*y(?:es)?\s*\z/i) }
-        end
+        return { answer: answer, approved: answer.match?(/\A\s*y(?:es)?\s*\z/i) } if qtype == "yes_no"
 
         { answer: answer }
       end

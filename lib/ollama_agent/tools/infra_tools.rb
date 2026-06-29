@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "English"
 require "json"
 require "net/http"
 require_relative "base"
@@ -42,7 +43,7 @@ module OllamaAgent
 
         docker_cmd = "docker run --rm #{vols} #{envs} #{image} #{cmd} 2>&1"
         out = `#{docker_cmd}`
-        exit_code = $?.exitstatus
+        exit_code = $CHILD_STATUS.exitstatus
 
         {
           exit_code: exit_code,
@@ -75,7 +76,7 @@ module OllamaAgent
       def call(args, context: {})
         return "ci_trigger is disabled in read-only mode" if context[:read_only]
 
-        token = ENV["GITHUB_TOKEN"]
+        token = ENV.fetch("GITHUB_TOKEN", nil)
         return "Error: GITHUB_TOKEN not set" unless token && !token.empty?
 
         repo     = args["repo"]
@@ -115,7 +116,7 @@ module OllamaAgent
       MAX_BYTES = 32_768
 
       def call(args, _context = {})
-        token = ENV["GITHUB_TOKEN"]
+        token = ENV.fetch("GITHUB_TOKEN", nil)
         return "Error: GITHUB_TOKEN not set" unless token && !token.empty?
 
         repo   = args["repo"]
@@ -130,7 +131,7 @@ module OllamaAgent
         return "HTTP #{resp.code}" unless resp.is_a?(Net::HTTPSuccess)
 
         body = resp.body.to_s.encode("UTF-8", invalid: :replace, undef: :replace)
-        body = body.byteslice(0, MAX_BYTES) + "\n...[truncated]" if body.bytesize > MAX_BYTES
+        body = "#{body.byteslice(0, MAX_BYTES)}\n...[truncated]" if body.bytesize > MAX_BYTES
         { logs: body, run_id: run_id }
       rescue StandardError => e
         { error: e.message }
@@ -158,7 +159,7 @@ module OllamaAgent
 
       def call(args, _context = {})
         key = args["key"].to_s
-        value = ENV[key]
+        value = ENV.fetch(key, nil)
         value.nil? ? "ENV[#{key}] is not set" : value
       end
     end

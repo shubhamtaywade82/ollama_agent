@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "English"
 require_relative "base"
 require_relative "enhanced_registry"
 
@@ -63,12 +64,12 @@ module OllamaAgent
         tables = args["table"] ? [args["table"]] : conn.tables.sort
 
         schemas = tables.map do |t|
-          cols = conn.columns(t).map { |c|
+          cols = conn.columns(t).map do |c|
             { name: c.name, type: c.type, null: c.null, default: c.default, limit: c.limit }
-          }
-          idx = conn.indexes(t).map { |i|
+          end
+          idx = conn.indexes(t).map do |i|
             { name: i.name, columns: i.columns, unique: i.unique }
-          }
+          end
           { table: t, columns: cols.first(MAX_COLUMNS), indexes: idx.first(20) }
         end
 
@@ -112,7 +113,7 @@ module OllamaAgent
 
         {
           direction: dir,
-          exit_code: $?.exitstatus,
+          exit_code: $CHILD_STATUS.exitstatus,
           output: out.lines.first(100).join.strip
         }
       rescue StandardError => e

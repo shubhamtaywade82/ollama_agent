@@ -64,13 +64,13 @@ module OllamaAgent
           # Fetch cloud models, filtered to accessible ones when cache is available
           begin
             cloud_names = agent.list_cloud_model_names
-            accessible  = CloudAccessibilityCache.accessible_names   # Set<String> or nil
+            accessible  = CloudAccessibilityCache.accessible_names # Set<String> or nil
             reasons     = CloudAccessibilityCache.inaccessibility_reasons # Hash or nil
             cloud_names.each do |name|
               next if list.any? { |m| m.name == name }
               next if accessible && !accessible.include?(name)
 
-              subscription = if reasons && reasons.key?(name)
+              subscription = if reasons&.key?(name)
                                true # explicitly probed and failed
                              elsif accessible
                                false # explicitly probed and succeeded

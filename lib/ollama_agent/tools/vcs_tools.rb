@@ -25,7 +25,7 @@ module OllamaAgent
       def call(args, context: {})
         return "open_pull_request is disabled in read-only mode" if context[:read_only]
 
-        token = ENV["GITHUB_TOKEN"]
+        token = ENV.fetch("GITHUB_TOKEN", nil)
         return "Error: GITHUB_TOKEN not set" unless token && !token.empty?
 
         root  = context[:root] || Dir.pwd

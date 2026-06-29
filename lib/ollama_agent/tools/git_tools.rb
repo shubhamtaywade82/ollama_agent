@@ -164,7 +164,7 @@ module OllamaAgent
         return "create_branch is disabled in read-only mode" if context[:read_only]
 
         root = context[:root] || Dir.pwd
-        name = args["name"].to_s.gsub(/[^a-z0-9\-\_]/, "-")
+        name = args["name"].to_s.gsub(/[^a-z0-9\-_]/, "-")
         base = args["base"] || "main"
         return "Error: name too generic" if name.match?(/\A(main|master|develop)\z/i)
 

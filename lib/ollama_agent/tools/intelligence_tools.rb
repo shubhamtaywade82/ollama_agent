@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "English"
 require_relative "base"
 require_relative "enhanced_registry"
 
@@ -163,9 +164,7 @@ module OllamaAgent
 
       def extract_public_methods(node)
         results = []
-        if node.respond_to?(:name) && node.class.name.include?("DefNode")
-          results << node.name.to_s
-        end
+        results << node.name.to_s if node.respond_to?(:name) && node.class.name.include?("DefNode")
         node.child_nodes.compact.each { |c| results.concat(extract_public_methods(c)) }
         results
       end
@@ -211,9 +210,7 @@ module OllamaAgent
         violations = ARCHITECTURE_RULES.filter_map do |rule|
           matches = []
           diff.each_line.with_index(1) do |line, num|
-            if line =~ rule[:pattern]
-              matches << { line: num, text: line.strip }
-            end
+            matches << { line: num, text: line.strip } if line =~ rule[:pattern]
           end
           next if matches.empty?
 
@@ -225,8 +222,9 @@ module OllamaAgent
           rf   = File.expand_path(rules_path, root)
           if File.exist?(rf)
             custom = File.read(rf)
-            custom.each_line.with_index(1) do |rule_line, i|
+            custom.each_line.with_index(1) do |rule_line, _i|
               next if rule_line.strip.empty? || rule_line.start_with?("#")
+
               violations << { rule: "Custom: #{rule_line.strip}" }
             end
           end
@@ -268,9 +266,13 @@ module OllamaAgent
 
         {
           format: fmt,
-          exit_code: $?.exitstatus,
+          exit_code: $CHILD_STATUS.exitstatus,
           output: out.lines.first(50).join.strip,
-          output_dir: fmt == "yard" ? "doc/" : fmt == "rdoc" ? "doc/" : "out/"
+          output_dir: if fmt == "yard"
+                        "doc/"
+                      else
+                        fmt == "rdoc" ? "doc/" : "out/"
+                      end
         }
       rescue StandardError => e
         { error: e.message }

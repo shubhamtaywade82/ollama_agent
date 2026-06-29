@@ -98,17 +98,17 @@ module OllamaAgent
 
     # Model access delegated to ModelManager
     def_delegators :@model_manager,
-      :model, :assign_chat_model!, :model_accessible?,
-      :list_local_model_names, :list_cloud_model_names
+                   :model, :assign_chat_model!, :model_accessible?,
+                   :list_local_model_names, :list_cloud_model_names
 
     # Tool access delegated to Toolbox (replaces SandboxedTools include)
     def_delegators :@toolbox,
-      :read_file, :write_file, :edit_file, :apply_patch,
-      :search, :index_ruby, :ruby_index, :read_directory, :repo_list, :grep_symbol,
-      :list_files, :search_code, :search_with_ripgrep,
-      :missing_tool_argument, :blank_tool_value?, :path_allowed?,
-      :resolve_path, :disallowed_path_message, :coerce_tool_arguments,
-      :tool_arg, :integer_or, :user_confirms_patch?
+                   :read_file, :write_file, :edit_file, :apply_patch,
+                   :search, :index_ruby, :ruby_index, :read_directory, :repo_list, :grep_symbol,
+                   :list_files, :search_code, :search_with_ripgrep,
+                   :missing_tool_argument, :blank_tool_value?, :path_allowed?,
+                   :resolve_path, :disallowed_path_message, :coerce_tool_arguments,
+                   :tool_arg, :integer_or, :user_confirms_patch?
 
     # Prompt access delegated to PromptBuilder
     def_delegators :@prompt_builder, :system_prompt

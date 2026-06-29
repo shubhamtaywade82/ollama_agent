@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "English"
 require "json"
 require_relative "base"
 require_relative "enhanced_registry"
@@ -30,18 +31,17 @@ module OllamaAgent
         root  = context[:root] || Dir.pwd
         pat   = args["pattern"]
         fw    = args["framework"] || detect_framework(root)
-        cwd   = root
 
         cmd = case fw
               when "rspec"    then "bundle exec rspec #{Shellwords.shellescape(pat || "spec/")} --format progress 2>&1"
               when "minitest" then "bundle exec ruby -Ilib:test #{Shellwords.shellescape(pat || "test/")} 2>&1"
-              when "jest"     then "npx jest #{pat ? Shellwords.shellescape(pat) : ""} 2>&1"
-              when "pytest"   then "python -m pytest #{pat ? Shellwords.shellescape(pat) : ""} 2>&1"
+              when "jest"     then "npx jest #{Shellwords.shellescape(pat) if pat} 2>&1"
+              when "pytest"   then "python -m pytest #{Shellwords.shellescape(pat) if pat} 2>&1"
               else return "Error: unknown framework #{fw}"
               end
 
         out = `#{cmd}`.lines
-        exit_code = $?.exitstatus
+        exit_code = $CHILD_STATUS.exitstatus
 
         {
           framework: fw,
@@ -101,7 +101,7 @@ module OllamaAgent
         lines = out.lines.first(MAX_LINES)
         {
           tool: tool,
-          exit_code: $?.exitstatus,
+          exit_code: $CHILD_STATUS.exitstatus,
           violations: lines.size,
           output: lines.join.strip
         }
@@ -152,10 +152,10 @@ module OllamaAgent
               else return "Error: unknown typechecker #{tool}"
               end
 
-        errors = out.lines.select { |l| l =~ /error:|Error:/ }
+        errors = out.lines.grep(/error:|Error:/)
         {
           tool: tool,
-          exit_code: $?.exitstatus,
+          exit_code: $CHILD_STATUS.exitstatus,
           error_count: errors.size,
           output: out.lines.first(200).join.strip
         }
@@ -197,7 +197,7 @@ module OllamaAgent
         ruby = args["ruby"] || "ruby"
         out  = `#{ruby} #{Shellwords.shellescape(script)} 2>&1`
         {
-          exit_code: $?.exitstatus,
+          exit_code: $CHILD_STATUS.exitstatus,
           output: out.lines.first(200).join.strip
         }
       rescue StandardError => e
@@ -235,9 +235,13 @@ module OllamaAgent
               end
 
         cov_file = File.join(root, "coverage", ".last_run.json")
-        coverage = if File.exist?(cov_file)
-                     JSON.parse(File.read(cov_file))["result"] rescue nil
-                   end
+        coverage = (if File.exist?(cov_file)
+                      begin
+                        JSON.parse(File.read(cov_file))["result"]
+                      rescue StandardError
+                        nil
+                      end
+                    end)
 
         {
           framework: fw,
