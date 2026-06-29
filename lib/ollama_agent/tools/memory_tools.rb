@@ -93,6 +93,7 @@ module OllamaAgent
       tool_description "Delete a key from long-term memory"
       tool_risk        :medium
       tool_requires_approval false
+      tool_read_only_safe false
       tool_schema({
                     type: "object",
                     properties: {
@@ -114,3 +115,8 @@ module OllamaAgent
     end
   end
 end
+
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::MemoryStore)
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::MemoryRecall)
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::MemoryList)
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::MemoryDelete)

@@ -59,7 +59,9 @@ module OllamaAgent
       when "delegate_to_agent"       then execute_delegate_to_agent_tool(args)
       when "list_directory_contents" then execute_list_directory_contents(args)
       when "calculate"               then execute_calculate(args)
-      else "Unknown tool: #{name}"
+      else
+        result = Tools::EnhancedRegistry.execute(name, args, context: context)
+        result.nil? ? "Unknown tool: #{name}" : result
       end
     end
 

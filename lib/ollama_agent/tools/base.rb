@@ -56,9 +56,17 @@ module OllamaAgent
           @tool_output_schema = schema if schema
           @tool_output_schema
         end
+
+        def tool_read_only_safe(value = nil)
+          @tool_read_only_safe = value unless value.nil?
+          return @tool_read_only_safe unless @tool_read_only_safe.nil?
+
+          !tool_requires_approval && tool_risk != :high && tool_risk != :critical
+        end
       end
 
       attr_reader :name, :description, :input_schema, :output_schema, :risk_level, :requires_approval
+      attr_reader :read_only_safe
 
       def initialize
         @name               = self.class.tool_name
@@ -67,6 +75,7 @@ module OllamaAgent
         @output_schema      = self.class.tool_output_schema
         @risk_level         = self.class.tool_risk
         @requires_approval  = self.class.tool_requires_approval
+        @read_only_safe     = self.class.tool_read_only_safe
       end
 
       # Execute the tool.

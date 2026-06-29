@@ -306,14 +306,21 @@ RSpec.describe OllamaAgent::Agent do
   end
 
   describe "read_only and tools" do
-    it "omits edit_file from tools when read_only is true" do
+    it "omits mutation tools when read_only is true" do
       agent = described_class.new(client: instance_double(Ollama::Client), root: root, read_only: true,
                                   confirm_patches: false)
       args = agent.send(:request_args, [])
       names = args[:tools].map { |t| t.dig(:function, :name) }
-      expect(names).to contain_exactly("read_file", "search_code", "list_files",
-                                       "list_directory_contents", "calculate")
-      expect(names).not_to include("edit_file", "write_file")
+
+      # Core read-only tools should be present
+      expect(names).to include("read_file", "search_code", "list_files",
+                               "list_directory_contents", "calculate")
+
+      # Read-only-safe enhanced tools should be present
+      expect(names).to include("git_status", "git_diff", "search_symbols", "get_definition")
+
+      # Mutation tools should be excluded
+      expect(names).not_to include("edit_file", "write_file", "delete_file", "copy_file")
     end
 
     it "uses patch_policy to skip confirmation for auto-approved paths" do

@@ -18,8 +18,10 @@ RSpec.describe OllamaAgent, ".tools_for" do
     expect(names).not_to include("delegate_to_agent")
   end
 
-  it "matches legacy TOOLS count when orchestrator is false" do
+  it "includes enhanced tool schemas when orchestrator is false" do
     t = described_class.tools_for(read_only: false, orchestrator: false)
-    expect(t.size).to eq(described_class::TOOLS.size)
+    names = t.map { |x| x.dig(:function, :name) }
+    expect(names).to include("search_symbols", "get_definition", "run_tests", "git_status")
+    expect(t.size).to be > described_class::TOOLS.size
   end
 end
