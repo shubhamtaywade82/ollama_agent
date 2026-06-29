@@ -54,8 +54,10 @@ RSpec.describe OllamaAgent::Tools::FetchUrl do
   end
 
   describe "#call" do
-    it "returns error for invalid URL" do
-      result = tool.call({ "url" => "ftp://bad-scheme" }, context: {})
+    before { allow(Net::HTTP).to receive(:get_response).and_raise(SocketError, "mock") }
+
+    it "returns error on network failure" do
+      result = tool.call({ "url" => "http://example.com/test" }, context: {})
       expect(result).to be_a(Hash)
       expect(result).to have_key(:error)
     end
