@@ -4,7 +4,7 @@ module OllamaAgent
   class Agent
     # Value object grouping Agent construction options (Runner and tests build this explicitly).
     class AgentConfig
-      attr_reader :model, :root, :confirm_patches, :http_timeout, :think, :read_only, :patch_policy, :system_prompt, :skill_paths, :skills_enabled, :skills_include, :skills_exclude, :external_skills_enabled, :orchestrator, :confirm_delegation, :max_retries, :audit, :session_id, :resume, :max_tokens, :context_summarize, :stdin, :stdout, :user_prompt, :logger, :provider, :provider_name, :budget, :permissions, :policies, :memory_manager, :trace_logger, :approval_gate, :skills, :session
+      attr_reader :model, :root, :provider, :provider_name, :budget, :permissions, :policies, :memory_manager, :trace_logger, :approval_gate, :skills, :session
 
       # @param confirm_delegation [Boolean, nil] nil means default true
       # rubocop:disable Metrics/MethodLength, Metrics/ParameterLists, Metrics/AbcSize -- value object mirrors Agent keywords
