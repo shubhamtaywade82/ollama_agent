@@ -13,10 +13,11 @@ module OllamaAgent
   ORCHESTRATOR_TOOLS_SCHEMA_VERSION = Tools::BuiltInSchemas::ORCHESTRATOR_TOOLS_SCHEMA_VERSION
 
   def self.tools_for(read_only:, orchestrator:)
-    Tools::BuiltInSchemas.tools_for(
+    base = Tools::BuiltInSchemas.tools_for(
       read_only: read_only,
       orchestrator: orchestrator,
       custom_schemas: Tools::Registry.custom_schemas
     )
+    base + Tools::EnhancedRegistry.schemas(read_only: read_only)
   end
 end

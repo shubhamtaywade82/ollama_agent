@@ -20,23 +20,35 @@ require_relative "sandboxed_tools/search_text"
 require_relative "sandboxed_tools/delegate_external"
 
 module OllamaAgent
-  # File read, search, and patch application constrained to a project root.
-  module SandboxedTools
+  class Toolbox
     DEFAULT_MAX_READ_FILE_BYTES = 2_097_152
 
-    include FileReadWrite
-    include SearchText
-    include DelegateExternal
-    include PatchSupport
-    include RepoList
-    include RubyIndexToolSupport
-    include ToolArguments
+    attr_reader :config, :logger, :root
 
-    # rubocop:disable Metrics/MethodLength, Metrics/CyclomaticComplexity
-    def execute_tool(name, args)
+    # Use prepend so included methods can be called via super/from public wrappers.
+    prepend SandboxedTools::FileReadWrite
+    prepend SandboxedTools::SearchText
+    prepend SandboxedTools::DelegateExternal
+    prepend PatchSupport
+    prepend RepoList
+    prepend RubyIndexToolSupport
+    prepend ToolArguments
+
+    def initialize(config:, logger:, user_prompt: nil)
+      @config = config
+      @logger = logger
+      @root = config.root
+      # Backward-compat ivars for prepended sub-modules (FileReadWrite, PatchSupport, etc.)
+      @read_only = config.read_only
+      @confirm_patches = config.confirm_patches
+      @patch_policy = config.patch_policy
+      @user_prompt = user_prompt
+    end
+
+    def execute(name, args, context:)
       args = coerce_tool_arguments(args)
 
-      return Tools::Registry.execute_custom(name, args, root: @root, read_only: @read_only) if Tools::Registry.custom_tool?(name)
+      return Tools::Registry.execute_custom(name, args, root: root, read_only: context[:read_only]) if Tools::Registry.custom_tool?(name)
 
       case name
       when "read_file"            then execute_read_file(args)
@@ -48,14 +60,15 @@ module OllamaAgent
       when "delegate_to_agent"       then execute_delegate_to_agent_tool(args)
       when "list_directory_contents" then execute_list_directory_contents(args)
       when "calculate"               then execute_calculate(args)
-      else "Unknown tool: #{name}"
+      else
+        result = Tools::EnhancedRegistry.execute(name, args, context: context)
+        result.nil? ? "Unknown tool: #{name}" : result
       end
     end
-    # rubocop:enable Metrics/MethodLength, Metrics/CyclomaticComplexity
 
     def execute_list_directory_contents(args)
       path = tool_arg(args, "path") || "."
-      Tools::FilesystemExplorer.new.call({ "path" => path }, context: { root: @root })
+      Tools::FilesystemExplorer.new.call({ "path" => path }, context: { root: root })
     end
 
     def execute_calculate(args)
@@ -90,7 +103,7 @@ module OllamaAgent
 
     def edit_file(path, diff)
       return disallowed_path_message(path) unless path_allowed?(path)
-      return "edit_file is disabled in read-only mode." if @read_only
+      return "edit_file is disabled in read-only mode." if @config.runtime.read_only
 
       diff = DiffPathValidator.normalize_diff(diff)
 
@@ -105,14 +118,14 @@ module OllamaAgent
     end
 
     def patch_confirmation_needed?(path, diff)
-      return false unless @confirm_patches
-      return true unless @patch_policy
+      return false unless @config.runtime.confirm_patches
+      return true unless @config.runtime.patch_policy
 
-      @patch_policy.call(path, diff) == :require_confirmation
+      @config.runtime.patch_policy.call(path, diff) == :require_confirmation
     end
 
     def validate_edit_diff(path, diff)
-      mismatch = DiffPathValidator.call(diff, @root, path)
+      mismatch = DiffPathValidator.call(diff, root, path)
       return log_tool_message(mismatch) if mismatch
 
       dry = patch_dry_run(diff)
@@ -123,7 +136,6 @@ module OllamaAgent
 
     def log_tool_message(message)
       logger.debug("ollama_agent: #{message}") if ENV["OLLAMA_AGENT_DEBUG"] == "1"
-
       message
     end
 
@@ -140,7 +152,7 @@ module OllamaAgent
     end
 
     def sandbox_root_abs
-      @sandbox_root_abs ||= File.expand_path(@root)
+      @sandbox_root_abs ||= File.expand_path(root)
     end
 
     def sandbox_root_real
@@ -156,11 +168,11 @@ module OllamaAgent
     end
 
     def user_prompt
-      @user_prompt ||= UserPrompt.new
+      @user_prompt || UserPrompt.new
     end
 
     def disallowed_path_message(path)
-      "Path must stay under project root #{@root}: #{path}"
+      "Path must stay under project root #{root}: #{path}"
     end
   end
 end

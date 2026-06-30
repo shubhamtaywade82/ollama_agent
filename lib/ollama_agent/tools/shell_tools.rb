@@ -255,3 +255,5 @@ module OllamaAgent
     # rubocop:enable Metrics/ClassLength
   end
 end
+
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::RunShell)

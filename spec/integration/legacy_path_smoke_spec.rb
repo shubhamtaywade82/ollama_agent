@@ -44,7 +44,7 @@ RSpec.describe "legacy tool path without kernel", :integration do
         final_response("done.")
       )
 
-      agent = OllamaAgent::Agent.new(client: client, root: root, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(client: client, root: root, confirm_patches: false)
       agent.run("please write hello.txt")
 
       expect(File.read(File.join(root, "hello.txt"))).to eq("world")
@@ -63,7 +63,7 @@ RSpec.describe "legacy tool path without kernel", :integration do
         final_response("read ok")
       )
 
-      agent = OllamaAgent::Agent.new(client: client, root: root, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(client: client, root: root, confirm_patches: false)
       agent.run("read sample")
 
       expect(File.directory?(File.join(root, ".ollama_agent", "kernel"))).to be(false)
@@ -88,7 +88,7 @@ RSpec.describe "legacy tool path without kernel", :integration do
         final_response("patched")
       )
 
-      agent = OllamaAgent::Agent.new(client: client, root: root, confirm_patches: false)
+      agent = OllamaAgent::Agent.build(client: client, root: root, confirm_patches: false)
       agent.run("edit readme")
 
       expect(File.read(File.join(root, "README.md"))).to eq("hello\n")

@@ -4,6 +4,8 @@ module OllamaAgent
   module SandboxedTools
     # read_file / write_file and line-range helpers.
     module FileReadWrite
+      DEFAULT_MAX_READ_FILE_BYTES = 2_097_152
+
       private
 
       def execute_read_file(args)

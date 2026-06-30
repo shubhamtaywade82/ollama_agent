@@ -140,7 +140,7 @@ module OllamaAgent
           @stdout.puts "  Switching session is not supported mid-run. " \
                        "Restart with: ollama_agent ask --session #{arg} --resume"
         else
-          id = @agent.session_id
+          id = @agent.config.session.session_id
           @stdout.puts "  Current session: #{id || "(none)"}"
         end
       end
@@ -190,10 +190,10 @@ module OllamaAgent
         rows = [
           [:model, @agent.model],
           [:root, @agent.root],
-          [:read_only, @agent.read_only],
-          [:max_tokens, @agent.max_tokens],
-          [:session_id, @agent.session_id],
-          [:orchestrator, @agent.orchestrator]
+          [:read_only, @agent.config.runtime.read_only],
+          [:max_tokens, @agent.config.session.max_tokens],
+          [:session_id, @agent.config.session.session_id],
+          [:orchestrator, @agent.config.runtime.orchestrator]
         ]
         rows.each do |label, val|
           next if val.nil?
@@ -208,7 +208,7 @@ module OllamaAgent
           @stdout.puts "  Provider switching mid-run is not yet supported. Restart with --provider #{arg}"
           @stdout.puts "  Chat model can be changed anytime: /model <name>"
         else
-          @stdout.puts "  Current provider: #{@agent.provider_name || "ollama"}"
+          @stdout.puts "  Current provider: #{@agent.config.runtime.provider_name || "ollama"}"
         end
       end
 

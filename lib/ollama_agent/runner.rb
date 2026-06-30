@@ -165,33 +165,21 @@ module OllamaAgent
 
       trace_logger = trace ? Core::TraceLogger.new(format: :human) : nil
 
-      config = Agent::AgentConfig.new(
-        root: root,
-        model: model,
-        system_prompt: system_prompt,
-        confirm_patches: confirm_patches,
-        http_timeout: http_timeout,
-        think: think,
-        read_only: read_only,
-        skills_enabled: skills_enabled,
-        skill_paths: skill_paths ? Array(skill_paths) : nil,
-        orchestrator: orchestrator,
-        session_id: session_id,
-        resume: resume,
-        max_retries: max_retries,
-        audit: audit,
-        max_tokens: max_tokens,
-        context_summarize: context_summarize,
-        stdin: stdin,
-        stdout: stdout,
+      @agent = Agent.build(
+        root: root, model: model, system_prompt: system_prompt,
+        read_only: read_only, confirm_patches: confirm_patches,
+        http_timeout: http_timeout, think: think,
+        orchestrator: orchestrator, confirm_delegation: nil,
+        max_retries: max_retries, audit: audit,
+        session_id: session_id, resume: resume,
+        max_tokens: max_tokens, context_summarize: context_summarize,
+        stdin: stdin, stdout: stdout,
         provider_name: provider,
         permissions: permissions,
-        budget: budget,
-        memory_manager: memory,
+        budget: budget, memory_manager: memory,
         trace_logger: trace_logger,
         logger: logger
       )
-      @agent = Agent.new(config: config)
 
       # Build CredentialRouter when multi-key credentials are supplied.
       # Stored as @credential_router so consumers (e.g. TUI) can query pool_status.

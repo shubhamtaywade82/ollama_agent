@@ -205,3 +205,6 @@ module OllamaAgent
     end
   end
 end
+
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::HttpGet)
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::HttpPost)

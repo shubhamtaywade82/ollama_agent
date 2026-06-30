@@ -145,6 +145,60 @@ module OllamaAgent
       # rubocop:enable Metrics/AbcSize, Metrics/MethodLength
     end
 
+    # Create and checkout a new git branch (not just list).
+    class GitCreateBranch < GitBase
+      tool_name        "create_branch"
+      tool_description "Create and checkout a new feature branch. Agents should NEVER commit to main."
+      tool_risk        :medium
+      tool_requires_approval true
+      tool_schema({
+                    type: "object",
+                    properties: {
+                      name: { type: "string", description: "Branch name (alphanumeric, hyphens, underscores only)" },
+                      base: { type: "string", description: "Base branch (default: main)" }
+                    },
+                    required: ["name"]
+                  })
+
+      def call(args, context: {})
+        return "create_branch is disabled in read-only mode" if context[:read_only]
+
+        root = context[:root] || Dir.pwd
+        name = args["name"].to_s.gsub(/[^a-z0-9\-_]/, "-")
+        base = args["base"] || "main"
+        return "Error: name too generic" if name.match?(/\A(main|master|develop)\z/i)
+
+        git_run("git checkout -b #{name} origin/#{base}", cwd: root)
+      end
+    end
+
+    # Git push — push current branch to origin
+    class GitPush < GitBase
+      tool_name        "git_push"
+      tool_description "Push current branch to origin remote"
+      tool_risk        :medium
+      tool_requires_approval true
+      tool_schema({
+                    type: "object",
+                    properties: {
+                      remote: { type: "string", description: "Remote name (default: origin)" },
+                      branch: { type: "string", description: "Branch to push (default: current branch)" },
+                      force: { type: "boolean", description: "Force push (use with extreme caution)" }
+                    },
+                    required: []
+                  })
+
+      def call(args, context: {})
+        return "git_push is disabled in read-only mode" if context[:read_only]
+
+        root   = context[:root] || Dir.pwd
+        remote = args["remote"] || "origin"
+        branch = args["branch"] || `git -C #{Shellwords.shellescape(root)} rev-parse --abbrev-ref HEAD`.strip
+        force  = args["force"] ? "--force" : ""
+        git_run("git push #{force} #{remote} #{Shellwords.shellescape(branch)}", cwd: root)
+      end
+    end
+
     # Git branch list — read-only
     class GitBranch < GitBase
       tool_name        "git_branch"
@@ -174,3 +228,11 @@ module OllamaAgent
     end
   end
 end
+
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::GitStatus)
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::GitDiff)
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::GitLog)
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::GitCommit)
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::GitBranch)
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::GitCreateBranch)
+OllamaAgent::Tools::EnhancedRegistry.register(OllamaAgent::Tools::GitPush)

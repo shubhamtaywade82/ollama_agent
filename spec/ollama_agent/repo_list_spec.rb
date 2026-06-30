@@ -4,7 +4,7 @@ require "spec_helper"
 
 RSpec.describe "OllamaAgent::RepoList" do
   let(:tmpdir) { Dir.mktmpdir }
-  let(:agent) { OllamaAgent::Agent.new(root: tmpdir, confirm_patches: false) }
+  let(:agent) { OllamaAgent::Agent.build(root: tmpdir, confirm_patches: false) }
 
   after do
     FileUtils.remove_entry(tmpdir)
